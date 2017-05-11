@@ -1,0 +1,37 @@
+reset
+${Units('si')}
+undo off
+create Cylinder height {20*m} radius {5*m}
+create planar surface with plane xplane offset {0.*m} 
+create planar surface with plane yplane offset {0.*m}
+webcut volume 1 with plane surface 4 
+webcut volume 1 with plane surface 5 
+delete volume 4 5 
+delete body 2 3
+Volume 1 Scheme auto 
+Volume 1 size {.25*m}
+Mesh Volume 1 
+
+group "yneg" add node in surface 14
+nodeset 1 group yneg 
+nodeset 1 name "yneg"
+group "xneg" add node in surface 17
+nodeset 2 group xneg 
+nodeset 2 name "xneg"
+group "zneg" add node in surface 16
+nodeset 3 group zneg 
+nodeset 3 name "zneg"
+group "peri" add node in surface 15
+nodeset 4 group peri 
+nodeset 4 name "peri"
+
+group "side_zpos" add surface 18
+sideset 1 group side_zpos
+sideset 1 name "side_zpos"
+group "el_zpos" add hex in volume 1 with z_coord > {9.75*m}
+block 1 group el_zpos
+block 1 name "el_zpos"
+group "trac0" add hex in volume 1 with z_coord < {9.75*m}
+block 2 group trac0 
+block 2 name "trac0"
+export mesh "./Mandel3D.exo" dimension 3 overwrite

@@ -1,0 +1,79 @@
+reset
+${Units('si')}
+undo off
+brick x 2. y 1.2 z .7
+volume 1 move x 0 y 0 z -.35
+import stl "fault.stl"  
+surface 7 scheme submap
+surface 7 size .02
+mesh surface 7
+create surface net from mapped surface 7 tolerance .02 heal 
+delete volume 2
+webcut volume 1 with sheet extended from surface 8 
+delete surface 8 
+merge all
+
+# Layers
+create planar surface with plane zplane offset 0. move z -.16
+create planar surface with plane zplane offset 0. move z -.25
+create planar surface with plane zplane offset 0. move z -.30
+create planar surface with plane zplane offset 0. move z -.45
+create planar surface with plane zplane offset 0. move z -.50
+
+webcut surface 19 to 23 with sheet extended from surface 9 
+delete surface 27 28 31 32
+webcut volume 1 with plane surface 24
+webcut volume 15 with plane surface 26
+webcut volume 16 with plane surface 30
+webcut volume 4 with plane surface 25  
+webcut volume 18 with plane surface 29
+webcut volume 19 with plane surface 33
+delete surface 24 26 30 25 29 33 
+imprint all
+merge all
+
+# Mesh
+surface 46 94 95 97 scheme trimesh
+surface 46 94 95 97 size 0.00625
+#surface 46 94 95 97 size 0.0125
+mesh surface 46 94 95 97 
+volume all scheme tetmesh
+volume all size .02
+#volume all size .04
+mesh volume all 
+
+# Fault face
+unmerge surface 46 94 95 97
+nodeset 1 surface 46 94 95 97 
+sideset 1 surface 46 94 95 97
+nodeset 2 surface 98 99 100 101 
+sideset 2 surface 98 99 100 101
+
+# Domain boundaries
+sideset 3 surface all with x_coord < -.999
+nodeset 3 surface all with x_coord < -.999 
+sideset 4 surface all with y_coord < -.599
+nodeset 4 surface all with y_coord < -.599
+sideset 5 surface all with z_coord < -.699
+nodeset 5 surface all with z_coord < -.699
+sideset 6 surface all with x_coord > .999 
+nodeset 6 surface all with x_coord > .999
+sideset 7 surface all with y_coord > .599
+nodeset 7 surface all with y_coord > .599
+sideset 8 surface all with z_coord > -0.001 
+nodeset 8 surface all with z_coord > -0.001 
+
+group "under" add tet in volume 17 20 
+group "res"   add tet in volume 16 with z_coord < -.27 
+group "res"   add tet in volume 19 with z_coord < -.32
+group "salt"  add tet in volume 15 18 
+group "hyd"   add tet in volume 16 with z_coord >= -.27 
+group "hyd"   add tet in volume 19 with z_coord >= -.32
+group "over"  add tet in volume 1 4
+block 1 group under
+block 2 group res
+block 3 group salt
+block 4 group hyd
+block 5 group over
+export mesh "./F3D_tet.exo" dimension 3 overwrite
+quit

@@ -1,0 +1,64 @@
+${Units('si')}
+undo off
+reset
+# Geometry
+brick x 46.0 y 46.0 z 20.0 
+volume 1 move x 0 y 0 z {-0.5*20.0}
+#{cos30=sqrt(3)/2}
+volume 1 move x -3.75 y 0 z 0
+create planar surface with plane xplane offset 0 spin y 30. 
+create planar surface with plane xplane offset -6 spin y 30.
+create planar surface with plane xplane offset  6 spin y 30.
+create planar surface with plane zplane offset {-18*cos30}
+webcut volume all with plane yplane offset   18. 
+webcut volume all with plane yplane offset  -18.
+webcut volume 11 with plane surface 45
+webcut volume 11 with plane surface 40 
+webcut volume 17 with plane surface 42
+webcut volume 11 with plane surface 44
+delete body 2 3 4 5 7 8 9 10 12 13 14 15
+imprint all
+merge all
+# Mesh domain
+volume all scheme map
+volume all size {0.1*3}
+mesh volume all
+# Smooth mesh
+refine hex in volume 17 19 depth 1
+
+#{beta=3.0}
+#{loop(6)}
+volume all smooth scheme condition number beta {beta} cpu 20 
+smooth volume all
+#{beta=beta-0.2}
+#{endloop}
+
+# fault face
+unmerge surface 57 
+nodeset 1 surface 62 
+nodeset 2 surface 57 
+sideset 1 surface 62 
+sideset 2 surface 57 
+
+# Domain boundaries
+nodeset 3 surface all with x_coord >  46/2 - 3.75 - .01 
+nodeset 4 surface all with y_coord >  46/2 - .01
+nodeset 5 surface all with z_coord < -20.0 + .01 
+sideset 3 surface all with x_coord >  46/2 - 3.75 - .01 
+sideset 4 surface all with y_coord >  46/2 - .01
+sideset 5 surface all with z_coord < -20.0 + .01
+nodeset 6 surface all with x_coord < -46/2 - 3.75 + .01
+nodeset 7 surface all with y_coord < -46/2 + .01
+nodeset 8 surface all with z_coord > -.01
+sideset 6 surface all with x_coord < -46/2 - 3.75 + .01
+sideset 7 surface all with y_coord < -46/2 + .01
+sideset 8 surface all with z_coord > -.01
+
+group 'xneg' add hex in volume 17 
+group 'xpos' add hex in volume 19
+group 'mat' add hex in volume 1 6 11 16 18
+block 1 group xneg 
+block 2 group xpos 
+block 3 group mat
+export mesh "SCEC10.exo" dimension 3 overwrite
+quit
