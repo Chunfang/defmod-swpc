@@ -1,7 +1,7 @@
 ## FE (defmod) installation
 
-Download PETSc from https://www.mcs.anl.gov/petsc/download/index.html and unzip. 
-Add export PETSC_DIR=/home/cmeng/petsc-[version] to ~/.bashrc (.profile)
+Download PETSc from https://www.mcs.anl.gov/petsc/download/index.html and unzip. __ 
+Add export PETSC_DIR=/home/cmeng/petsc-[version] to ~/.bashrc (.profile) __
 cd petsc-[version]
 
 For intel-mpi cluster (change the mpi, blas/lapack and scalapack args accordingly for different clusters), Comment out all the intel/mpi modules in the .bashrc file.
@@ -26,11 +26,11 @@ To suppress gnu warnings add to the file src/Makefile FFLAGS = -Wno-maybe-uninit
 
 All configurations can have --with-debugging=1 for debug. To inspect the allocatable array/pointer with gdb+gfortran:
 
-(gdb) print *((real *)A+m)@n
-A: array/pointer name
-data type: real_8/int/long_int/
-m: 2 means print from 3rd entry 
-n: number of entries to print
+(gdb) print *((real *)A+m)@n __
+A: array/pointer name __
+data type: real_8/int/long_int/ __
+m: 2 means print from 3rd entry __
+n: number of entries to print __
 
 With PETSC_DIR and PETSC_ARCH set correctly in ~/.bashrc
 
@@ -40,43 +40,45 @@ cd src/defmod && make all
 
 Install NetCDF and NetCDF-fortran, following http://www.unidata.ucar.edu/software/netcdf. If NetCDF is already available, only NetCDF-fortran needs to install. 
 
-export NCDIR=[NetCDF]
-export CC=gcc(icc)
-export FC=gfortran(ifort)
-export LD_LIBRARY_PATH=${NCDIR}/lib:${LD_LIBRARY_PATH}
-export NFDIR=[NetCDF-fortan]
-export CPPFLAGS=-I${NCDIR}/include LDFLAGS=-L${NCDIR}/lib 
-./configure --prefix=${NFDIR} --disable-fortran-type-check  
+export NCDIR=[NetCDF] __
+export CC=gcc(icc) __
+export FC=gfortran(ifort) __
+export LD_LIBRARY_PATH=${NCDIR}/lib:${LD_LIBRARY_PATH} __
+export NFDIR=[NetCDF-fortan] __
+export CPPFLAGS=-I${NCDIR}/include LDFLAGS=-L${NCDIR}/lib __ 
+./configure --prefix=${NFDIR} --disable-fortran-type-check __ 
 make check && make install
 
-Add new entries to src/share/makefile.arch and src/share/makefile-tool.arch for local environment. Use existing entries, e.g. arch=mac-gfortran, as template. Note, set the NetCDF paths correctly.
-NCLIB   = -L[NetCDF-fortan]/lib -L[NetCDF]/lib
-NCINC   = -I[NetCDF-fortan]/include
+Add new entries to src/share/makefile.arch and src/share/makefile-tool.arch for local environment. Use existing entries, e.g. arch=mac-gfortran, as template. To set the NetCDF paths correctly. __
+NCLIB   = -L[NetCDF-fortan]/lib -L[NetCDF]/lib __
+NCINC   = -I[NetCDF-fortan]/include __
 
-cd src/swpc3d
-make arch=[local arch] debug(publish)=true/false
-cd src/tool
+cd src/swpc3d __
+make arch=[local arch] debug(publish)=true/false __
+cd src/tool __
 make arch=[local arch] debug(publish)=true/false
 
 ## Running mixed code
 
-Note, defmod and swpc can run standalone, compatible with all the model inputs for the original codes, see
-https://bitbucket.org/stali/defmod
-https://bitbucket.org/chunfangmeng/defmod-dev
+Note, defmod and swpc can run standalone, compatible with all the model inputs for the original codes, __
+https://bitbucket.org/stali/defmod __
+https://bitbucket.org/chunfangmeng/defmod-dev __
 https://github.com/takuto-maeda/OpenSWPC
 
 To run the code in FE-FD mixed mode, two additional input files are needed, [my_model]_fe.cfg [my_model]_fd.cfg
 Find, SCEC[ID]_fe(fd).cfg and F3D_tet_fe(fd).cfg in example/SCEC and example/F3Dp, and follow the comments. Note, the values in [my_model]_fe.cfg should be consistent with those in [my_model].inf for swpc, and the values in [my_model]_fd.cfg, i.e. observation list, should be consistent with those in [my_model].inp for defmod. Use the two examples SCEC and F3Dp (poroelastic) as templates.
 
-First run defmod (FE) model. -fd 1 tells the code to output the FD input.
+First run defmod (FE) model. -fd 1 tells the code to output the FD input. __
 bin/defmod -f [my_fe_model].inp [petsc-args] -fd 1
 
-After FE model finishes without errors, run swpc (FD) model. -r [my_fe_model] passes the code the FE model name, no extension. -e [event_ID] passes which earthquake to simulate if there are more then one event. Without -e the code will pick the first event. 
+After FE model finishes without errors, run swpc (FD) model. -r [my_fe_model] passes the code the FE model name, no extension. -e [event_ID] passes which earthquake to simulate if there are more then one event. Without -e the code will pick the first event. __ 
 bin/swpc_3d.x   -i [my_fd_model].inf -r [my_fe_model] -e [event ID] 
 
 The code will display if the FE-FD mode is on via screen outputs. 
 
 Use example/SCEC/SCEC_rup(sw).sh and example/F3Dp/F3D_rup(sw).sh as templates for command lines or job submissions. Also, use *.py files in the two examples as templates for making FE models.
 
-To generate FE mesh, in Exodus-II (.exo) format, cubit(trelis) -nojournal -nographics [my_model].jou
-To generate FE inp file, [my_model_gen].py [my_model].exo
+To generate FE mesh, in Exodus-II (.exo) format, __
+cubit(trelis) -nojournal -nographics [my_model].jou __
+To generate FE inp file, __
+[my_model_gen].py [my_model].exo
