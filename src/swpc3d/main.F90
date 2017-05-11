@@ -176,6 +176,7 @@ program SWPC_3D
 
      call ckprst__checkpoint( it )
 
+
   end do
 #ifdef _FX
   call fipp_stop()  !! performance measurement

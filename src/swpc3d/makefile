@@ -39,12 +39,12 @@ s_vmodel3 = m_vmodel_lhm.F90 # laterally homogeneous medium
 s_vmodel1r = m_vmodel_uni_rmed.F90 # homogeneous structure
 s_vmodel2r = m_vmodel_grd_rmed.F90 # requires netcdf
 s_vmodel3r = m_vmodel_lhm_rmed.F90 # homogeneous structure
+s_vmodel_fe = m_vmodel_fe.F90 # FE structure
 
 ## kernel module
 s_global  = m_global.F90
 s_kernel  = m_kernel.F90
 s_source  = m_source.F90
-s_vmodel_fe = m_vmodel_fe.F90
 s_rup     = m_rup.F90
 s_fdtool  = m_fdtool.F90
 s_output  = m_output.F90

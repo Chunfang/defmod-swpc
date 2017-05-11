@@ -18,7 +18,7 @@ VPATH = ../share/:../../bin/
 ##
 ## Compiler & Compile Option
 ##
-include ../share/makefile-tools.arch
+include ../share/makefile-tool.arch
 
 .F90.o:
 	$(FC) $(NCINC) $(FFLAGS) $(NCFLAG) -c $< -o $@ $(NETCDF)

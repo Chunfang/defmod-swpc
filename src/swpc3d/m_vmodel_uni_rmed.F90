@@ -71,6 +71,7 @@ contains
     dh = sqrt(3.) / sqrt( 1./dx**2 + 1./dy**2 + 1./dz**2 )
     cc = 6. / 7. !! assume 4th order
     vmax = 0.95 * cc * dh / dt  ! 0.95 is a safety coefficient
+
     vmax_over  = .false.
     vmin_under = .false.
     rhomin_under = .false.
