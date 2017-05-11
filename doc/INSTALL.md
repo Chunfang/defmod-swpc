@@ -70,7 +70,7 @@ Find, SCEC[ID]_fe(fd).cfg and F3D_tet_fe(fd).cfg in example/SCEC and example/F3D
 First run defmod (FE) model. -fd 1 tells the code to output the FD input.  
 [MPI_cmd] [MPI-args] bin/defmod -f [my_fe_model].inp [petsc-args] -fd 1
 
-After FE model finishes without errors, run swpc (FD) model. -r [my_fe_model] passes the code the FE model name, no extension. -e [event_ID] passes which earthquake to simulate, if there are more then one event. Without -e the code will pick the first event.   
+After FE model finishes without errors, run swpc (FD) model. -r [my_fe_model] passes the code the FE model name, no extension. -e [event_ID] passes which earthquake to simulate, if there are more then one event. Without -e argument, the code will pick the first event.   
 [MPI_cmd] [MPI-args] bin/swpc_3d.x -i [my_fd_model].inf -r [my_fe_model] -e [event_ID] 
 
 The code will display if the FE-FD mode is on via screen outputs. 
