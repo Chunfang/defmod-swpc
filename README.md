@@ -1,7 +1,9 @@
 # defmod-swpc -- A finite element and finite difference mixed code for multiphysics and multiscale crustal motions. 
 
 Corresponding Author: Chunfang Meng ( cmeng (at) mit.edu )
+
 Contributers: Tabrez Ali ( tabrez.ali (at) gmail.com ) 
+
               Takuto Maeda ( maeda (at) eri.u-tokyo.ac.jp )
 
 * * *
@@ -11,7 +13,9 @@ This code combines two open source codes Defmod(-dev) and OpenSWPC, forming an F
 
 To install and use the "pure" FE or FD code, visit 
 https://bitbucket.org/stali/defmod
+
 https://bitbucket.org/chunfangmeng/defmod-dev
+
 https://github.com/takuto-maeda/OpenSWPC
 
 To install and run this "mixed" code, see doc/INSTALL
