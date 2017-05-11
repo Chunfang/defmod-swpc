@@ -24,18 +24,17 @@ export PETSC_ARCH=linux-gnu-opt
 
 To suppress gnu warnings add to the file src/Makefile FFLAGS = -Wno-maybe-uninitialized
 
-All configurations can have --with-debugging=1 for debug. To inspect the allocatable array/pointer with gdb+gfortran:
-
+All configurations can have --with-debugging=1 for debug. To inspect the allocatable array/pointer with gdb+gfortran  
 (gdb) print *((real *)A+m)@n  
 A: array/pointer name  
 data type: real_8/int/long_int/  
 m: 2 means print from 3rd entry  
 n: number of entries to print  
 
-With PETSC_DIR and PETSC_ARCH set correctly in ~/.bashrc
+With PETSC_DIR and PETSC_ARCH set correctly in ~/.bashrc  
 cd src/defmod && make all
 
-## FD (swpc) sintallation
+## FD (swpc) installation
 
 Install NetCDF and NetCDF-fortran, following http://www.unidata.ucar.edu/software/netcdf. If NetCDF is already available, only NetCDF-fortran needs to install. 
 
@@ -48,7 +47,7 @@ export CPPFLAGS=-I${NCDIR}/include LDFLAGS=-L${NCDIR}/lib
 ./configure --prefix=${NFDIR} --disable-fortran-type-check   
 make check && make install
 
-Add new entries to src/share/makefile.arch and src/share/makefile-tool.arch for local the environment. Use existing entries, e.g. arch=mac-gfortran, as template. To set the NetCDF paths correctly  
+Add new entries to src/share/makefile.arch and src/share/makefile-tool.arch for local the environment. Use existing entries, e.g. arch=mac-gfortran, as template. To set the NetCDF paths correctly,  
 NCLIB   = -L[NetCDF-fortan]/lib -L[NetCDF]/lib  
 NCINC   = -I[NetCDF-fortan]/include  
 
@@ -57,14 +56,14 @@ make arch=[local arch] debug(publish)=true/false
 cd src/tool  
 make arch=[local arch] debug(publish)=true/false
 
-## Running mixed code
+## Running the mixed code
 
-Note, defmod and swpc can run standalone, compatible with all the model inputs for the original codes.  
+defmod and swpc can run standalone, compatible with all the model inputs for the original codes.  
 https://bitbucket.org/stali/defmod  
 https://bitbucket.org/chunfangmeng/defmod-dev  
 https://github.com/takuto-maeda/OpenSWPC
 
-To run the code in FE-FD mixed mode, two additional input files are needed, [my_model]_fe.cfg [my_model]_fd.cfg.
+To run the code in FE-FD mixed mode, two additional input files are needed, [my_model]_fe.cfg and [my_model]_fd.cfg.
 
 Find, SCEC[ID]_fe(fd).cfg and F3D_tet_fe(fd).cfg in example/SCEC and example/F3Dp, and follow the comments. Note, the values in [my_model]_fe.cfg should be consistent with those in [my_model].inf for swpc, and the values in [my_model]_fd.cfg, i.e. observation list, should be consistent with those in [my_model].inp for defmod. Use the two examples SCEC and F3Dp (poroelastic) as templates.
 
