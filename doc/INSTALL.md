@@ -48,7 +48,7 @@ export CPPFLAGS=-I${NCDIR}/include LDFLAGS=-L${NCDIR}/lib
 ./configure --prefix=${NFDIR} --disable-fortran-type-check   
 make check && make install
 
-Add new entries to src/share/makefile.arch and src/share/makefile-tool.arch for local environment. Use existing entries, e.g. arch=mac-gfortran, as template. To set the NetCDF paths correctly.  
+Add new entries to src/share/makefile.arch and src/share/makefile-tool.arch for local the environment. Use existing entries, e.g. arch=mac-gfortran, as template. To set the NetCDF paths correctly  
 NCLIB   = -L[NetCDF-fortan]/lib -L[NetCDF]/lib  
 NCINC   = -I[NetCDF-fortan]/include  
 
@@ -59,24 +59,24 @@ make arch=[local arch] debug(publish)=true/false
 
 ## Running mixed code
 
-Note, defmod and swpc can run standalone, compatible with all the model inputs for the original codes,  
+Note, defmod and swpc can run standalone, compatible with all the model inputs for the original codes.  
 https://bitbucket.org/stali/defmod  
 https://bitbucket.org/chunfangmeng/defmod-dev  
 https://github.com/takuto-maeda/OpenSWPC
 
-To run the code in FE-FD mixed mode, two additional input files are needed, [my_model]_fe.cfg [my_model]_fd.cfg
+To run the code in FE-FD mixed mode, two additional input files are needed, [my_model]_fe.cfg [my_model]_fd.cfg.
 
 Find, SCEC[ID]_fe(fd).cfg and F3D_tet_fe(fd).cfg in example/SCEC and example/F3Dp, and follow the comments. Note, the values in [my_model]_fe.cfg should be consistent with those in [my_model].inf for swpc, and the values in [my_model]_fd.cfg, i.e. observation list, should be consistent with those in [my_model].inp for defmod. Use the two examples SCEC and F3Dp (poroelastic) as templates.
 
 First run defmod (FE) model. -fd 1 tells the code to output the FD input.  
 [MPI_cmd] [MPI-args] bin/defmod -f [my_fe_model].inp [petsc-args] -fd 1
 
-After FE model finishes without errors, run swpc (FD) model. -r [my_fe_model] passes the code the FE model name, no extension. -e [event_ID] passes which earthquake to simulate if there are more then one event. Without -e the code will pick the first event.   
-[MPI_cmd] [MPI-args] bin/swpc_3d.x   -i [my_fd_model].inf -r [my_fe_model] -e [event_ID] 
+After FE model finishes without errors, run swpc (FD) model. -r [my_fe_model] passes the code the FE model name, no extension. -e [event_ID] passes which earthquake to simulate, if there are more then one event. Without -e the code will pick the first event.   
+[MPI_cmd] [MPI-args] bin/swpc_3d.x -i [my_fd_model].inf -r [my_fe_model] -e [event_ID] 
 
 The code will display if the FE-FD mode is on via screen outputs. 
 
-Use example/SCEC/SCEC_rup(sw).sh and example/F3Dp/F3D_rup(sw).sh as templates for command lines or job submissions. Also, use *.py files in the two examples as templates for making FE models.
+Use example/SCEC/SCEC_rup(sw).sh and example/F3Dp/F3D_rup(sw).sh as templates for command lines or job submissions. Also, use *.py files in the two examples as templates for making the FE models.
 
 To generate FE mesh, in Exodus-II (.exo) format,  
 cubit(trelis) -nojournal -nographics [my_model].jou  
