@@ -33,7 +33,6 @@ m: 2 means print from 3rd entry
 n: number of entries to print  
 
 With PETSC_DIR and PETSC_ARCH set correctly in ~/.bashrc
-
 cd src/defmod && make all
 
 ## FD (swpc) sintallation
@@ -66,13 +65,14 @@ https://bitbucket.org/chunfangmeng/defmod-dev
 https://github.com/takuto-maeda/OpenSWPC
 
 To run the code in FE-FD mixed mode, two additional input files are needed, [my_model]_fe.cfg [my_model]_fd.cfg
+
 Find, SCEC[ID]_fe(fd).cfg and F3D_tet_fe(fd).cfg in example/SCEC and example/F3Dp, and follow the comments. Note, the values in [my_model]_fe.cfg should be consistent with those in [my_model].inf for swpc, and the values in [my_model]_fd.cfg, i.e. observation list, should be consistent with those in [my_model].inp for defmod. Use the two examples SCEC and F3Dp (poroelastic) as templates.
 
 First run defmod (FE) model. -fd 1 tells the code to output the FD input.  
-bin/defmod -f [my_fe_model].inp [petsc-args] -fd 1
+[MPI_cmd] [MPI-args] bin/defmod -f [my_fe_model].inp [petsc-args] -fd 1
 
 After FE model finishes without errors, run swpc (FD) model. -r [my_fe_model] passes the code the FE model name, no extension. -e [event_ID] passes which earthquake to simulate if there are more then one event. Without -e the code will pick the first event.   
-bin/swpc_3d.x   -i [my_fd_model].inf -r [my_fe_model] -e [event ID] 
+[MPI_cmd] [MPI-args] bin/swpc_3d.x   -i [my_fd_model].inf -r [my_fe_model] -e [event ID] 
 
 The code will display if the FE-FD mode is on via screen outputs. 
 
