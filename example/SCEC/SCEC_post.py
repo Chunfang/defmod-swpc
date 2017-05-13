@@ -3,9 +3,13 @@ import numpy as np
 import sys
 import scipy.io as io_mat 
 import argparse
-import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-
+import matplotlib
+matplotlib.use('Svg')
+import matplotlib.pyplot as plt
+font = {'weight' : 'normal',
+        'size'   : 10}
+matplotlib.rc('font', **font)
 ap=argparse.ArgumentParser()
 ap.add_argument('-m') # model file (no extension)
 ap.add_argument('-p') # problem number
@@ -92,8 +96,7 @@ for i in range(nobs):
             plt.plot(dat_fm[:,0],dat_fm[:,1+j])
         plt.xlim(0,t_plt)
         plt.ylim(ymin,ymax)
-    fig.tight_layout()
-    plt.savefig(name_sol+'_wave_%d'%(i+1))
+    plt.savefig(name_sol+'_wave_%d'%(i+1)+'.png')
 
 if rup==1 or dsp==1: # Plot rupture front
     fcoord   = np.squeeze(io_mat.loadmat(matfile)['crd_flt' ]) 
@@ -135,5 +138,4 @@ if rup==1 or dsp==1: # Plot rupture front
     plt.xlabel('y [km]')
     plt.ylabel('z [km]')
     plt.gca().set_aspect('equal', adjustable='box')
-    fig.tight_layout()
-    plt.savefig(name_sol+'_rup')
+    plt.savefig(name_sol+'_rup'+'.png')

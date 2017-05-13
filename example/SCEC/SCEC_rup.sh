@@ -39,9 +39,9 @@ mpirun ./defmod -f SCEC102_dsp.inp -pc_asm_overlap 2 -fd 1
 rm defmod
 
 # sort outcome (SCEC_sort.sh) 
-${TOOL_DIR}/def_sort.py SCEC205 slip clean
-${TOOL_DIR}/def_sort.py SCEC10  slip clean
-${TOOL_DIR}/def_sort.py SCEC102_dsp slip rsf clean
+${TOOL_DIR}/def_sort.py SCEC205 slip
+${TOOL_DIR}/def_sort.py SCEC10  slip
+${TOOL_DIR}/def_sort.py SCEC102_dsp slip rsf
 
 # compare Defmod against others (SCEC_post.sh) 
 ./SCEC_post.py -m SCEC205 -p 205 -r 1
