@@ -75,6 +75,8 @@ program main
   if (poro) then
      p=1; ef_eldof=eldof+eldofp
      if (eltype=="tri") nip=3; if (eltype=="tet") nip=4
+  elseif (fault) then
+     if (eltype=="tri") nip=3; if (eltype=="tet") nip=4
   end if
 
   ! Partition mesh using METIS, create mappings, and read on-rank mesh data

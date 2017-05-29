@@ -429,9 +429,11 @@ contains
           vecss(dmn)=matst(dmn,dmn)
           if (abs(vecfl(dmn))>f0) r=(r+abs(vecss(dmn)/vecfl(dmn)))/f2
           ! Convert prestress to nodal force
-          st_init(j,:)=st_init(j,:)/r
-          coh(j)=coh(j)/r(1)
-          if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r(1)
+          if (r(dmn)>f0) then
+             st_init(j,:)=st_init(j,:)/r
+             coh(j)=coh(j)/r(1)
+             if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r(1)
+          end if
           call VecSetValues(Vec_f2s,dmn,workneg,-r,Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
@@ -958,8 +960,8 @@ contains
        MPI_Comm_World,ierr)
     call MPI_AllReduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
        MPI_Comm_World,ierr)
-    ! Identify aseismic slip, nc=2 for SCEC10 (slow weakening)
-    nc=2; nr=15
+    ! Identify aseismic slip, nc=10 for SCEC10/14 (slow weakening)
+    nc=10; nr=15
     if (ih>nc+rsf*nr .and. sum((slip0-slip_sum)*(slip0-slip_sum))==0) then 
        slip=0
        crp=.true.
