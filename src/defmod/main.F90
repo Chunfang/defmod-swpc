@@ -912,6 +912,7 @@ program main
               call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
               call GetVec_U; tot_uu=tot_uu+uu
               call VecAXPY(Vec_Um,f1,Vec_U,ierr)
+              call Rscdt(fdt) ! Scale [K] with dt (pv)
               if (vout==1) then
                  if (nceqs>0) then
                     call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
@@ -929,7 +930,6 @@ program main
               call GetVec_flt_qs 
               if (rank==0) call WriteOutput_flt_qs
            end if
-           call Rscdt(fdt)
         else ! Not poro
            call VecGetLocalSize(Vec_U,j,ierr)
            call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
