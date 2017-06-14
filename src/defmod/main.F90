@@ -313,10 +313,15 @@ program main
            ierr)
      elseif(fault .and. nceqs-nceqs_ncf>0 .and. hyb>0) then
         call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs_ncf/(dmn+p)+nfnd,&
-           Vec_lmnd,ierr)
-        call VecGetLocalSize(Vec_lmnd,n_lmnd,ierr)
-        call VecGetOwnershipRange(Vec_lmnd,lmnd0,j,ierr)
-        Call VecDestroy(Vec_lmnd,ierr)
+           Vec_lm_pn,ierr)
+        call VecGetLocalSize(Vec_lm_pn,n_lmnd,ierr)
+        call VecGetOwnershipRange(Vec_lm_pn,lmnd0,j,ierr)
+        if (poro) then
+           call VecDuplicate(Vec_lm_pn,Vec_lm_pp,ierr)
+           call VecDuplicate(Vec_lm_pn,Vec_lm_f2s,ierr)
+        else
+           call VecDestroy(Vec_lm_pn,ierr)
+        end if
         ! Dofs of one fault node are not split by different ranks
         call VecCreateMPI(Petsc_Comm_World,n_lmnd*dmn,(nceqs_ncf/(dmn+p)+nfnd)*&
            dmn,Vec_lambda_sta,ierr)
@@ -882,7 +887,9 @@ program main
               call GetVec_Stress
               call GetVec_S
               if (nceqs>0) then
+                 if (poro) call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
                  call GetVec_f2s
+                 if (poro) call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
                  call GetVec_f2s_seq
               else
                  call GetVec_ft
@@ -1089,6 +1096,7 @@ program main
               call VecRestoreArrayF90(Vec_I,pntr,ierr)
               j=size(uup)
               call VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
+              call Up_s2d
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               ! Stabilize RHS
               do i=1,nels

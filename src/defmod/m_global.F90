@@ -32,7 +32,7 @@ module global
   Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,            &
      Vec_U_dyn,Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up0,Vec_Up_dyn,Vec_I_dyn,Vec_fp,   &
      Vec_qu,Vec_Uu,Vec_Ul,Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip, &
-     Vec_nrm,Vec_lmnd,Vec_lambda_sta,Vec_lambda_sta0
+     Vec_nrm,Vec_lambda_sta,Vec_lambda_sta0,Vec_lm_pn,Vec_lm_pp,Vec_lm_f2s
   Vec,pointer :: Vec_W(:),Vec_Wlm(:)
   Mat :: Mat_K,Mat_M,Mat_Minv,Mat_Gt,Mat_G,Mat_GMinvGt,Mat_Kc,Mat_K_dyn,Mat_H, &
      Mat_Ht
@@ -53,7 +53,7 @@ module global
   Vec :: Seq_U,Seq_U_dyn,Seq_fp,Seq_fl,Seq_flc,Seq_ql,Seq_qu,Seq_SS,Seq_SH,    &
      Seq_f2s,Seq_dip,Seq_nrm
   IS :: From,To,RI,From_u,To_u,RIu,From_p,To_p,RIl
-  VecScatter :: Scatter,Scatter_dyn,Scatter_u,Scatter_q,Scatter_s2d
+  VecScatter :: Scatter,Scatter_dyn,Scatter_u,Scatter_q,Scatter_s2d,Scatter_pn2d,Scatter_pp2d
   real(8),pointer :: pntr(:)
 
 contains
@@ -345,10 +345,11 @@ contains
   subroutine GetVec_f2s
     implicit none
 #include "petsc.h"
-    integer :: j,j1,j2,j3,workpos(dmn),workneg(dmn)
+    integer :: j,j1,j2,j3,j4,j5,workpos(dmn),workneg(dmn)
     real(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r(dmn),dip(dmn),nrm(dmn),      &
-       matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn)
+       matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn),pn,pp,ptmp
     call VecGetOwnershipRange(Vec_flc,j2,j3,ierr)
+    if (poro) call VecGetOwnershipRange(Vec_Up,j4,j5,ierr)
     do j=1,nfnd
        matrot=reshape(vecf(j,:),(/dmn,dmn/))
        vecfl=f0; vecss=f0; vecsh=f0
@@ -369,6 +370,19 @@ contains
        call MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecsh=vec
+       pn=f0; pp=f0
+       if (poro) then
+          if (node_neg(j)-1>=j4 .and. node_neg(j)-1<j5) then
+             call VecGetValues(Vec_Up,1,node_neg(j)-1,pn,ierr)
+          end if
+          if (node_pos(j)-1>=j4 .and. node_pos(j)-1<j5) then
+             call VecGetValues(Vec_Up,1,node_pos(j)-1,pp,ierr)
+          end if
+          call MPI_Reduce(pn,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr) 
+          pn=ptmp
+          call MPI_Reduce(pp,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr) 
+          pp=ptmp
+       end if
        if (rank==nprcs-1) then
           select case(dmn)
           case(2)
@@ -385,7 +399,7 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=abs(vecss(dmn)/vecfl(dmn))
+          if (abs(vecfl(dmn))>f0) r=abs((vecss(dmn)-pn)/vecfl(dmn))
           !if (rank==nprcs-1) then
           call VecSetValues(Vec_f2s,dmn,workpos,r,Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
@@ -427,7 +441,7 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=(r+abs(vecss(dmn)/vecfl(dmn)))/f2
+          if (abs(vecfl(dmn))>f0) r=(r+abs((vecss(dmn)-pp)/vecfl(dmn)))/f2
           ! Convert prestress to nodal force
           if (r(dmn)>f0) then
              st_init(j,:)=st_init(j,:)/r
@@ -435,12 +449,17 @@ contains
              if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r(1)
           end if
           call VecSetValues(Vec_f2s,dmn,workneg,-r,Insert_Values,ierr)
+          if (poro) call VecSetValue(Vec_lm_f2s,j-1,r(dmn),Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
        end if
     end do
     call VecAssemblyBegin(Vec_f2s,ierr)
     call VecAssemblyEnd(Vec_f2s,ierr)
+    if (poro) then
+       call VecAssemblyBegin(Vec_lm_f2s,ierr)
+       call VecAssemblyEnd(Vec_lm_f2s,ierr)
+    end if
     call VecAssemblyBegin(Vec_dip,ierr)
     call VecAssemblyEnd(Vec_dip,ierr)
     call VecAssemblyBegin(Vec_nrm,ierr)
@@ -612,19 +631,30 @@ contains
     implicit none
 #include "petsc.h"
     integer :: j,j1,j2,j3,slip_loc(nfnd),rw_loc(dmn)
-    real(8) :: mu,theta102,flt_qs(dmn),fsh,fnrm,rsftau,mattmp(dmn,dmn),d,fcoh, &
+    real(8) :: mu,theta102,flt_qs(dmn),fsh,fnrm,rsftau,d,fcoh, &
        a,b0,b,V0,L
-    real(8),target :: flt_ndf(n_lmnd*dmn),flt_ndf0(n_lmnd*dmn)
+    real(8),target :: flt_ndf(n_lmnd*dmn),flt_ndf0(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
     integer,save :: k=0
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    if (poro) then
+       call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
+       lm_pn=pntr
+       call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
+       call VecGetArrayF90(Vec_lm_pp,pntr,ierr)
+       lm_pp=pntr
+       call VecRestoreArrayF90(Vec_lm_pp,pntr,ierr)
+       call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
+       lm_f2s=pntr
+       call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
+    end if
     if (rsf==1 .and. k>0) then
-        call VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
-        flt_ndf0=pntr
-        call VecRestoreArrayF90(Vec_lambda_sta0,pntr,ierr)
-        call RSF_QS_update(flt_ndf0,flt_ndf,slip_loc,trunc)
-        go to 250
+       call VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
+       flt_ndf0=pntr
+       call VecRestoreArrayF90(Vec_lambda_sta0,pntr,ierr)
+       call RSF_QS_update(flt_ndf0,flt_ndf,slip_loc,trunc)
+       go to 250
     end if
     if (rsf==1 .and. k==0) rsfv=v_bg
     slip_loc=0
@@ -632,7 +662,8 @@ contains
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-       flt_qs=flt_ndf(rw_loc)+st_init(j3,:)
+       flt_qs=flt_ndf(rw_loc)+st_init(j3,:dmn)
+       if (poro) flt_qs(dmn)=flt_qs(dmn)+(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
        if (rsf==1) then  
           if (k==0) then
              ! RSF parameters
@@ -663,7 +694,6 @@ contains
           fsh=sqrt(flt_qs(1)**2+flt_qs(2)**2)
           fnrm=flt_qs(3)
        end select
-       mattmp=transpose(reshape(vecf(j3,:),(/dmn,dmn/)))
        ! Cohesive stress if any
        if (coh(j3)>f0) then
           d=sqrt(sum(qs_flt_slip(rw_loc(:dmn-1))*qs_flt_slip(rw_loc(:dmn-1))))
@@ -679,7 +709,7 @@ contains
           slip_loc(j3)=1
        else
           slip_loc(j3)=0
-       end if
+       endif
     end do
 250 call MPI_AllReduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,MPI_Comm_World,  &
        ierr)
@@ -740,6 +770,38 @@ contains
     k=k+1
   end subroutine LM_s2d 
 
+  ! Scatter two side fault pressure to dynamic LM space 
+  subroutine Up_s2d
+    implicit none
+#include "petsc.h"
+    integer :: j,j1,jn,jp,idxmp_n(nfnd_loc,2),idxmp_p(nfnd_loc,2)
+    integer,save :: k=0
+    if (k==0) then 
+       do j1=1,nfnd_loc
+          j=FltMap(j1,1)
+          jn=node_neg(FltMap(j1,2))
+          jp=node_pos(FltMap(j1,2))
+          idxmp_n(j1,1)=lmnd0+j-1
+          idxmp_p(j1,1)=lmnd0+j-1
+          idxmp_n(j1,2)=jn-1
+          idxmp_p(j1,2)=jp-1
+       end do
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_n(:,2),Petsc_Copy_Values,From,ierr)
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_n(:,1),Petsc_Copy_Values,To,ierr)
+       call VecScatterCreate(Vec_Up,From,Vec_lm_pn,To,Scatter_pn2d,ierr)
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_p(:,2),Petsc_Copy_Values,From,ierr)
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_p(:,1),Petsc_Copy_Values,To,ierr)
+       call VecScatterCreate(Vec_Up,From,Vec_lm_pp,To,Scatter_pp2d,ierr)
+    end if
+    call VecScatterBegin(Scatter_pn2d,Vec_Up,Vec_lm_pn,Insert_Values,Scatter_Forward,ierr)
+    call VecScatterEnd(Scatter_pn2d,Vec_Up,Vec_lm_pn,Insert_Values,Scatter_Forward,ierr)
+    call VecScatterBegin(Scatter_pp2d,Vec_Up,Vec_lm_pp,Insert_Values,Scatter_Forward,ierr)
+    call VecScatterEnd(Scatter_pp2d,Vec_Up,Vec_lm_pp,Insert_Values,Scatter_Forward,ierr)
+    call VecScale(Vec_lm_pn,scale,ierr)
+    call VecScale(Vec_lm_pp,scale,ierr)
+    k=k+1
+  end subroutine Up_s2d
+  
   ! Cap dynamic LM by frictional laws 
   subroutine CapLM_dyn
     implicit none
@@ -748,7 +810,7 @@ contains
     real(8) :: d,dd,fr,frs,frd,fsh,mu,fcoh,fnrm,rsftau,vec_init(dmn),vec(dmn), &
        lm_sta(dmn),lm_dyn(dmn),lm_dyn0(dmn),mattmp(dmn,dmn)
     real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn),                 &
-       flt_dyn0(n_lmnd*dmn)
+       flt_dyn0(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_sta=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -758,6 +820,17 @@ contains
     call VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
     flt_dyn0=pntr
     call VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
+    if (poro) then
+       call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
+       lm_pn=pntr
+       call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
+       call VecGetArrayF90(Vec_lm_pp,pntr,ierr)
+       lm_pp=pntr
+       call VecRestoreArrayF90(Vec_lm_pp,pntr,ierr)
+       call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
+       lm_f2s=pntr
+       call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
+    end if
     rsftau=f0
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
@@ -801,6 +874,7 @@ contains
        end if
        mu_hyb(j3)=mu
        vec(1)=vec(1)+rsftau
+       if (poro) vec(dmn)=vec(dmn)+(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
        select case(dmn)
        case(2)
           fsh=abs(vec(1))
@@ -840,6 +914,7 @@ contains
        ! Subtract the static LM 
        vec(1)=vec(1)-rsftau
        lm_dyn=vec-vec_init-lm_sta-lm_dyn0
+       if (poro) lm_dyn(dmn)=lm_dyn(dmn)-(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
        rw_loc=lmnd0*dmn+rw_loc-1
        ! From the new dynamic LM
        call VecSetValues(Vec_lambda,dmn,rw_loc,lm_dyn,Insert_Values,ierr)
@@ -961,7 +1036,7 @@ contains
     call MPI_AllReduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
        MPI_Comm_World,ierr)
     ! Identify aseismic slip, nc=10 for SCEC10/14 (slow weakening)
-    nc=10; nr=15
+    nc=5; nr=15
     if (ih>nc+rsf*nr .and. sum((slip0-slip_sum)*(slip0-slip_sum))==0) then 
        slip=0
        crp=.true.
