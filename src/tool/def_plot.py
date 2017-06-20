@@ -119,7 +119,7 @@ if slip:
         dat_fsq_sort=[]
         vmax=0.6; vmin=0.
         for i in range(len(dat_fqs)):
-            dat_grid = griddata((np.squeeze(fcoord[:,1]), np.squeeze(fcoord[:,2])), np.linalg.norm(dat_fqs[i][:,:2],axis=1)/dat_fqs[i][:,2], (yi, zi), method='linear')
+            dat_grid = griddata((np.squeeze(fcoord[:,1]), np.squeeze(fcoord[:,2])), np.linalg.norm(dat_fqs[i][:,:2],axis=1)/(-dat_fqs[i][:,2]), (yi, zi), method='linear')
             plt.contourf(yi, zi/np.cos(theta), dat_grid, 20, cmap=plt.cm.rainbow, vmax=vmax, vmin=vmin)
             plt.xlabel('length [km]'); plt.ylabel('height [km]');
             plt.gca().set_aspect('equal', adjustable='box')

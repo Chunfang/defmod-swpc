@@ -54,7 +54,7 @@ visc = 1E25; r = 1.
 B=0.9 #Biot coef
 phi=.15 #porosity
 cf=1E9 #fluid bulk modulus 
-source = -1.75E5 #source/sink -1.75E5, -1.8E5, -1.6E5 to make ~2MPa drop
+source = -.012 #source/sink .012 to make ~2 MPa drop
 
 if init==1:
     mat = [[E[0], nu[0], visc, r, rho[0], K[0], B, phi, cf,    0.,E_dyn[0],nu_dyn[0]],

@@ -359,11 +359,12 @@ program main
         allocate(node_pos(nfnd),node_neg(nfnd),vecf(nfnd,dmn*dmn),fc(nfnd),    &
            fcd(nfnd),dc(nfnd),perm(nfnd),vvec_all(2*nfnd*dmn,dmn),             &
            node_all(2*nfnd*dmn),st_init(nfnd,dmn),xfnd(nfnd,dmn),frc(nfnd),    &
-           coh(nfnd),dcoh(nfnd))    
+           coh(nfnd),dcoh(nfnd),biot(nfnd))    
+        biot=f1
         if (rsf==1) allocate(rsfb0(nfnd),rsfV0(nfnd),rsfdtau0(nfnd),rsfa(nfnd),&
             rsfb(nfnd),rsfL(nfnd),rsftheta(nfnd))
         do i=1,nfnd
-           if (poro) then
+           if (poro .and. init==1) then
               if (rsf==1) then
                  read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
                     rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
@@ -373,6 +374,17 @@ program main
                  read(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),    &
                     dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),               &
                     coh(i),dcoh(i)
+              end if
+           else if (poro) then
+              if (rsf==1) then
+                 read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
+                    rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
+                    perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),              &
+                    dcoh(i),biot(i)
+              else
+                 read(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),    &
+                    dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),               &
+                    coh(i),dcoh(i),biot(i)
               end if
            else
               if (rsf==1) then

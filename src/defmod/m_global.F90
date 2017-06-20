@@ -20,7 +20,7 @@ module global
      onlst(:,:),frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),nnd_fe2fd(:),rsf_sta(:)
   real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vvec_all(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:), &
-     xfnd(:,:),ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),         &
+     xfnd(:,:),ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:), &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
      mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
@@ -279,11 +279,13 @@ contains
   subroutine GetVec_fcoulomb
     implicit none
 #include "petsc.h"
-    integer :: j,j1,u1,u2,workpos(dmn),workneg(dmn),row
-    real(8) :: lm(dmn),vecfl(dmn),mattmp(dmn,dmn),vectmp(dmn,1)
+    integer :: j,j1,u1,u2,r1,r2,workpos(dmn),workneg(dmn),row,row_f2s
+    real(8) :: lm(dmn),vecfl(dmn),mattmp(dmn,dmn),vectmp(dmn,1),rvec(dmn),rf2s(dmn)
+    integer,save :: k=0
     call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
+    if (k>0) call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
     do j=1,nfnd
-       lm=f0; vecfl=f0
+       lm=f0; vecfl=f0; rvec=f0; rf2s=f0
        do j1=1,dmn
           workpos(j1)=dmn*node_pos(j)-dmn+j1-1
           workneg(j1)=dmn*node_neg(j)-dmn+j1-1
@@ -295,20 +297,29 @@ contains
           if (row>=u1 .and. row<u2) then
              call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
           end if
+          if (k>0) then
+             row_f2s=dmn*node_pos(j)-dmn+j1-1
+             if (row_f2s>=r1 .and. row_f2s<r2) then
+                call VecGetValues(Vec_f2s,1,row_f2s,rvec(j1),ierr)
+             end if
+          end if
        end do
        call MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
           ierr)
+       if (k>0) call MPI_Reduce(rvec,rf2s,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
        if (rank==nprcs-1) then
           vectmp=reshape(vecfl,(/dmn,1/))
           mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
           vectmp=matmul(mattmp,vectmp)
           vecfl(:)=vectmp(:,1)
+          if (k>0) vecfl=vecfl*rf2s
           call VecSetValues(Vec_flc,dmn,workpos,wt*vecfl,Insert_Values,ierr)
           call VecSetValues(Vec_flc,dmn,workneg,-wt*vecfl,Insert_Values,ierr)
        end if
     end do
     call VecAssemblyBegin(Vec_flc,ierr)
     call VecAssemblyEnd(Vec_flc,ierr)
+    k=k+1
   end subroutine GetVec_fcoulomb
 
   ! Pass pseudo velocity to dynamic model
@@ -370,8 +381,8 @@ contains
        call MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecsh=vec
-       pn=f0; pp=f0
-       if (poro) then
+       pn=f0; pp=f0; ptmp=f0 
+       if (poro .and. init/=1) then
           if (node_neg(j)-1>=j4 .and. node_neg(j)-1<j5) then
              call VecGetValues(Vec_Up,1,node_neg(j)-1,pn,ierr)
           end if
@@ -379,9 +390,9 @@ contains
              call VecGetValues(Vec_Up,1,node_pos(j)-1,pp,ierr)
           end if
           call MPI_Reduce(pn,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr) 
-          pn=ptmp
+          pn=ptmp*scale
           call MPI_Reduce(pp,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr) 
-          pp=ptmp
+          pp=ptmp*scale
        end if
        if (rank==nprcs-1) then
           select case(dmn)
@@ -399,12 +410,10 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=abs((vecss(dmn)-pn)/vecfl(dmn))
-          !if (rank==nprcs-1) then
+          if (abs(vecfl(dmn))>f0) r=abs((vecss(dmn)-biot(j)*pn)/vecfl(dmn))
           call VecSetValues(Vec_f2s,dmn,workpos,r,Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
-          !end if
        end if
        matrot=reshape(vecf(j,:),(/dmn,dmn/))
        vecfl=f0; vecss=f0; vecsh=f0
@@ -441,7 +450,7 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=(r+abs((vecss(dmn)-pp)/vecfl(dmn)))/f2
+          if (abs(vecfl(dmn))>f0) r=(r+abs((vecss(dmn)-biot(j)*pp)/vecfl(dmn)))/f2
           ! Convert prestress to nodal force
           if (r(dmn)>f0) then
              st_init(j,:)=st_init(j,:)/r
@@ -638,7 +647,7 @@ contains
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    if (poro) then
+    if (poro .and. init/=1) then
        call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
        lm_pn=pntr
        call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
@@ -648,6 +657,8 @@ contains
        call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
        lm_f2s=pntr
        call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
+    else 
+       lm_pn=f0; lm_pp=f0; lm_f2s=f1
     end if
     if (rsf==1 .and. k>0) then
        call VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
@@ -663,7 +674,7 @@ contains
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        flt_qs=flt_ndf(rw_loc)+st_init(j3,:dmn)
-       if (poro) flt_qs(dmn)=flt_qs(dmn)+(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
+       flt_qs(dmn)=flt_qs(dmn)+biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
        if (rsf==1) then  
           if (k==0) then
              ! RSF parameters
@@ -820,7 +831,7 @@ contains
     call VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
     flt_dyn0=pntr
     call VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
-    if (poro) then
+    if (poro .and. init/=1) then
        call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
        lm_pn=pntr
        call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
@@ -830,6 +841,8 @@ contains
        call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
        lm_f2s=pntr
        call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
+    else
+       lm_pn=f0; lm_pp=f0; lm_f2s=f1 
     end if
     rsftau=f0
     do j1=1,nfnd_loc
@@ -874,7 +887,7 @@ contains
        end if
        mu_hyb(j3)=mu
        vec(1)=vec(1)+rsftau
-       if (poro) vec(dmn)=vec(dmn)+(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
+       vec(dmn)=vec(dmn)+biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
        select case(dmn)
        case(2)
           fsh=abs(vec(1))
@@ -914,7 +927,7 @@ contains
        ! Subtract the static LM 
        vec(1)=vec(1)-rsftau
        lm_dyn=vec-vec_init-lm_sta-lm_dyn0
-       if (poro) lm_dyn(dmn)=lm_dyn(dmn)-(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
+       lm_dyn(dmn)=lm_dyn(dmn)-biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
        rw_loc=lmnd0*dmn+rw_loc-1
        ! From the new dynamic LM
        call VecSetValues(Vec_lambda,dmn,rw_loc,lm_dyn,Insert_Values,ierr)
@@ -1036,7 +1049,7 @@ contains
     call MPI_AllReduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
        MPI_Comm_World,ierr)
     ! Identify aseismic slip, nc=10 for SCEC10/14 (slow weakening)
-    nc=5; nr=15
+    nc=10; nr=15
     if (ih>nc+rsf*nr .and. sum((slip0-slip_sum)*(slip0-slip_sum))==0) then 
        slip=0
        crp=.true.
@@ -1693,7 +1706,7 @@ contains
        end do
        do i=1,npel
           j=i*(dmn+1)
-          if (bc(nodes(el,i),dmn+1)/=0) svec(j)=sip
+          if (bc(nodes(el,i),dmn+1)/=0) svec(j)=sip*scale
        end do
        call VecSetValues(Vec_F,(dmn+1)*npel,row,svec,Add_Values,ierr)
     end do
