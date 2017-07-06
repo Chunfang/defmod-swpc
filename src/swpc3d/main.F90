@@ -7,7 +7,7 @@
 !!   elastic/visco-elastic medium by finite difference method (FDM).
 !!
 !! @copyright
-!!   Copyright 2013-2016 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2017 Takuto Maeda. All rights reserved. This project is released under the MIT license.
 !!
 !! @see
 !!   - Noguchi et al.     (2016) GJI     doi:10.1093/gji/ggw074
@@ -76,10 +76,10 @@ program SWPC_3D
   if (have_rs) then
     call getopt('e', is_opt,str_eid, 'ID' )
     if (str_eid/='ID' .and. is_opt) then
-       str_eid=trim(str_eid)
-       read(str_eid,'(I3.0)')eid ! max 999 events
+      str_eid=trim(str_eid)
+      read(str_eid,'(I3.0)')eid ! max 999 events
     else
-       eid=1
+      eid=1
     end if
   end if
 
@@ -104,16 +104,16 @@ program SWPC_3D
   !!
   if( it0 == 1 ) then
 
-     !!
-     !! stopwatch start
-     !!
-     call pwatch__setup( stopwatch_mode )
+    !!
+    !! stopwatch start
+    !!
+    call pwatch__setup( stopwatch_mode )
 
-     !!
-     !! set-up each module
-     !!
-     call global__setup2( )
-     call medium__setup( io_prm )
+    !!
+    !! set-up each module
+    !!
+    call global__setup2( )
+    call medium__setup( io_prm )
 
      ! FE vmodel overwrite
      call vmodel__fe
@@ -121,15 +121,19 @@ program SWPC_3D
      call mpi_barrier( mpi_comm_world, ierr ) 
 
      call kernel__setup( )
-     if (have_ps) call source__setup( io_prm )
-     
+     if (have_ps) then 
+       call source__setup( io_prm )
+     else if (have_rs) then ! rupture source no rescale
+       UC=1D0; M0=1D0
+     end if 
+
      ! Rupture source setup
      if (have_rs) then
-        call rup__Init
-        call rup__getTime
-        call rup__getFE2FD 
-        call rup__getObsFD
-        call mpi_barrier( mpi_comm_world, ierr )
+       call rup__Init
+       call rup__getTime
+       call rup__getFE2FD 
+       call rup__getObsFD
+       call mpi_barrier( mpi_comm_world, ierr )
      end if
 
      call absorb__setup( io_prm )
@@ -146,35 +150,35 @@ program SWPC_3D
   !! mainloop
   do it = it0, nt
 
-     call report__progress(it)
+    call report__progress(it)
 
-     call green__store( it )
-     call output__store_wav ( it )
-     call output__write_snap( it )
+    call green__store( it )
+    call output__store_wav ( it )
+    call output__write_snap( it )
 
-     call kernel__update_stress()
-     call absorb__update_stress()
+    call kernel__update_stress()
+    call absorb__update_stress()
 
-     if (have_ps) call source__stressdrop(it)
-     call global__comm_stress()
+    if (have_ps) call source__stressdrop(it)
+    call global__comm_stress()
 
-     call kernel__update_vel()
-     call absorb__update_vel()
+    call kernel__update_vel()
+    call absorb__update_vel()
 
-     if (have_ps) call source__bodyforce(it)
+    if (have_ps) call source__bodyforce(it)
 
      ! Set rupture source
      if (have_rs) then
-        call rup__setSrc(it) 
-        call rup__evalObsFD(it)
-        call rup__writeObsFD(it)
+       call rup__setSrc(it) 
+       call rup__evalObsFD(it)
+       call rup__writeObsFD(it)
      end if 
 
-     call green__source( it )
+    call green__source( it )
 
-     call global__comm_vel()
+    call global__comm_vel()
 
-     call ckprst__checkpoint( it )
+    call ckprst__checkpoint( it )
 
 
   end do
@@ -198,11 +202,11 @@ program SWPC_3D
   !! stopwatch report from 0-th node
   !!
   if( stopwatch_mode ) then
-     if( myid == 0 ) then
-        call std__getio( io_watch )
-        open( io_watch, file=trim( odir ) // '/' // trim( title ) //  '.tim', action='write', status='unknown' )
-     end if
-     call pwatch__report( io_watch, 0 )
+    if( myid == 0 ) then
+      call std__getio( io_watch )
+      open( io_watch, file=trim( odir ) // '/' // trim( title ) //  '.tim', action='write', status='unknown' )
+    end if
+    call pwatch__report( io_watch, 0 )
   end if
 
   !!
