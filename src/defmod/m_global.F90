@@ -356,11 +356,10 @@ contains
   subroutine GetVec_f2s
     implicit none
 #include "petsc.h"
-    integer :: j,j1,j2,j3,j4,j5,workpos(dmn),workneg(dmn)
+    integer :: j,j1,j2,j3,workpos(dmn),workneg(dmn)
     real(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r(dmn),dip(dmn),nrm(dmn),      &
-       matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn),pn,pp,ptmp
+       matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn)
     call VecGetOwnershipRange(Vec_flc,j2,j3,ierr)
-    if (poro) call VecGetOwnershipRange(Vec_Up,j4,j5,ierr)
     do j=1,nfnd
        matrot=reshape(vecf(j,:),(/dmn,dmn/))
        vecfl=f0; vecss=f0; vecsh=f0
@@ -381,19 +380,6 @@ contains
        call MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecsh=vec
-       pn=f0; pp=f0; ptmp=f0 
-       if (poro .and. init/=1) then
-          if (node_neg(j)-1>=j4 .and. node_neg(j)-1<j5) then
-             call VecGetValues(Vec_Up,1,node_neg(j)-1,pn,ierr)
-          end if
-          if (node_pos(j)-1>=j4 .and. node_pos(j)-1<j5) then
-             call VecGetValues(Vec_Up,1,node_pos(j)-1,pp,ierr)
-          end if
-          call MPI_Reduce(pn,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr) 
-          pn=ptmp*scale
-          call MPI_Reduce(pp,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr) 
-          pp=ptmp*scale
-       end if
        if (rank==nprcs-1) then
           select case(dmn)
           case(2)
@@ -410,7 +396,7 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=abs((vecss(dmn)-biot(j)*pn)/vecfl(dmn))
+          if (abs(vecfl(dmn))>f0) r=abs(vecss(dmn)/vecfl(dmn))
           call VecSetValues(Vec_f2s,dmn,workpos,r,Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
@@ -450,7 +436,7 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=(r+abs((vecss(dmn)-biot(j)*pp)/vecfl(dmn)))/f2
+          if (abs(vecfl(dmn))>f0) r=(r+abs(vecss(dmn)/vecfl(dmn)))/f2
           ! Convert prestress to nodal force
           if (r(dmn)>f0) then
              st_init(j,:)=st_init(j,:)/r
@@ -647,7 +633,7 @@ contains
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    if (poro .and. init/=1) then
+    if (poro) then
        call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
        lm_pn=pntr
        call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
@@ -657,8 +643,6 @@ contains
        call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
        lm_f2s=pntr
        call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
-    else 
-       lm_pn=f0; lm_pp=f0; lm_f2s=f1
     end if
     if (rsf==1 .and. k>0) then
        call VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
@@ -674,7 +658,8 @@ contains
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        flt_qs=flt_ndf(rw_loc)+st_init(j3,:dmn)
-       flt_qs(dmn)=flt_qs(dmn)+biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
+       ! Positive pressure affects normal stress
+       flt_qs(dmn)=flt_qs(dmn)+max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
        if (rsf==1) then  
           if (k==0) then
              ! RSF parameters
@@ -831,7 +816,7 @@ contains
     call VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
     flt_dyn0=pntr
     call VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
-    if (poro .and. init/=1) then
+    if (poro) then
        call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
        lm_pn=pntr
        call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
@@ -841,8 +826,6 @@ contains
        call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
        lm_f2s=pntr
        call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
-    else
-       lm_pn=f0; lm_pp=f0; lm_f2s=f1 
     end if
     rsftau=f0
     do j1=1,nfnd_loc
@@ -887,7 +870,8 @@ contains
        end if
        mu_hyb(j3)=mu
        vec(1)=vec(1)+rsftau
-       vec(dmn)=vec(dmn)+biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
+       ! Positive pressure affects friction
+       vec(dmn)=vec(dmn)+max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
        select case(dmn)
        case(2)
           fsh=abs(vec(1))
@@ -927,7 +911,7 @@ contains
        ! Subtract the static LM 
        vec(1)=vec(1)-rsftau
        lm_dyn=vec-vec_init-lm_sta-lm_dyn0
-       lm_dyn(dmn)=lm_dyn(dmn)-biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
+       lm_dyn(dmn)=lm_dyn(dmn)-max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
        rw_loc=lmnd0*dmn+rw_loc-1
        ! From the new dynamic LM
        call VecSetValues(Vec_lambda,dmn,rw_loc,lm_dyn,Insert_Values,ierr)
@@ -1107,8 +1091,11 @@ contains
           vectmp=matmul(mattmp,vectmp)
           vec(:)=vectmp(:,1)
           ! Nodal force to stress
-          flt_ss(j,:)=vec*wt*rvec(dmn)
-          if (poro) flt_p(j)=fltp*scale 
+          flt_ss(j,:)=(vec*wt+st_init(j,:))*rvec(dmn)
+          if (poro) then 
+             flt_p(j)=fltp*scale 
+             flt_ss(j,dmn)=flt_ss(j,dmn)+max(f0,biot(j)*fltp*scale)
+          end if 
        end if
     end do
     call MPI_Bcast(flt_ss,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
