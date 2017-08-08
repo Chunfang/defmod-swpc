@@ -479,8 +479,8 @@ program main
   end if
 
   ! Account for absorbing boundaries
-  call PrintMsg("Absorbing bundary ...")
   if (stype=="explicit" .or. (fault .and. nceqs>0)) then
+     call PrintMsg("Absorbing bundary ...")
      do i=1,nabcs
         ! For axis aligned absorbing boundaries
         !read(10,*)el,side,j; el=emap(el)
