@@ -633,6 +633,7 @@ contains
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    lm_pn=f0; lm_pp=f0; lm_f2s=f1 ! None-zero default f2s, denominator
     if (poro) then
        call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
        lm_pn=pntr
@@ -816,6 +817,7 @@ contains
     call VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
     flt_dyn0=pntr
     call VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
+    lm_pn=f0; lm_pp=f0; lm_f2s=f1 ! None-zero default f2s, denominator
     if (poro) then
        call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
        lm_pn=pntr
