@@ -46,15 +46,18 @@ contains
     implicit none
     integer :: i
     character(256) :: name0
-    write(name0,'(A,A)')trim(name_fe),"_fd.cfg"
+    write(name0,'(A,A)')trim(name_fe),"_fefd.cfg"
     km2m=1.0d3
     open(248,file=adjustl(name0),status='old')
+    do i=1,3
+      read(248,*)
+    end do
+    read(248,*)xref,yref,zref
     read(248,*) nviz,nobsFE
     allocate(xobsFE(nobsFE,3),idobsFE(nobsFE))
     do i=1,nobsFE 
       read(248,*)xobsFE(i,:),idobsFE(i) 
     end do
-    read(248,*)xref,yref,zref
     close(248)
   end subroutine rup__Init
 

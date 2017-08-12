@@ -25,7 +25,7 @@ contains
     character(256) :: name,name0,name1
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A)')trim(name0),trim(name1),"_fe.cfg"
+    write(name,'(A,A,A)')trim(name0),trim(name1),"_fefd.cfg"
     open(149,file=adjustl(name),status='old')
     select case(dmn)
     case(2)
