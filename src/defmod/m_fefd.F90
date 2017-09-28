@@ -1,12 +1,9 @@
-module FD2FE 
-
-#include <petscversion.h>
+module fefd 
 
   use global
   implicit none
-#include "petscdef.h"
 
-! ------------------FD variables needed by FE------------------------------
+! FD variables needed by FE
 ! total number of grid points in each direction of the grid
   integer :: nx,ny,nz
   integer :: nprc_x,nprc_y ! horizontal division of FD domain 
@@ -279,4 +276,4 @@ contains
     k=k+1
   end subroutine WriteOutput_fd
 
-end module FD2FE 
+end module fefd 

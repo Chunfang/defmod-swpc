@@ -6,7 +6,7 @@ program main
 #include <petscversion.h>
 
   use global
-  use FD2FE
+  use fefd 
   implicit none
 #include "petsc.h"
   character(256) :: input_file,viz,fd
