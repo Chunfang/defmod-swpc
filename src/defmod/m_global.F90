@@ -444,7 +444,7 @@ contains
              if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r(1)
           end if
           call VecSetValues(Vec_f2s,dmn,workneg,-r,Insert_Values,ierr)
-          if (poro) call VecSetValue(Vec_lm_f2s,j-1,r(dmn),Insert_Values,ierr)
+          if (poro) call VecSetValue(Vec_lm_f2s,nceqs_ncf/(dmn+1)+j-1,r(dmn),Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
        end if
