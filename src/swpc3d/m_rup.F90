@@ -41,7 +41,7 @@ module m_rup
   real(MP), allocatable :: obsFD(:,:)   ! Local obs passed from FE
 
 contains
-  
+
   subroutine rup__Init 
     implicit none
     integer :: i
