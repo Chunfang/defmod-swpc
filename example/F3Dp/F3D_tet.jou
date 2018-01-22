@@ -1,11 +1,12 @@
-reset
 ${Units('si')}
 undo off
+reset
+# Geometry
 brick x 2. y 1.2 z .7
 volume 1 move x 0 y 0 z -.35
-import stl "fault.stl"  
+import stl "F3D_tet.stl"  
 surface 7 scheme submap
-surface 7 size .02
+surface 7 size .032
 mesh surface 7
 create surface net from mapped surface 7 tolerance .02 heal 
 delete volume 2
@@ -34,13 +35,22 @@ merge all
 
 # Mesh
 surface 46 94 95 97 scheme trimesh
-surface 46 94 95 97 size 0.00625
+surface 46 94 95 97 size 0.0045
+#surface 46 94 95 97 size 0.00625
 #surface 46 94 95 97 size 0.0125
 mesh surface 46 94 95 97 
 volume all scheme tetmesh
-volume all size .02
+volume all size .0145
+#volume all size .02
 #volume all size .04
 mesh volume all 
+
+#{beta=3.0}
+#{loop(5)}
+volume all smooth scheme condition number beta {beta} cpu 10
+smooth volume all
+#{beta=beta-0.2}
+#{endloop}
 
 # Fault face
 unmerge surface 46 94 95 97

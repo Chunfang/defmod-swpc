@@ -6,8 +6,14 @@ module global
 #include <petscversion.h>
 
   use local
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
   implicit none
 #include "petscdef.h"
+#else
+#include <petsc/finclude/petscksp.h>
+  use petscksp
+  implicit none
+#endif
   ! Global variables
   integer :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,lm_str,  &
      bod_frc,steps,tstep,steps_dyn,tstep_dyn,nfnd,hyb,frq_dyn,nobs,n_log,      &
@@ -16,11 +22,12 @@ module global
   real(8) :: alpha,beta,t,dt,t_dyn,dt_dyn,t_lim,val,wt,scale,rslip,t_sta,t_abs,&
      t_hyb,v_bg,vtol,trunc
   integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
-     worku(:),workl(:),node_pos(:),node_neg(:),node_all(:),slip(:),perm(:),    &
-     onlst(:,:),frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),nnd_fe2fd(:),rsf_sta(:)
+     worku(:),workl(:),node_pos(:),node_neg(:),slip(:),perm(:),onlst(:,:),     &
+     frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),          &
+     nnd_fe2fd(:)
   real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
-     fval(:,:),tval(:,:),vvec_all(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:), &
-     xfnd(:,:),ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:), &
+     fval(:,:),tval(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:),xfnd(:,:),     &
+     ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:),           &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
      mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
@@ -32,7 +39,8 @@ module global
   Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,            &
      Vec_U_dyn,Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up0,Vec_Up_dyn,Vec_I_dyn,Vec_fp,   &
      Vec_qu,Vec_Uu,Vec_Ul,Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip, &
-     Vec_nrm,Vec_lambda_sta,Vec_lambda_sta0,Vec_lm_pn,Vec_lm_pp,Vec_lm_f2s
+     Vec_nrm,Vec_lambda_sta,Vec_lambda_sta0,Vec_lambda_bk,Vec_lm_pn,Vec_lm_pp, &
+     Vec_lm_f2s,Vec_Fm_dyn,Vec_F_dyn ! For implicit alpha
   Vec,pointer :: Vec_W(:),Vec_Wlm(:)
   Mat :: Mat_K,Mat_M,Mat_Minv,Mat_Gt,Mat_G,Mat_GMinvGt,Mat_Kc,Mat_K_dyn,Mat_H, &
      Mat_Ht
@@ -53,7 +61,8 @@ module global
   Vec :: Seq_U,Seq_U_dyn,Seq_fp,Seq_fl,Seq_flc,Seq_ql,Seq_qu,Seq_SS,Seq_SH,    &
      Seq_f2s,Seq_dip,Seq_nrm
   IS :: From,To,RI,From_u,To_u,RIu,From_p,To_p,RIl
-  VecScatter :: Scatter,Scatter_dyn,Scatter_u,Scatter_q,Scatter_s2d,Scatter_pn2d,Scatter_pp2d
+  VecScatter :: Scatter,Scatter_dyn,Scatter_u,Scatter_q,Scatter_s2d,           &
+     Scatter_pn2d,Scatter_pp2d
   real(8),pointer :: pntr(:)
 
 contains
@@ -90,26 +99,26 @@ contains
     end if
   end subroutine FormLocalK
  
-! Rescale local [Kv] for dt
-  subroutine RscKv(el,k,indx,dtmp)
+  ! Rescale local [Kv] for dt
+  subroutine RscKv(el,k,indx,ddt)
     implicit none
     integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn),dtmp
+    real(8) :: k(:,:),estress(nip,cdmn),ddt
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     estress=stress(el,:,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     visc=mat(id(el),3); expn=mat(id(el),4)
     H=mat(id(el),6)
-    call RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
+    call RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,ddt)
     call FormLocalIndx(enodes,indx) 
   end subroutine RscKv
 
   ! Rescale local [Kp] for dt
-  subroutine RscKp(el,k,indx,dtmp)
+  subroutine RscKp(el,k,indx,ddt)
     implicit none
     integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn),dtmp
+    real(8) :: k(:,:),estress(nip,cdmn),ddt
     character(2) :: strng
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
@@ -119,25 +128,27 @@ contains
     H=mat(id(el),6)
     strng="Kp"
     if (visco) strng="Kv"
-    call RscElKp(ecoords,estress,E,nu,visc,expn,H,1.0d0,scale,dt,k,dtmp,strng)
+    call RscElKp(ecoords,estress,E,nu,visc,expn,H,1.0d0,scale,dt,k,ddt,strng)
     call FormLocalIndx(enodes,indx)
   end subroutine RscKp 
 
-  ! Rescale [K] for new dt (poro and/or linear visco) 
+  ! Rescale [K] for new dt = fdt*dt (poro and/or linear visco) 
   subroutine Rscdt(fdt)
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h" 
+#endif
     integer :: i,ndof
-    real(8) :: fdt,dtmp
-    dtmp=(fdt-f1)*dt
+    real(8) :: fdt,ddt
+    ddt=(fdt-f1)*dt
     ndof=eldof+eldofp
     do i=1,nels
        if (visco .and. .not. poro) then
-          call RscKv(i,k,indx,dtmp)
-          !call RscRHSv(i,f,indx,dtmp)
+          call RscKv(i,k,indx,ddt)
+          !call RscRHSv(i,f,indx,ddt)
        else 
-          call RscKp(i,k,indx,dtmp)
-          !call RscRHSp(i,f,indx,dtmp)
+          call RscKp(i,k,indx,ddt)
+          !call RscRHSp(i,f,indx,ddt)
        end if
        indx=indxmap(indx,2)
        call MatSetValues(Mat_K,ndof,indx,ndof,indx,k,Add_Values,ierr)
@@ -165,9 +176,12 @@ contains
   ! Account for constraint eqns
   subroutine ApplyConstraints
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: i,j,n,j1,j2,j3,j4
-    open(15,file="cnstrns.tmp",status='old')
+    open(15,file=trim(output_file(:index(output_file,"/",BACK=.TRUE.)))//      &
+       "cnstrns.tmp",status='old')
     j4=0
     do i=1,nceqs
        if (poro .and. mod(i,dmn+1)>0) j4=j4+1
@@ -205,15 +219,22 @@ contains
   ! Create full Mat_Gt for dynamic constraints
   subroutine GetMat_Gt
     implicit none
-    integer :: j,j1,j2,j3,j4,j5
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
+    integer :: j,j1,j2,j3,j4,j5
     if (rank==0) then
        do j=1,nfnd
           do j1=1,dmn
              j3=(j-1)*dmn+j1-1
              do j2=1,2
-                vvec=vvec_all(2*j3+j2,:)
-                node=node_all(2*j3+j2)
+                if (j2==1) then 
+                   node=node_pos(j)
+                   vvec=vecf(j,(j1-1)*dmn+1:j1*dmn)
+                else
+                   node=node_neg(j)
+                   vvec=-vecf(j,(j1-1)*dmn+1:j1*dmn) 
+                end if
                 do j4=1,dmn
                    j5=dmn*node-dmn+j4-1
                    call MatSetValue(Mat_Gt,j5,j3+nceqs_ncf*dmn/(dmn+p),vvec(j4)&
@@ -228,9 +249,11 @@ contains
   ! Scatter LMs to solution space
   subroutine GetVec_flambda
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
-    integer :: j,j1,j3,j4,u1,u2,workpos(dmn),workneg(dmn),row
-    real(8) :: lm(dmn),vecfl(dmn),lmq,q
+#endif
+    integer :: j,j1,j3,j4,u1,u2,workpos(dmn),workneg(dmn),row(1)
+    real(8) :: lm(dmn),vecfl(dmn),lmq(1),q
     call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
     do j=1,nfnd
        lm=f0; vecfl=f0; lmq=f0; q=f0
@@ -242,7 +265,7 @@ contains
           else
              row=dmn*(j-1)+j1-1
           end if
-          if (row>=u1 .and. row<u2) then
+          if (row(1)>=u1 .and. row(1)<u2) then
              call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
           end if
        end do
@@ -250,7 +273,7 @@ contains
           ierr)
        if (poro .and. perm(j)==1) then
            row=row+1
-           if (row>=u1 .and. row<u2) then
+           if (row(1)>=u1 .and. row(1)<u2) then
               call VecGetValues(Vec_Ul,1,row,lmq,ierr)
            end if
            call MPI_Reduce(lmq,q,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,   &
@@ -278,9 +301,12 @@ contains
   ! Extract the LM in fault's strike, dip and normal directions
   subroutine GetVec_fcoulomb
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
-    integer :: j,j1,u1,u2,r1,r2,workpos(dmn),workneg(dmn),row,row_f2s
-    real(8) :: lm(dmn),vecfl(dmn),mattmp(dmn,dmn),vectmp(dmn,1),rvec(dmn),rf2s(dmn)
+#endif
+    integer :: j,j1,u1,u2,r1,r2,workpos(dmn),workneg(dmn),row(1),row_f2s(1)
+    real(8) :: lm(dmn),vecfl(dmn),mattmp(dmn,dmn),vectmp(dmn,1),rvec(dmn),     &
+       rf2s(dmn)
     integer,save :: k=0
     call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
     if (k>0) call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
@@ -294,19 +320,20 @@ contains
           else
              row=dmn*(j-1)+j1-1
           end if
-          if (row>=u1 .and. row<u2) then
+          if (row(1)>=u1 .and. row(1)<u2) then
              call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
           end if
           if (k>0) then
              row_f2s=dmn*node_pos(j)-dmn+j1-1
-             if (row_f2s>=r1 .and. row_f2s<r2) then
+             if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
                 call VecGetValues(Vec_f2s,1,row_f2s,rvec(j1),ierr)
              end if
           end if
        end do
        call MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
           ierr)
-       if (k>0) call MPI_Reduce(rvec,rf2s,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
+       if (k>0) call MPI_Reduce(rvec,rf2s,dmn,MPI_Real8,MPI_Sum,nprcs-1,       &
+          MPI_Comm_World,ierr)
        if (rank==nprcs-1) then
           vectmp=reshape(vecfl,(/dmn,1/))
           mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
@@ -325,7 +352,9 @@ contains
   ! Pass pseudo velocity to dynamic model
   subroutine Rsfv2dyn
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer:: j,j1,j2,j3,rw_loc(dmn)
     real(8) :: vec(dmn),flt_qs(dmn)
     real(8),target :: flt_ndf(n_lmnd*dmn)
@@ -355,9 +384,11 @@ contains
   ! Force to stress ratio and normal dip vector of the fault nodes
   subroutine GetVec_f2s
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: j,j1,j2,j3,workpos(dmn),workneg(dmn)
-    real(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r(dmn),dip(dmn),nrm(dmn),      &
+    real(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r,dip(dmn),nrm(dmn),           &
        matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn)
     call VecGetOwnershipRange(Vec_flc,j2,j3,ierr)
     do j=1,nfnd
@@ -395,9 +426,9 @@ contains
              nrm(:)=matrot(:,3)
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
-          vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=abs(vecss(dmn)/vecfl(dmn))
-          call VecSetValues(Vec_f2s,dmn,workpos,r,Insert_Values,ierr)
+          vecss=matst(:,dmn)
+          r=sqrt(sum(vecss*vecss)/sum(vecfl*vecfl))
+          call VecSetValues(Vec_f2s,dmn,workpos,(/r,r,r/),Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
        end if
@@ -435,16 +466,17 @@ contains
              nrm(:)=matrot(:,3)
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
-          vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=(r+abs(vecss(dmn)/vecfl(dmn)))/f2
+          vecss=matst(:,dmn)
+          r=(r+sqrt(sum(vecss*vecss)/sum(vecfl*vecfl)))/f2
           ! Convert prestress to nodal force
-          if (r(dmn)>f0) then
+          if (r>f0) then
              st_init(j,:)=st_init(j,:)/r
-             coh(j)=coh(j)/r(1)
-             if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r(1)
+             coh(j)=coh(j)/r
+             if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r
           end if
-          call VecSetValues(Vec_f2s,dmn,workneg,-r,Insert_Values,ierr)
-          if (poro) call VecSetValue(Vec_lm_f2s,nceqs_ncf/(dmn+1)+j-1,r(dmn),Insert_Values,ierr)
+          call VecSetValues(Vec_f2s,dmn,workneg,-(/r,r,r/),Insert_Values,ierr)
+          if (poro) call VecSetValue(Vec_lm_f2s,nceqs_ncf/(dmn+1)+j-1,r,       &
+             Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
        end if
@@ -468,7 +500,9 @@ contains
   ! Fault dip and normal vectors
   subroutine GetVec_ft
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: j,j1,workpos(dmn)
     real(8):: dip(dmn),nrm(dmn),matrot(dmn,dmn)
     do j=1,nfnd
@@ -496,23 +530,25 @@ contains
   end subroutine GetVec_ft
 
   ! RSF pseudo time update 
-  subroutine RSF_QS_update(flt_ndf0,flt_ndf1,slip_loc,trunc)
+  subroutine RSF_QS_update(flt_ndf0,flt_ndf1,slip_loc)
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
-    integer :: j,j1,j2,j3,j4,rw_loc(dmn),nqs,cut_glb,cut,slip_loc(nfnd),ntol,nslip
+#endif
+    integer :: j,j1,j2,j3,j4,rw_loc(dmn),nqs,ncut,slip_loc(nfnd),ntol,nslip
     real(8) :: theta,mu,a,b0,b,V0,L,dd,v_qs,dtpsd,flt_qs0(dmn),flt_qs1(dmn),   &
-       flt_qs(dmn),trunc !,vmax
+       flt_qs(dmn),vmax
     real(8),target :: flt_ndf0(n_lmnd*dmn),flt_ndf1(n_lmnd*dmn)
     real(8),allocatable :: rsfstate(:,:,:)
     integer,save :: k=0,rsflog=0
     dtpsd=f1
-    nqs=int((dt+trunc)/dtpsd)
+    nqs=int((dt)/dtpsd)
     allocate(rsfstate(nqs,nfnd_loc,3))
     rsfstate=f0; slip_loc=0
-    cut=nqs
-    vtol=1.D-3 ! Velocity threshold 1D-5
-    !vmax=1.D-2 ! Maximum velocity 1D-4
-    ntol=10 ! Slip node threshold 10 for 5 m spacing
+    ncut=nqs
+    vtol=2.5D-4 ! Velocity threshold
+    vmax=1.0D-3 ! Maximum velocity
+    ntol=10 ! Slip node threshold 
     do j4=1,nqs
        do j=1,nfnd_loc
           j1=FltMap(j,1); j3=FltMap(j,2)
@@ -524,41 +560,43 @@ contains
              theta=rsfstate(j4-1,j,3)
           end if
           rw_loc=(/((j1-1)*dmn+j2,j2=1,dmn)/)
-          flt_qs0=flt_ndf0(rw_loc)+st_init(j3,:)
-          flt_qs1=flt_ndf1(rw_loc)+st_init(j3,:)
+          flt_qs0=flt_ndf0(rw_loc)
+          flt_qs1=flt_ndf1(rw_loc)
           ! Match shear with friction by updating v_qs
-          flt_qs=flt_qs0+(flt_qs1-flt_qs0)*dble(j4)/dble(nqs)
+          flt_qs=flt_qs0+(flt_qs1-flt_qs0)*dble(j4)/dble(nqs)+st_init(j3,:)
           mu=sqrt(sum(flt_qs(:dmn-1)*flt_qs(:dmn-1)))/abs(flt_qs(dmn))
-          !v_qs=sinh(mu/a)*V0*f2/exp((b0+b*log(V0*theta/L))/a)
-          v_qs=min(vtol,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*theta/L))/a))
-          dd=v_qs*dtpsd
-          theta=dtpsd/(f1+dd/f2/L)+theta*(f1-dd/L/f2)/(f1+dd/L/f2)
+          ! Prevent pseudo velocity overflow
+          v_qs=min(vmax,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*theta/L))/a))
+          dd=v_qs*dtpsd/L
+          ! Normal stress dependent theta (Dieterich 2007, alpha = 0.5)
+          dd=dd+0.5/b*(flt_qs1(dmn)-flt_qs0(dmn))/dble(nqs)/flt_qs(dmn)
+          theta=dtpsd/(f1+0.5*dd)+theta*(f1-dd*0.5)/(f1+dd*0.5)
           rsfstate(j4,j,:)=(/v_qs,mu,theta/)
        end do
-       call MPI_AllReduce(size(pack(rsfstate(j4,:,1),rsfstate(j4,:,1)>=vtol)),nslip,1,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
-       !if (maxval(rsfstate(j4,:,1))>vtol) then
-       if (nslip>=ntol) then ! At least ntol fault nodes nucleate
-          cut=j4
+       call MPI_AllReduce(size(pack(rsfstate(j4,:,1),rsfstate(j4,:,1)>vtol)), &
+          nslip,1,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
+       ! At least ntol fault nodes nucleate
+       if (nslip>=ntol) then 
+          ncut=j4
           exit
        end if
     end do
-    call MPI_AllReduce(cut,cut_glb,1,MPI_Integer,MPI_Min,MPI_Comm_World,ierr) 
     do j=1,nfnd_loc
        j3=FltMap(j,2)
-       rsftheta(j3)=rsfstate(cut_glb,j,3)
-       mu_hyb(j3)=rsfstate(cut_glb,j,2)
-       rsfv(j3)=rsfstate(cut_glb,j,1)
-       if (rsfv(j3)>=vtol .and. nslip>=ntol) slip_loc(j3)=1 ! .and. nslip>ntol
+       rsftheta(j3)=rsfstate(ncut,j,3)
+       mu_hyb(j3)=rsfstate(ncut,j,2)
+       rsfv(j3)=rsfstate(ncut,j,1)
+       if (rsfv(j3)>vtol .and. nslip>=ntol) slip_loc(j3)=1
     end do 
-    if (cut_glb<nqs) then 
-       call VecScale(Vec_lambda_sta,dble(cut_glb)/dble(nqs),ierr)
-       call VecAXPY(Vec_lambda_sta,f1-dble(cut_glb)/dble(nqs),Vec_lambda_sta0, &
-          ierr)
-       trunc=dt*(f1-dble(cut_glb)/dble(nqs))
+    if (ncut<nqs) then 
+       call VecCopy(Vec_lambda_sta,Vec_lambda_bk,ierr)
+       call VecScale(Vec_lambda_sta,dble(ncut)/dble(nqs),ierr)
+       call VecAXPY(Vec_lambda_sta,f1-dble(ncut)/dble(nqs),Vec_lambda_sta0,ierr)
+       trunc=dt*(f1-dble(ncut)/dble(nqs))
     else
        trunc=f0
     end if
-    do j4=1,cut_glb
+    do j4=1,ncut
        if (mod(k,200)==0) then
           call WriteOutput_rsf(rsfstate(j4,:,:2))
           rsflog=rsflog+1
@@ -579,7 +617,7 @@ contains
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     if (nfnd_loc>0) then 
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_rsf.txt"
+       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_rsf_",rank,".txt"
        fmt="(2(ES11.2E3,X))"
        if (k==0) then
           open(10,file=adjustl(name),status='replace')
@@ -624,11 +662,14 @@ contains
   ! Update slip from the static model (from Vec_lambda_sta)
   subroutine GetSlip_sta 
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: j,j1,j2,j3,slip_loc(nfnd),rw_loc(dmn)
     real(8) :: mu,theta102,flt_qs(dmn),fsh,fnrm,rsftau,d,fcoh, &
        a,b0,b,V0,L
-    real(8),target :: flt_ndf(n_lmnd*dmn),flt_ndf0(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
+    real(8),target :: flt_ndf(n_lmnd*dmn),flt_ndf0(n_lmnd*dmn),lm_pn(n_lmnd),  &
+       lm_pp(n_lmnd),lm_f2s(n_lmnd)
     integer,save :: k=0
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
@@ -649,7 +690,7 @@ contains
        call VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
        flt_ndf0=pntr
        call VecRestoreArrayF90(Vec_lambda_sta0,pntr,ierr)
-       call RSF_QS_update(flt_ndf0,flt_ndf,slip_loc,trunc)
+       call RSF_QS_update(flt_ndf0,flt_ndf,slip_loc)
        go to 250
     end if
     if (rsf==1 .and. k==0) rsfv=v_bg
@@ -718,7 +759,9 @@ contains
   ! Scatter from Vec_Ul to Vec_lambda_sta 
   subroutine LM_s2d
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: j,j1,j2,j3,rw_dyn(dmn),rw_loc(dmn),rw_sta(dmn),                 &
        idxmp(nfnd_loc*dmn,2)
     integer,save :: k=0
@@ -770,7 +813,9 @@ contains
   ! Scatter two side fault pressure to dynamic LM space 
   subroutine Up_s2d
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: j,j1,jn,jp,idxmp_n(nfnd_loc,2),idxmp_p(nfnd_loc,2)
     integer,save :: k=0
     if (k==0) then 
@@ -783,17 +828,25 @@ contains
           idxmp_n(j1,2)=jn-1
           idxmp_p(j1,2)=jp-1
        end do
-       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_n(:,2),Petsc_Copy_Values,From,ierr)
-       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_n(:,1),Petsc_Copy_Values,To,ierr)
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_n(:,2),            &
+          Petsc_Copy_Values,From,ierr)
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_n(:,1),            &
+          Petsc_Copy_Values,To,ierr)
        call VecScatterCreate(Vec_Up,From,Vec_lm_pn,To,Scatter_pn2d,ierr)
-       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_p(:,2),Petsc_Copy_Values,From,ierr)
-       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_p(:,1),Petsc_Copy_Values,To,ierr)
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_p(:,2),            &
+          Petsc_Copy_Values,From,ierr)
+       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc,idxmp_p(:,1),            &
+          Petsc_Copy_Values,To,ierr)
        call VecScatterCreate(Vec_Up,From,Vec_lm_pp,To,Scatter_pp2d,ierr)
     end if
-    call VecScatterBegin(Scatter_pn2d,Vec_Up,Vec_lm_pn,Insert_Values,Scatter_Forward,ierr)
-    call VecScatterEnd(Scatter_pn2d,Vec_Up,Vec_lm_pn,Insert_Values,Scatter_Forward,ierr)
-    call VecScatterBegin(Scatter_pp2d,Vec_Up,Vec_lm_pp,Insert_Values,Scatter_Forward,ierr)
-    call VecScatterEnd(Scatter_pp2d,Vec_Up,Vec_lm_pp,Insert_Values,Scatter_Forward,ierr)
+    call VecScatterBegin(Scatter_pn2d,Vec_Up,Vec_lm_pn,Insert_Values,          &
+       Scatter_Forward,ierr)
+    call VecScatterEnd(Scatter_pn2d,Vec_Up,Vec_lm_pn,Insert_Values,            &
+       Scatter_Forward,ierr)
+    call VecScatterBegin(Scatter_pp2d,Vec_Up,Vec_lm_pp,Insert_Values,          &
+       Scatter_Forward,ierr)
+    call VecScatterEnd(Scatter_pp2d,Vec_Up,Vec_lm_pp,Insert_Values,            &
+       Scatter_Forward,ierr)
     call VecScale(Vec_lm_pn,scale,ierr)
     call VecScale(Vec_lm_pp,scale,ierr)
     k=k+1
@@ -802,10 +855,12 @@ contains
   ! Cap dynamic LM by frictional laws 
   subroutine CapLM_dyn
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer ::j,j1,j2,j3,rw_loc(dmn)
     real(8) :: d,dd,fr,frs,frd,fsh,mu,fcoh,fnrm,rsftau,vec_init(dmn),vec(dmn), &
-       lm_sta(dmn),lm_dyn(dmn),lm_dyn0(dmn),mattmp(dmn,dmn)
+       lm_sta(dmn),lm_dyn(dmn),lm_dyn0(dmn)
     real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn),                 &
        flt_dyn0(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -839,6 +894,8 @@ contains
        lm_dyn=flt_dyn(rw_loc)
        d=sqrt(sum(tot_flt_slip(rw_loc(:dmn-1))*tot_flt_slip(rw_loc(:dmn-1))))
        vec=vec_init+lm_sta+lm_dyn0+lm_dyn 
+       ! Positive pressure affects friction
+       vec(dmn)=vec(dmn)+max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
        if (rsf==1) then ! Rate state friction
           ! RSF options
           !dd=max(v_bg*dt_dyn,sqrt(sum(flt_slip(rw_loc(:dmn-1))                 &
@@ -850,17 +907,16 @@ contains
           !dd=rsfv(j3)*dt_dyn+sqrt(sum(flt_slip(rw_loc(:dmn-1))                 &
           !   *flt_slip(rw_loc(:dmn-1))))
           dd=max(v_bg*dt_dyn,flt_slip(rw_loc(1))) ! Only for SCEC102
-
-          ! Stabilize RSF velocity
-          !if (tstep>1) then
-          !   if (t_sta>f0 .and. dd<vtol*dt_dyn) rsf_sta(j1)=1 
-          !   if (rsf_sta(j1)==1) dd=min(dd,vtol*dt_dyn)
-          !end if
-
-          rsftheta(j3)=max(dt_dyn,dt_dyn/(f1+dd/f2/rsfL(j3))                   &
-             +rsftheta(j3)*(f1-dd/rsfL(j3)/f2)/(f1+dd/rsfL(j3)/f2))
           mu=rsfa(j3)*asinh(dd/dt_dyn/rsfV0(j3)/f2*exp((rsfb0(j3)              &
              +rsfb(j3)*log(rsfV0(j3)*rsftheta(j3)/rsfL(j3)))/rsfa(j3)))
+          dd=dd/rsfL(j3)
+          ! Normal stress dependent theta (Dieterich 2007, alpha = 0.5)
+          !if (vec(dmn)<f0) then ! Only when under compression, not for SCEC102 
+          !   dd=dd+0.5/rsfb(j3)*lm_dyn(dmn)/(vec(dmn)-lm_dyn(dmn)*0.5)
+          !end if
+          ! Prevent negative theta
+          rsftheta(j3)=max(dt_dyn,dt_dyn/(f1+0.5*dd)+rsftheta(j3)*(f1-0.5*dd)/ &
+             (f1+0.5*dd))
           ! Only for SCEC102
           call GetExSt(xfnd(j3,:),t_hyb,rsfdtau0(j3),rsftau)
        else ! Slip weakening
@@ -872,8 +928,6 @@ contains
        end if
        mu_hyb(j3)=mu
        vec(1)=vec(1)+rsftau
-       ! Positive pressure affects friction
-       vec(dmn)=vec(dmn)+max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
        select case(dmn)
        case(2)
           fsh=abs(vec(1))
@@ -882,7 +936,6 @@ contains
           fsh=sqrt(vec(1)**2+vec(2)**2)
           fnrm=vec(3)
        end select
-       mattmp=transpose(reshape(vecf(j3,:),(/dmn,dmn/)))
        ! Slip weakening cohesion
        if (coh(j3)>f0) then
           ! Cumulative slip 
@@ -906,9 +959,9 @@ contains
              frd=sign(frd,vec(2))
              vec(2)=frd
           end if
-       ! Zero friction when fault faces detach under cohesion
+       ! When fault faces detach under cohesion
        elseif (fnrm>=f0) then 
-          vec=vec/sqrt(sum(vec*vec))*fcoh
+          vec=vec/sqrt(sum(vec*vec))*min(sqrt(sum(vec*vec)),fcoh)
        end if
        ! Subtract the static LM 
        vec(1)=vec(1)-rsftau
@@ -923,38 +976,51 @@ contains
   end subroutine CapLM_dyn
 
   ! Record latest moment fault stress from the hybrid run
-  subroutine GetVec_lambda_hyb(trunc)
+  subroutine GetVec_lambda_hyb
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: i,j,j1,j2,j3,rw_loc(dmn),nqs
-    real(8) :: vec(dmn),lm_sta(dmn),lm_dyn(dmn),trunc,dtpsd,a,b0,b,V0,L,mu,dd
-    real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn)
+    real(8) :: vec(dmn),lm_sta(dmn),lm_bk(dmn),lm_dyn(dmn),dtpsd,a,b0,b,V0,L,  &
+       mu,dd
+    real(8),target :: flt_sta(n_lmnd*dmn),flt_bk(n_lmnd*dmn),flt_dyn(n_lmnd*dmn)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_sta=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    if (rsf==1) then
+       call VecGetArrayF90(Vec_lambda_bk,pntr,ierr)
+       flt_bk=pntr
+       call VecRestoreArrayF90(Vec_lambda_bk,pntr,ierr)
+    end if
     call VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
     flt_dyn=pntr
     call VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
     dtpsd=f1
-    nqs=int((dt-trunc)/dtpsd)
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        lm_sta=flt_sta(rw_loc)
        lm_dyn=flt_dyn(rw_loc)
        if (rsf==1) then ! Pseudo time healing for RSF
+          lm_bk=flt_bk(rw_loc)
+          nqs=int(trunc/dtpsd)
           ! RSF parameters
           a=rsfa(j3); b0=rsfb0(j3); b=rsfb(j3); V0=rsfV0(j3); L=rsfL(j3)
           do i=1,nqs 
-             vec=lm_sta+lm_dyn*dble(i)/dble(nqs)
+             vec=lm_sta+lm_dyn+(lm_bk-lm_sta)*dble(i)/dble(nqs)+st_init(j3,:)
              mu=sqrt(sum(vec(:dmn-1)*vec(:dmn-1)))/abs(vec(dmn))
-             rsfv(j3)=min(vtol,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*rsftheta(j3)/L))/a))
-             dd=dtpsd*rsfv(j3)
-             rsftheta(j3)=dtpsd/(f1+dd/f2/L)+rsftheta(j3)*(f1-dd/L/f2)/(f1+dd/L/f2)
+             rsfv(j3)=min(vtol,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*rsftheta(j3)/ &
+                L))/a))
+             dd=dtpsd*rsfv(j3)/L
+             ! Normal stress dependent theta (Dieterich 2007, alpha = 0.5)
+             dd=dd+0.5/b*(lm_bk(dmn)-lm_sta(dmn))/dble(nqs)/vec(dmn)
+             rsftheta(j3)=dtpsd/(f1+0.5*dd)+rsftheta(j3)*(f1-0.5*dd)/(f1+0.5*dd)
           end do
-          !print*, mu,rsfv(j3),rsftheta(j3)
+          vec=vec-st_init(j3,:)
+       else
+          vec=lm_sta+lm_dyn
        end if
-       vec=lm_sta+lm_dyn
        rw_loc=lmnd0*dmn+rw_loc-1
        call VecSetValues(Vec_lambda_sta0,dmn,rw_loc,vec,Insert_Values,ierr)
     end do
@@ -966,11 +1032,11 @@ contains
   subroutine GetExSt(x,t,dst,st)
     implicit none
     real(8) :: t,x(dmn),rx2,dst,rsfF,rsfG,R2,rsfT,st
-    rsfF=f0;rsfG=f1;R2=9.0;rsfT=f1;st=0
+    rsfF=f0;rsfG=f1;R2=9.0;rsfT=f1;st=f0
     if (dmn==3) then
        rx2=x(2)**2+(x(3)+7.5)**2
     else
-       rx2=(x(2)+7.5)**2
+       rx2=x(1)**2
     end if
     if (rx2<R2) rsfF=exp(rx2/(rx2-R2))
     if (t>f0 .and. t<rsfT) rsfG=exp((t-rsfT)**2/t/(t-2*rsfT))
@@ -980,7 +1046,9 @@ contains
   ! Determine if the dynamic slip is stabilized
   subroutine GetSlip_dyn
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: j,j1,j2,j3,i,nc,nr,rw_loc(dmn),slip_loc(nfnd),slip_sum_loc(nfnd)
     real(8) :: d0,d
     slip_loc=slip
@@ -992,21 +1060,21 @@ contains
        d0=sqrt(sum(tot_flt_slip(rw_loc(:dmn-1))*tot_flt_slip(rw_loc(:dmn-1))))
        ! Stabilization tolerance 
        if (rsf==1) then ! Rate state friction
-          if (d0>5e-2*rsfL(j3)) then
-             if ((d/d0)<1E-4) then
+          if (d0>5.0D-2*rsfL(j3)) then
+             if ((d/d0)<1.0D-4) then
                 slip_loc(j3)=0
              else
                 slip_loc(j3)=1
                 slip_sum_loc(j3)=1
              end if
           end if
-          if (d/dt_dyn>=vtol) then
+          if (d/dt_dyn>vtol) then
             slip_loc(j3)=1
             slip_sum_loc(j3)=1
           end if
        else ! Slip weakening
-          if (d0>5E-2*dc(j3)) then 
-             if ((d/d0)<1E-4) then
+          if (d0>5.0D-2*dc(j3)) then 
+             if ((d/d0)<1.0D-4) then
                 slip_loc(j3)=0
              else
                 slip_loc(j3)=1
@@ -1053,10 +1121,12 @@ contains
   ! Get fault QS state 
   subroutine GetVec_flt_qs
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
-    integer :: l1,l2,j,j1,r1,r2,row_l,row_f2s,row_p 
+#endif
+    integer :: l1,l2,j,j1,r1,r2,row_l(1),row_f2s(1),row_p(1) 
     real(8) :: lm(dmn),vec(dmn),rvec(dmn),rf2s(dmn),mattmp(dmn,dmn),           &
-       vectmp(dmn,1),pval,fltp
+       vectmp(dmn,1),pval(1),fltp
     call VecGetOwnershipRange(Vec_Um,l1,l2,ierr)
     call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
     do j=1,nfnd
@@ -1068,16 +1138,16 @@ contains
              row_l=dmn*nnds+nceqs_ncf+(j-1)*dmn+j1-1
           end if
           row_f2s=dmn*node_pos(j)-dmn+j1-1
-          if (row_l>=l1 .and. row_l<l2) then
+          if (row_l(1)>=l1 .and. row_l(1)<l2) then
              call VecGetValues(Vec_Um,1,row_l,lm(j1),ierr)
           end if
-          if (row_f2s>=r1 .and. row_f2s<r2) then
+          if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
              call VecGetValues(Vec_f2s,1,row_f2s,rf2s(j1),ierr)
           end if
        end do
        if (poro) then
           row_p=(dmn+1)*node_pos(j)-1
-          if (row_p>=l1 .and. row_p<l2) then
+          if (row_p(1)>=l1 .and. row_p(1)<l2) then
              call VecGetValues(Vec_Um,1,row_p,pval,ierr)
           end if
        end if
@@ -1107,7 +1177,9 @@ contains
   ! Add fault slip from dynamic model to static model as constraint functions
   subroutine FaultSlip
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: j,j1,j2,j3,rw_loc(dmn),rw_sta(dmn)
     real(8) :: vec(dmn),vectmp(dmn,1),mattmp(dmn,dmn)
     do j1=1,nfnd_loc
@@ -1155,7 +1227,7 @@ contains
        else
           do i=1,npel
              row((/((i-1)*(dmn+p)+j,j=1,dmn+p)/))=(/((ind(i)-1)*(dmn+p)+j,j=1, &
-               dmn+p)/)
+                dmn+p)/)
           end do
           mattmp=reshape(uu(row),(/dmn+p,npel/))
           vecshp=reshape(oshape(ob,:),(/npel,1/))
@@ -1169,13 +1241,19 @@ contains
   ! Apply nodal force
   subroutine ApplyNodalForce(node,vvec)
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: node,i,j
     real(8) :: vvec(:)
     do i=1,dmn+p
        j=(dmn+p)*node-(dmn+p)+i-1
        val=vvec(i); if (i==dmn+1) val=scale*val
-       call VecSetValue(Vec_F,j,val,Add_Values,ierr)
+       if(dyn) then
+          call VecSetValue(Vec_F_dyn,j,val,Add_Values,ierr)
+       else
+          call VecSetValue(Vec_F,j,val,Add_Values,ierr)
+       end if
     end do
   end subroutine ApplyNodalForce
 
@@ -1197,7 +1275,9 @@ contains
   ! Form RHS
   subroutine FormRHS
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer :: i,j
     real(8) :: t1,t2
     do i=1,nceqs
@@ -1358,7 +1438,9 @@ contains
   ! Scatter stress to vertices (normal: SS, shear: SH)
   subroutine GetVec_Stress
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     integer:: i,j,indx(eldof),row(dmn)
     real(8):: sigma(cdmn)
     do i=1,nels
@@ -1647,7 +1729,9 @@ contains
   ! Apply body force
   subroutine ApplyGravity
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     real(8) :: dns,gip,gsca,gvec(npel*dmn),ecoords(npel,dmn),detj
     integer :: el,i,j,indx((dmn+p)*npel),row(dmn*npel)
     do el=1,nels
@@ -1677,7 +1761,9 @@ contains
   ! Apply fluid body source
   subroutine ApplySource
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     real(8) :: sdns,sip,ssca,svec((dmn+1)*npel),ecoords(npel,dmn),detj
     integer :: el,i,j,indx((dmn+1)*npel),row((dmn+1)*npel)
     do el=1,nels
@@ -2274,11 +2360,11 @@ contains
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     if (dyn) then
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,           &
-          "_dyn_obs.txt"
+       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_dyn_obs_",rank,   &
+          ".txt"
        j=k_dyn
     else
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_obs.txt"
+       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_obs_",rank,".txt"
        j=k
     end if
     if (j==0) then
@@ -2320,7 +2406,7 @@ contains
           if (dsp_hyb==1) then
              write(10,fmt)tot_uu_dyn_obs(i,:)
           else
-            write(10,fmt)uu_dyn_obs(i,:)
+             write(10,fmt)uu_dyn_obs(i,:)
           end if
        else
           if (dsp==1) then
@@ -2358,7 +2444,7 @@ contains
     else
        seis=1
     end if
-    write(10,"(2(I0X))")n_log,seis
+    write(10,"(2(I0,X))")n_log,seis
     close(10); k=k+1
   end subroutine WriteOutput_log
 
@@ -2405,7 +2491,9 @@ contains
   ! Write temporal fault slip (and theta for rate state friction) 
   subroutine WriteOutput_slip
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
+#endif
     character(256) :: name,name0,name1
     character(64) :: fmt
     integer :: j,j1,j2,j3,rw_loc(dmn) 
@@ -2413,7 +2501,7 @@ contains
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     if (nfnd_loc>0) then ! Has on rank fault nodes
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_slip.txt"
+       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_slip_",rank,".txt"
        if (rsf<1) then
           select case(dmn)
              case(2); fmt="(2(ES11.2E3,X))"
@@ -2427,7 +2515,7 @@ contains
        end if
        if (k==0) then
           open(10,file=adjustl(name),status='replace')
-          write(10,'(I0)')nfnd_loc!n_lmnd-max(0,(nceqs_ncf/(dmn+p)-lmnd0))
+          write(10,'(I0)')nfnd_loc
           do j1=1,nfnd_loc
              j3=FltMap(j1,2) 
              select case(dmn)
@@ -2444,9 +2532,9 @@ contains
              j=FltMap(j1,1); j3=FltMap(j1,2)
              rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
              if (dsp_hyb==1) then
-                 write(10,fmt)tot_flt_slip(rw_loc(:dmn-1)),mu_hyb(j3)
+                write(10,fmt)tot_flt_slip(rw_loc(:dmn-1)),mu_hyb(j3)
              else
-                 write(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3)
+                write(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3)
              end if
           end do
        else ! Rate and state friction
@@ -2457,7 +2545,7 @@ contains
                 write(10,fmt)tot_flt_slip(rw_loc(:dmn-1)),mu_hyb(j3),          &
                    rsftheta(j3)
              else
-                write(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3),    &
+                write(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3),       &
                    rsftheta(j3)
              end if
           end do

@@ -1,0 +1,111 @@
+${Units('si')}
+undo off
+reset
+# Geometry
+#{blockWidth=48}
+#{blockLength=64}
+#{blockHeight=32}
+# Faults have a common width of 15 km
+#{faultWidth=15.0}
+
+# Main fault is 32.0 km long.
+#{mainFaultLength=32.0}
+
+# Branch fault is at angle of 30.0 degrees.
+#{branchAngle=30.0}
+
+# ----------------------------------------------------------------------
+# Parameters for mesh.
+# ----------------------------------------------------------------------
+#{dx=.1} !dx=.3 (lit), dx=.1
+
+brick x {blockWidth} y {blockLength} z {blockHeight}
+volume 1 move z {-blockHeight/2.0}
+
+create planar surface with plane xplane offset 0
+surface 7 name "temp_main"
+webcut volume 1 with sheet surface temp_main
+delete body 2
+
+# Create branch fault
+create planar surface with plane yplane offset 0.0
+surface 18 name "temp_branch"
+move surface temp_branch x {blockWidth/2} y 0 z 0
+rotate surface temp_branch about vertex 21 vertex 22 angle {90-branchAngle}
+webcut volume 1 with sheet surface temp_branch
+delete body 4
+
+# Split main fault surface using volume 1 
+create vertex 0 {-mainFaultLength/2} 0
+create vertex 0 {+mainFaultLength/2} 0
+create vertex 0 {-mainFaultLength/2} {-faultWidth}
+create vertex 0 {+mainFaultLength/2} {-faultWidth}
+create vertex 0 {-blockLength/2} {-faultWidth}
+create vertex 0 {+blockLength/2} {-faultWidth}
+
+split surface 13 across location vertex 37 location vertex 38 
+split surface 30 across location vertex 33 location vertex 35
+split surface 32 across location vertex 34 location vertex 36
+delete vertex all
+
+# Split branch fault surface using volume 3
+vertex 27 copy move z {-faultWidth}
+vertex 25 copy move z {-faultWidth}
+create vertex on curve 48 distance {12} from end
+vertex 47 copy move z {-faultWidth}
+split surface 19 across location vertex 45 location vertex 46 
+split surface 36 across location vertex 47 location vertex 48
+delete vertex all
+imprint all
+merge all
+
+# Mesh and smooth 
+surface  40 37 44 scheme trimesh
+surface 40 37 44 size {2*dx}
+mesh surface 40 37 44
+volume all scheme tetmesh
+volume all size {8*dx}
+mesh volume all
+refine volume all
+#volume all smooth scheme condition number beta 1.3 cpu 10
+#smooth volume all
+
+# Fault faces
+unmerge surface 40
+unmerge surface 37
+unmerge surface 44
+merge curve 95 72
+nodeset 1 surface 44 43
+nodeset 2 surface 46 40
+nodeset 3 surface 37
+nodeset 4 surface 48
+sideset 1 surface 44 43
+sideset 2 surface 46 40
+sideset 3 surface 37
+sideset 4 surface 48
+
+# remove sharing nodes
+nodeset 3 node with x_coord<=0 remove
+nodeset 4 node with x_coord<=0 remove
+
+# exterior faces
+nodeset 5  surface 6
+nodeset 6  surface 15 20 25
+nodeset 7  surface 16 21 28
+nodeset 8  surface 4
+nodeset 9  surface 10 17
+nodeset 10 surface 14 23 26
+sideset 5  surface 6
+sideset 6  surface 15 20 25
+sideset 7  surface 16 21 28
+sideset 8  surface 4
+sideset 9  surface 10 17
+sideset 10 surface 14 23 26 
+
+# Output
+group 'mat' add tet in volume 5 3
+group 'fzone' add tet in volume 1
+block 1 group mat
+block 2 group fzone
+export mesh "SCEC_spl.exo" dimension 3 overwrite
+quit

@@ -1,0 +1,29 @@
+${Units('si')}
+undo off
+# Geometry
+reset
+Create Surface rectangle width 46.0 height 20.0 ZPLANE
+Surface 1 move x -3.75 y -10.0 z 0
+create vertex location position 0  0 0
+create vertex location position -11.547 -20. 0
+Split Surface 1 across location vertex 5 6  
+merge all
+Curve 5 size .1
+mesh Curve 5 
+Surface 2 3 size .1
+block 1 Surface 2 3 
+block 1 element type quad
+mesh surface 2  3 
+refine Curve 5 depth 2 
+sideset 1 Curve 5
+nodeset 1 Curve 5
+sideset 2 Curve 7 8 
+nodeset 2 Curve 7 8 
+sideset 3 Curve 4 
+nodeset 3 Curve 4 
+sideset 4 Curve 6 9 
+nodeset 4 Curve 6 9
+sideset 5 Curve 2 
+nodeset 5 Curve 2
+export mesh "./SCEC10-2D.exo" dimension 2 overwrite
+quit

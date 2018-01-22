@@ -2,8 +2,6 @@
 import numpy as np
 import os, sys, netCDF4
 import argparse 
-from scipy.spatial import ConvexHull
-from scipy.interpolate import griddata 
 
 ap=argparse.ArgumentParser()
 ap.add_argument('-m') # mesh file
@@ -40,7 +38,7 @@ elif idcase==10:
     dt_dyn=0.0025; nviz_wave=8; nviz_slip=20
 elif idcase==102:
     dt_dyn=0.00125; nviz_wave=16; nviz_slip=40
-line1 = ["fault hex 29"]
+line1 = ["fault hex 51"]
 line3 = np.array([t,dt,nviz,dsp]).reshape(1,4)
 line4 = np.array([t_dyn,dt_dyn,nviz_dyn,t_lim,dsp_hyb,dsp_str,bod_frc,hyb,rsf,init]).reshape(1,10)
 if rsf==1: 
@@ -323,29 +321,10 @@ if idcase in [205,10]:
 elif idcase==102:
     np.savetxt(f,np.hstack((vecf,b0,V0,dtau0,a,b,L,theta_init,st_init,xfnd,frc,coh,dcoh)),delimiter = ' ',\
        fmt='%d '*2+'%g '*22+'%d '+'%g '*2)
-# Form rotated constraint matrix for fault model
-for node_pos,node_neg,i in zip(ft_pos_nodes,ft_neg_nodes,range(len(ft_pos_nodes))):
-    if node_pos != node_neg:
-        mat_ft = np.hstack((vec_fs[i,:].reshape(3,1),vec_fd[i,:].reshape(3,1),vec_fn[i,:].reshape(3,1)))
-        vec = np.array([1., 0., 0.]).reshape(3,)
-        vec = np.dot(mat_ft, vec).reshape(3,)
-        vec1  = [[vec[0], vec[1], vec[2], node_pos], 
-                 [-vec[0], -vec[1], -vec[2], node_neg]]
-        vec = np.array([0., 1., 0.]).reshape(3,1)
-        vec = np.dot(mat_ft, vec).reshape(3,)
-        vec2  = [[vec[0], vec[1], vec[2], node_pos], 
-                 [-vec[0], -vec[1], -vec[2], node_neg]]
-        vec = np.array([0., 0., 1.]).reshape(3,1)
-        vec = np.dot(mat_ft, vec).reshape(3,)
-        vec3  = [[vec[0], vec[1], vec[2], node_pos], 
-                 [-vec[0], -vec[1], -vec[2], node_neg]]
-        np.savetxt(f, vec1, delimiter = ' ', fmt = '%g %g %g %d') 
-        np.savetxt(f, vec2, delimiter = ' ', fmt = '%g %g %g %d')
-        np.savetxt(f, vec3, delimiter = ' ', fmt = '%g %g %g %d')
+
 # Boundary traction
 np.savetxt(f,np.column_stack((trac_el,trac_bc)),delimiter=' ',fmt='%d %d '+'%g '*5)
 # Observation grid
-#np.savetxt(f,np.column_stack((ogrid,obs_nlist,obs_N)),delimiter=' ',fmt='%g '*3+'%d '*8+'%g '*8)
 np.savetxt(f,ogrid,delimiter=' ',fmt='%g '*3)
 # Absorbing boundaries
 np.savetxt(f,abs_bc,delimiter=' ',fmt='%d %d %d')

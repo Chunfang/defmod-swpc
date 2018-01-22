@@ -1,0 +1,98 @@
+${Units('si')}
+undo off
+reset
+# Geometry
+Create Surface rectangle width 6. height 4. ZPLANE
+Surface 1 move x 0 y -2 z 0
+
+# Faults
+create vertex location position 1.1547  0 0
+create vertex location position -1.1547 -4 0
+Split Surface 1 across location vertex 5 6
+
+# Under/over burden bounds 
+create vertex location position -3., -1.75, 0
+create vertex location position 3., -1.75, 0
+create vertex location position -3., -2.25, 0
+create vertex location position 3., -2.25, 0
+Split Surface 2 across location vertex 9 10
+Split Surface 3 across location vertex 9 10
+Split Surface 4 across location vertex 11 12
+Split Surface 6 across location vertex 11 12
+
+# salt->res right
+create vertex location position -3., -1.8, 0
+create vertex location position 3., -1.8, 0
+Split Surface 11 across location vertex 19 20
+# res-under right
+create vertex location position -3., -2.05, 0
+create vertex location position 3., -2.05, 0
+Split Surface 12 across location vertex 23 24 
+# over->salt left 
+create vertex location position -3., -1.95, 0
+create vertex location position 3., -1.95, 0
+Split Surface 9 across location vertex 27 28
+# salt->res left 
+create vertex location position -3., -2.0, 0
+create vertex location position 3., -2.0, 0
+Split Surface 16 across location vertex 31 32
+
+# Recreate domain
+create vertex location position -3 -4 0 
+create vertex location position  3 -4 0
+create vertex location position -3  0 0 
+create vertex location position  3  0 0
+delete surface 5 7 8 10 
+create surface vertex 9 10 38 37 
+create surface vertex 11 12 36 35
+Split surface 20 across vertex 14 5
+split surface 21 across vertex 17 6
+
+# Mesh domain and fault
+Surface 22 23 24 25 size 0.04
+Mesh Surface 22 23 24 25
+refine curve 54 59 numsplit 2  
+Surface 13 14 15 17 18 19 size .005
+mesh Surface 13 14 15 17 18 19
+refine curve 30 32 39 43 44 numsplit 2 
+
+#{beta=3.0}
+#{loop(7)}
+  Surface 13 14 15 17 18 19 smooth scheme condition number beta {beta} cpu 20 
+  smooth Surface 13 14 15 17 18 19
+#{beta=beta-0.2}
+#{endloop}
+
+# Fault node/side sets
+sideset 1 Curve 30 32 39 43 44 54 59 
+nodeset 1 Curve 30 32 39 43 44 54 59
+
+# Domain bounds
+sideset 2 Curve 61 62
+nodeset 2 Curve 61 62
+sideset 3 Curve 47 51 29 33 34  
+nodeset 3 Curve 47 51 29 33 34 
+sideset 4 Curve 56 57 
+nodeset 4 Curve 56 57
+sideset 5 Curve 49 40 45 42 53 
+nodeset 5 Curve 49 40 45 42 53
+
+# NCF faces
+sideset 6 Curve 60 63
+nodeset 6 Curve 60 63
+sideset 7 Curve 18 23
+nodeset 7 Curve 18 23
+sideset 8 Curve 55 58
+nodeset 8 Curve 55 58
+sideset 9 Curve 10 15
+nodeset 9 Curve 10 15
+
+# Formations
+block 1 Surface 24 25 14 
+block 2 Surface 15 18
+block 3 Surface 13 19
+block 4 Surface 22 23 17 
+block 1 2 3 4 element type quad
+
+export mesh "./F2D.exo" dimension 2 overwrite
+quit

@@ -34,29 +34,24 @@ contains
     end do
   end subroutine FormElK
 
-! Rescale element [Kv] for new dt
-subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
+  ! Rescale element [Kv] for new dt
+  subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,ddt)
     implicit none
     real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,dt,          &
        k(eldof,eldof),alpha,D(cdmn,cdmn),S(cdmn,cdmn),dN(dmn,npel),detj,       &
-       B(cdmn,eldof),betad(cdmn,cdmn),dtmp
+       B(cdmn,eldof),betad(cdmn,cdmn),ddt
     integer :: i
-    !character(2) :: strng
     k=f0
     call DMat(D,E,nu)
-    !if (strng=="Kv") then
     alpha=f1
     call MatInv(D,S)
-    !end if
     do i=1,nip
        call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
        call BMat(dN,B)
-       !if (strng=="Kv") then
        call Matbetad(betad,estress(i,:),visc,expn)
        call MatInv(S+alpha*dt*betad,D)
-       !end if
        k=k-matmul(transpose(B),matmul(D,B))*weight(i)*detj
-       call MatInv(S+alpha*(dt+dtmp)*betad,D)
+       call MatInv(S+alpha*(dt+ddt)*betad,D)
        k=k+matmul(transpose(B),matmul(D,B))*weight(i)*detj
     end do
   end subroutine RscElKv
@@ -120,12 +115,11 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
 
   ! Rescale element [Kp] for new dt
   subroutine RscElKp(ecoords,estress,E,nu,visc,expn,H,theta,scale,dt,   &
-    k,dtmp,strng) !,Bc,fi,Kf
+    k,ddt,strng)
     implicit none
     real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,H,  &
-       theta,scale,dt,dtmp,D(cdmn,cdmn),alpha,V(cdmn,cdmn),Q(dmn,dmn),s,  &
+       theta,scale,dt,ddt,D(cdmn,cdmn),alpha,V(cdmn,cdmn),Q(dmn,dmn),s,  &
        dN(dmn,npel),detj,B(cdmn,eldof),N(1,npel),betad(cdmn,cdmn)
-       !,Bc,fi,Kf,m(cdmn,1),pN,G,Kb,Ksinv,
     real(8),target :: k(eldof+eldofp,eldof+eldofp)
     real(8),pointer :: kl(:,:)
     integer :: i
@@ -133,7 +127,6 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
     k=f0; Q=f0
     call DMat(D,E,nu)
     if (strng=="Kv") then
-    !if (visco) then
        alpha=f1
        call MatInv(D,V)
     end if
@@ -141,43 +134,21 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
        Q(i,i)=H
     end do
     s=scale
-    !if (dmn==2) m(:,1)=(/f1,f1,f0/)
-    !if (dmn==3) m(:,1)=(/f1,f1,f1,f0,f0,f0/)
-    !pN=f1/dble(npel)
-    !G=E/(f2*(f1+nu))
-    !Kb=E/(f3*(f1-f2*nu))
-    !Ksinv=(f1-Bc)/Kb
-    !if (strng=="Kp" .or. strng=="Kv") then
-       do i=1,nip
-          call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
-          call BMat(dN,B)
-          call ShapeFunc(N(1,:),ipoint(i,:))
-          if (strng=="Kv") then
-          !if (vsico) then
-             kl=>k(:eldof,:eldof)
-             call Matbetad(betad,estress(i,:),visc,expn)
-             call MatInv(V+alpha*dt*betad,D)
-             kl=kl-matmul(transpose(B),matmul(D,B))*weight(i)*detj
-             call MatInv(V+alpha*(dt+dtmp)*betad,D)
-             kl=kl+matmul(transpose(B),matmul(D,B))*weight(i)*detj
-          end if
-          kl=>k(eldof+1:,eldof+1:)
-          kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*theta*dtmp*s*s
-          !kl=kl+matmul(transpose(N-pN),N-pN)*weight(i)*detj*s*s*0.5d0/G
-          !kl=kl+matmul(transpose(N),N)*((Bc-fi)*Ksinv+fi/Kf)*weight(i)*detj*s*s
-          !kl=>k(:eldof,eldof+1:)
-          !kl=kl+matmul(transpose(B),matmul(m,N))*Bc*weight(i)*detj*s
-          !kl=>k(eldof+1:,:eldof)
-          !kl=kl-transpose(matmul(transpose(B),matmul(m,N))*Bc*weight(i)*detj)*s
-       end do
-    !end if
-    !if (strng=="Kc") then
-    !   do i=1,nip
-    !      call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
-    !      kl=>k(eldof+1:,eldof+1:)
-    !      kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*s*s
-    !   end do
-    !end if
+    do i=1,nip
+       call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+       call BMat(dN,B)
+       call ShapeFunc(N(1,:),ipoint(i,:))
+       if (strng=="Kv") then
+          kl=>k(:eldof,:eldof)
+          call Matbetad(betad,estress(i,:),visc,expn)
+          call MatInv(V+alpha*dt*betad,D)
+          kl=kl-matmul(transpose(B),matmul(D,B))*weight(i)*detj
+          call MatInv(V+alpha*(dt+ddt)*betad,D)
+          kl=kl+matmul(transpose(B),matmul(D,B))*weight(i)*detj
+       end if
+       kl=>k(eldof+1:,eldof+1:)
+       kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*theta*ddt*s*s
+    end do
   end subroutine RscElKp 
 
   ! Form element Hs (-ve)
@@ -468,8 +439,9 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
     real(8) :: betad(3,3),estress(3),kappa,c1,c2,c3,visc,expn,s1,s2,s3
     s1=estress(1); s2=estress(2); s3=estress(3)
     kappa=sqrt(((s1-s2)/f2)**2+s3**2)
-    if (kappa==f0) betad=f0
-    if (kappa==f0) return
+    if (kappa==f0) then 
+       betad=f0; return
+    end if
     c1=f1+(expn-f1)*((s1-s2)/(f2*kappa))**2
     c2=f1+(expn-f1)*(s3/kappa)**2
     c3=(expn-f1)*(s1*s3-s2*s3)/(kappa)**2
@@ -485,8 +457,9 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
     s1=estress(1); s2=estress(2); s3=estress(3)
     s4=estress(4); s5=estress(5); s6=estress(6)
     kappa=sqrt(((s1-s2)**2+(s2-s3)**2+(s1-s3)**2)/f6+s4**2+s5**2+s6**2)
-    if (kappa==f0) betad=f0
-    if (kappa==f0) return
+    if (kappa==f0) then
+       betad=f0; return
+    end if
     c=sqrt(expn-f1)
     Sx=c*(f2*s1-s2-s3)/(f3*kappa)
     Sy=c*(f2*s2-s3-s1)/(f3*kappa)

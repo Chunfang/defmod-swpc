@@ -146,7 +146,6 @@ if slip:
         else:
             dat = dat_slip.item()
             dat_flt.append(dat[:,:,:])
-        
         if rsf: 
             dat_rsf_flt=[]
             for i in range(len(dat_log_rsf)):

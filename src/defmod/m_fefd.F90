@@ -1,8 +1,18 @@
+! Copyright (C) 2010-2015 ../AUTHORS. All rights reserved.
+! This file is part of Defmod. See ../COPYING for license information.
+
 module fefd 
 
-  use global
-  implicit none
+#include <petscversion.h>
 
+  use global
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+  implicit none
+#else
+#include <petsc/finclude/petscksp.h>
+  use petscksp
+  implicit none
+#endif
 ! FD variables needed by FE
 ! total number of grid points in each direction of the grid
   integer :: nx,ny,nz
@@ -43,7 +53,8 @@ contains
   ! FD domain grid blocks containing fault nodes (idgp, xgp) 
   subroutine GetFDFnd
     implicit none
-    integer :: j2,j3,xid,yid,zid,rowfd(2**dmn),iddf(nfnd*(2**dmn),dmn),uniq(nfnd*(2**dmn))
+    integer :: j2,j3,xid,yid,zid,rowfd(2**dmn),iddf(nfnd*(2**dmn),dmn),        &
+       uniq(nfnd*(2**dmn))
     real(8) :: x0,x1,y0,y1,z0,z1,xfe(nfnd*(2**dmn),dmn)
     do j3=1,nfnd
        rowfd=(/((j3-1)*(2**dmn)+j2,j2=1,2**dmn)/)
@@ -87,7 +98,8 @@ contains
           xfe(rowfd(8),:)=(/x1,y1,z1/)
        end select
        ! Create a unique index set
-       call GetUniq(iddf(:rowfd(2**dmn),:),rowfd(2**dmn),uniq(rowfd(2**dmn)-2**dmn+1:rowfd(2**dmn)))
+       call GetUniq(iddf(:rowfd(2**dmn),:),rowfd(2**dmn),uniq(rowfd(2**dmn)-2**&
+          dmn+1:rowfd(2**dmn)))
     end do ! Local fault nodes
     ngp=size(pack(uniq,uniq/=0))
     allocate(idgp(ngp,dmn),xgp(ngp,dmn))
@@ -133,8 +145,11 @@ contains
   ! FE to FD MPI rank match (depending on FD partitioning) 
   subroutine NndFE2FD 
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
-    integer :: rankfd,rankxy,igp,i,j,k,hit(ngp_loc),buf(nprcs*nprc_fd),nnd_fe2fd(nprcs,nprc_fd),nnd_loc(nprc_fd)
+#endif
+    integer :: rankfd,rankxy,igp,i,j,k,hit(ngp_loc),buf(nprcs*nprc_fd),        &
+       nnd_fe2fd(nprcs,nprc_fd),nnd_loc(nprc_fd)
     character(256) :: name,name0,name1
     ! Find index size for local FD ranks
     do rankfd=0,nprc_fd-1
@@ -147,7 +162,8 @@ contains
        end do
        nnd_loc(rankfd+1)=sum(hit)
     end do
-    call MPI_Gather(nnd_loc,nprc_fd,MPI_Integer,buf,nprc_fd,MPI_Integer,nprcs-1,MPI_Comm_World,ierr)
+    call MPI_Gather(nnd_loc,nprc_fd,MPI_Integer,buf,nprc_fd,MPI_Integer,       &
+       nprcs-1,MPI_Comm_World,ierr)
     if (rank==nprcs-1) then 
        nnd_fe2fd=transpose(reshape(buf,(/nprc_fd,nprcs/)))
        name0=output_file(:index(output_file,"/",BACK=.TRUE.))
@@ -165,9 +181,12 @@ contains
   ! Mat type from FE to FD (matFD(idx0,idx1,idy0,idy1,idz0,idz1,idmat))
   subroutine MatFE2FD
      implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
-     integer :: k,el,matFD(nels,dmn*2+1),hasFD(nprc_fd),ixmin,iymin,izmin,ixmax,iymax,izmax, &
-        rankx,rankx0,rankx1,ranky,ranky0,ranky1,rankxy,buf(nprcs*nprc_fd),vfe2fd(nprcs,nprc_fd)
+#endif
+     integer :: k,el,matFD(nels,dmn*2+1),hasFD(nprc_fd),ixmin,iymin,izmin,     &
+        ixmax,iymax,izmax,rankx,rankx0,rankx1,ranky,ranky0,ranky1,rankxy,      &
+        buf(nprcs*nprc_fd),vfe2fd(nprcs,nprc_fd)
      real(8) :: xmin,ymin,zmin,xmax,ymax,zmax
      character(256) :: name,name0,name1,namev
      select case(dmn)
@@ -204,7 +223,8 @@ contains
                   ranky<=ranky1) hasFD(rankxy+1)=1
            end do
         end do
-        call MPI_Gather(hasFD,nprc_fd,MPI_Integer,buf,nprc_fd,MPI_Integer,nprcs-1,MPI_Comm_World,ierr) 
+        call MPI_Gather(hasFD,nprc_fd,MPI_Integer,buf,nprc_fd,MPI_Integer,     &
+           nprcs-1,MPI_Comm_World,ierr) 
         name0=output_file(:index(output_file,"/",BACK=.TRUE.))
         name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
         if (rank==nprcs-1) then 
@@ -231,7 +251,8 @@ contains
            izmin=int((-zmax+zref)/dz)+1; izmax=int((-zmin+zref)/dz)+1
            matFD(el,:)=(/ixmin,ixmax,iymin,iymax,izmin,izmax,id(el)/)
         end do
-        write(namev,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_ife2fd.txt"
+        write(namev,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,         &
+           "_ife2fd.txt"
         open(152,file=adjustl(namev),status='replace')
         write(152,'(I0)')nels
         do el=1,nels
