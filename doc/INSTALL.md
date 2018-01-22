@@ -1,7 +1,7 @@
 ## FE (defmod) installation
 
 Download PETSc from https://www.mcs.anl.gov/petsc/download/index.html and unzip.   
-Add "export PETSC_DIR=${HOME}/petsc-<version>" to ~/.bashrc (.profile)
+Add "export PETSC_DIR=${HOME}/petsc-[version]" to ~/.bashrc (.profile)
 cd petsc-[version]
 
 On CentOS cluster mkl+impi+icc, set the mpi, blas/lapack and scalapack arguments according to different Parallel Studio(R) installations. On Engaging cluster (MIT) for example:
@@ -44,7 +44,7 @@ data type: real_8/int/long_int/
 m: 2 means print from 3rd entry  
 n: number of entries to print  
 
-Add "PETSC_ARCH=<math-mpi-compiler>" to ~/.bashrc, source ~/.bashrc, cd <defmod-swpc>/src/defmod 
+Add "PETSC_ARCH=[math-mpi-compiler]" to ~/.bashrc, source ~/.bashrc, cd [defmod-swpc]/src/defmod 
 
 To suppress false compiler warnings, have "FFLAGS = -Wno-maybe-uninitialized" in Makefile. 
 
@@ -64,8 +64,8 @@ export CPPFLAGS=-I${NCDIR}/include LDFLAGS=-L${NCDIR}/lib
 make check && make install
 
 Add new entries to src/share/makefile.arch and src/share/makefile-tool.arch for local the environment. Use existing entries, e.g. arch=mac-gfortran, as template. To set the NetCDF paths correctly,  
-NCLIB   = -L<NetCDF-fortan>/lib -L[NetCDF]/lib  
-NCINC   = -I<NetCDF-fortan>/include  
+NCLIB   = -L[NetCDF-fortan]/lib -L[NetCDF]/lib  
+NCINC   = -I[NetCDF-fortan]/include  
 
 cd src/swpc3d  
 make arch=[local arch] debug(publish)=true/false  
@@ -79,19 +79,19 @@ https://bitbucket.org/stali/defmod
 https://bitbucket.org/chunfangmeng/defmod-dev  
 https://github.com/takuto-maeda/OpenSWPC
 
-To run the code in FE-FD coupled mode, an additional file "<xxx>_fefd.cfg" is needed, use the files in example/SCEC as templates. Note, the MPI size in <xxx>_fefd.cfg should be consistent with those in <xxx>.inf for the FD part, and the observation grid should have overlap with those in <xxx>.inp for cross validation.
+To run the code in FE-FD coupled mode, an additional file "[xxx]_fefd.cfg" is needed, use the files in example/SCEC as templates. Note, the MPI size in [xxx]_fefd.cfg should be consistent with those in [xxx].inf for the FD part, and the observation grid should have overlap with those in [xxx].inp for cross validation.
 
 First run defmod (FE) model. -fd 1 tells the code to output the FD input, and -ss 0/1 is to switch off/on snapshot (VTK) output:  
-<MPI_cmd> <MPI-args> <defmod-swpc>/bin/defmod -f <xxx>.inp <petsc-args> -ss 0/1 -fd 1
+[MPI_cmd] [MPI-args] [defmod-swpc]/bin/defmod -f [xxx].inp [petsc-args] -ss 0/1 -fd 1
 
-After FE model finishes without errors, run swpc (FD) model. -r <xxx> (no extension) passes the FE model name. -e <event number> tells which event to simulate in case of multiple events. Without -e argument, swpc will pick the first event: 
-<MPI_cmd> <MPI-args> <defmod-swpc>/bin/swpc3d.x -i <fd model>.inf -r <xxx> -e <event number> 
+After FE model finishes without errors, run swpc (FD) model. -r [xxx] (no extension) passes the FE model name. -e [event number] tells which event to simulate in case of multiple events. Without -e argument, swpc will pick the first event: 
+[MPI_cmd] [MPI-args] [defmod-swpc]/bin/swpc3d.x -i [fd model].inf -r [xxx] -e [event number] 
 
 Other files, e.g. station list and velocity model, are the same for original OpenSWPC. The FE velocity will override the FE velocity, be careful about velocity consistency at the interface. Both the codes display the FE-FD binding information via screen outputs. 
 
-To run models on cluster, use the submission files <xxx>_rup(sw).sh in example/<xxx> as template. Also, use the <xxx>.py files as template for making the FE model inputs, and makeing plots/movies.
+To run models on cluster, use the submission files [xxx]_rup(sw).sh in example/[xxx] as template. Also, use the [xxx].py files as template for making the FE model inputs, and makeing plots/movies.
 
 To generate FE mesh, in Exodus-II (.exo) format:
-cubit(trelis) -nojournal -nographics <xxx>.jou  
+cubit(trelis) -nojournal -nographics [xxx].jou  
 To generate FE inp file:  
-./<xxx prep>.py <xxx>.exo <options>
+./[xxx prep].py [xxx].exo [options]
