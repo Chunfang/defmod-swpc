@@ -20,7 +20,7 @@ To install and run this "mixed" code, see doc/INSTALL
 ## LICENSE
 MIT License, see LICENSE for details.
 
-The authors appreciate that the users cite the following papers in any publications employing this code. For feedbacks or contribution, please contact the corresponding author.  
+The authors appreciate that the users cite the following papers in any publications employing this code. For feedback or contribution, please contact the corresponding author. 
 
 
 * * *
@@ -29,6 +29,6 @@ The authors appreciate that the users cite the following papers in any publicati
 
 Chunfang Meng (2016), Benchmarking Defmod, an open source FEM code for modeling episodic fault rupture, Computers & Geosciences, Volume 100, March 2017, Pages 10-26, ISSN 0098-3004, https://doi.org/10.1016/j.cageo.2016.11.014.
 
-Takuto Maeda, Shunsuke Takemura and Takashi Furumura (2017), OpenSWPC: An open-source integrated parallel simulation code for modeling seismic wave propagation in 3D heterogeneous viscoelastic media, Preprint submitted to Earth, Planets and Space. 
+Takuto Maeda, Shunsuke Takemura and Takashi Furumura (2017), OpenSWPC: An open-source integrated parallel simulation code for modeling seismic wave propagation in 3D heterogeneous viscoelastic media, Earth, Planets and Space, 69:102, https://doi.org/10.1186/s40623-017-0687-2. 
 
-Chunfang Meng and Hua Wang (2017), A finite element and finite difference mixed approach for modeling fault rupture and ground motion, Preprint submitted to Computer and Geosciences.
+Chunfang Meng and Hua Wang (2018), A finite element and finite difference mixed approach for modeling fault rupture and ground motion, Computer & Geosciences (in press).
