@@ -8,12 +8,17 @@ Contributors: Tabrez Ali ( tabrez.ali (at) gmail.com ) and Takuto Maeda ( maeda 
 ## DESCRIPTION
 This code combines two open source codes Defmod(-dev) and OpenSWPC, forming an FE-FD mixed code. 
 
-To install and use the "pure" FE or FD code, visit    
+To install and use the "pure" FE or FD code, visit   
 https://bitbucket.org/stali/defmod    
-https://bitbucket.org/chunfangmeng/defmod-dev   
 https://github.com/takuto-maeda/OpenSWPC
 
 To install and run this "mixed" code, see doc/INSTALL
+
+## FEATURES
+1. Forward incremental Lagrange Multiplier method for modeling fault slip honoring slip weakening and rate-and-state frictional laws, verified with SCEC benchmark problems.
+2. Adaptive (Quasi-)static-dynamic "hybrid" (FE) solver that covers multi-temporal scales, e.g. fault slip (fast) triggered by pore pressure changes (slow).  
+3. Finite element and finite difference coupling that covers multi-spatial scales, e.g. localized fault slip and resulting ground motions. 
+4. Generalized-alpha (implicit dynamic) solver that is unconditionally stable, i.e. does not suffer CFL restriction, while allowing fault rupture.  
 
 * * *
 

@@ -70,13 +70,12 @@ NCINC   = -I[NetCDF-fortan]/include
 cd src/swpc3d  
 make arch=[local arch] debug(publish)=true/false  
 cd src/tool  
-make arch=[local arch] debug(publish)=true/false
+make arch=[local arch] 
 
 ## Running the mixed code
 
 defmod and swpc can run standalone, compatible with all the model inputs for the original codes:  
 https://bitbucket.org/stali/defmod  
-https://bitbucket.org/chunfangmeng/defmod-dev  
 https://github.com/takuto-maeda/OpenSWPC
 
 To run the code in FE-FD coupled mode, an additional file "[xxx]_fefd.cfg" is needed, use the files in example/SCEC as templates. Note, the MPI size in [xxx]_fefd.cfg should be consistent with those in [xxx].inf for the FD part, and the observation grid should have overlap with those in [xxx].inp for cross validation.
@@ -85,7 +84,7 @@ First run defmod (FE) model. -fd 1 tells the code to output the FD input, and -s
 [MPI_cmd] [MPI-args] [defmod-swpc]/bin/defmod -f [xxx].inp [petsc-args] -ss 0/1 -fd 1
 
 After FE model finishes without errors, run swpc (FD) model. -r [xxx] (no extension) passes the FE model name. -e [event number] tells which event to simulate in case of multiple events. Without -e argument, swpc will pick the first event:   
-[MPI_cmd] [MPI-args] [defmod-swpc]/bin/swpc3d.x -i [fd model].inf -r [xxx] -e [event number] 
+[MPI_cmd] [MPI-args] [defmod-swpc]/bin/swpc_3d.x -i [fd model].inf -r [xxx] -e [event number] 
 
 Other files, e.g. station list and velocity model, are the same for original OpenSWPC. The FE velocity will override the FE velocity, be careful about velocity consistency at the interface. Both the codes display the FE-FD binding information via screen outputs. 
 
