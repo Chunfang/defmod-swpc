@@ -51,7 +51,7 @@ ifeq ($(arch),mac-gfortran)
   FFLAGS  = -O2 -ffast-math -fconvert=big-endian -D_INFO -D_ASSERT -I../include
   NCFLAG  = -D_NETCDF
   NCLIB   = -L/opt/local/lib
-  NCINC   = -I$(HOME)/anaconda/include
+  NCINC   = -I/opt/local/include
   NETCDF  = -lnetcdf -lnetcdff
 
   ifeq ($(debug),true)
@@ -89,15 +89,18 @@ ifeq ($(arch),engaging)
   NCLIB   = -L${HOME}/NetCDF/lib -L/cm/shared/engaging/netcdf/4.4.1/lib
   NCINC   = -I${HOME}/NetCDF/include
   NETCDF  = -lnetcdff -lnetcdf
+endif
 
-  ifeq ($(publish),true)
-    FFLAGS = -xAVX -O3 -lmpi -I../include -D_INFO -D_ASSERT -static-intel -mcmodel=small
-  endif
-
-  ifeq ($(debug),true)
-    FFLAGS  = -CB -traceback -Wl,-no_pie -heap-arrays 10 -static-intel -I../include -D_INFO -D_ASSERT -D_DEBUG
-  endif
-
+##
+## PSC bridges 
+##
+ifeq ($(arch),bridges)
+  FC      = /opt/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/bin/mpiifort 
+  FFLAGS  = -xAVX -O3 -lmpi -I../include -D_INFO -D_ASSERT -qopenmp
+  NCFLAG  = -D_NETCDF
+  NCLIB   = -L/opt/packages/netcdf/4.1.3-icc/lib -Wl,-rpath=/opt/packages/hdf5/intel/1.8.16/hdf5/lib
+  NCINC   = -I/opt/packages/netcdf/4.1.3-icc/include
+  NETCDF  = -lnetcdff -lnetcdf
 endif
 
 ##
