@@ -1,6 +1,6 @@
 # Makefile for Defmod
 
-FFLAGS = -Wno-maybe-uninitialized
+FFLAGS =
 FPPFLAGS =
 LDLIBS =
 
@@ -16,7 +16,7 @@ m_elems.o  : m_elems.F90 m_utils.o
 m_local.o  : m_local.F90 m_elems.o
 m_global.o : m_global.F90 m_local.o 
 m_fefd.o   : m_fefd.F90 m_global.o
-m_galpha.o  : m_galpha.F90 m_global.o
+m_galpha.o : m_galpha.F90 m_global.o
 main.o     : main.F90 m_global.o m_fefd.o m_galpha.o
 
 all: ${OBJS}
