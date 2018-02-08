@@ -36,4 +36,4 @@ Chunfang Meng (2016), Benchmarking Defmod, an open source FEM code for modeling 
 
 Takuto Maeda, Shunsuke Takemura and Takashi Furumura (2017), OpenSWPC: An open-source integrated parallel simulation code for modeling seismic wave propagation in 3D heterogeneous viscoelastic media, Earth, Planets and Space, 69:102, https://doi.org/10.1186/s40623-017-0687-2. 
 
-Chunfang Meng and Hua Wang (2018), A finite element and finite difference mixed approach for modeling fault rupture and ground motion, Computer & Geosciences (in press).
+C. Meng, H. Wang, A finite element and finite difference mixed approach for modeling fault rupture and ground motion, Computers & Geosciences 113 (2018) 54 – 69, https://doi.org/10.1016/j.cageo.2018.01.015.
