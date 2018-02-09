@@ -32,7 +32,7 @@ The authors appreciate that the users cite the following papers in any publicati
 
 ## REFERENCES
 
-Chunfang Meng (2016), Benchmarking Defmod, an open source FEM code for modeling episodic fault rupture, Computers & Geosciences, Volume 100, March 2017, Pages 10-26, ISSN 0098-3004, https://doi.org/10.1016/j.cageo.2016.11.014.
+Chunfang Meng, Benchmarking Defmod, an open source FEM code for modeling episodic fault rupture, Computers & Geosciences, Volume 100, March 2017, Pages 10-26, ISSN 0098-3004, https://doi.org/10.1016/j.cageo.2016.11.014.
 
 Takuto Maeda, Shunsuke Takemura and Takashi Furumura (2017), OpenSWPC: An open-source integrated parallel simulation code for modeling seismic wave propagation in 3D heterogeneous viscoelastic media, Earth, Planets and Space, 69:102, https://doi.org/10.1186/s40623-017-0687-2. 
 
