@@ -1071,7 +1071,6 @@ program main
            call MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
            call MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
            call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-           if (init==1) call VecDuplicate(Vec_Up,Vec_Up0,ierr) ! Initial p
            call VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
            call VecCopy(Vec_Up,Vec_I,ierr) ! Hold Up
            call VecDuplicate(Vec_Up,Vec_qu,ierr) ! qu->Htu
@@ -1177,11 +1176,10 @@ program main
            if (nobs_loc>0) call WriteOutput_obs 
            if (init==1) then
               call PrintMsg("Pore fluid initialization...")
-              call VecGetSubVector(Vec_Um,RI,Vec_Up0,ierr)
               ! Zero initial pressure 
-              call VecZeroEntries(Vec_Up0,ierr)
-              call VecRestoreSubVector(Vec_Um,RI,Vec_Up0,ierr)
-              call VecDestroy(Vec_Up0,ierr)
+              call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+              call VecZeroEntries(Vec_Up,ierr)
+              call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               tot_uu=f0
               call VecZeroEntries(Vec_F,ierr)
               call ApplySource

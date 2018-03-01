@@ -36,10 +36,10 @@ module global
   character(12) :: stype
   character(256) :: output_file
   logical :: poro,visco,fault,dyn,fail,dsp_dyn,crp,gf
-  Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,            &
-     Vec_U_dyn,Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up0,Vec_Up_dyn,Vec_I_dyn,Vec_fp,   &
-     Vec_qu,Vec_Uu,Vec_Ul,Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip, &
-     Vec_nrm,Vec_lambda_sta,Vec_lambda_sta0,Vec_lambda_bk,Vec_lm_pn,Vec_lm_pp, &
+  Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,Vec_U_dyn,  &
+     Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up_dyn,Vec_I_dyn,Vec_fp,Vec_qu,Vec_Uu,Vec_Ul,&
+     Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip,Vec_nrm,              &
+     Vec_lambda_sta,Vec_lambda_sta0,Vec_lambda_bk,Vec_lm_pn,Vec_lm_pp,         &
      Vec_lm_f2s,Vec_Fm_dyn,Vec_F_dyn ! For implicit alpha
   Vec,pointer :: Vec_W(:),Vec_Wlm(:)
   Mat :: Mat_K,Mat_M,Mat_Minv,Mat_Gt,Mat_G,Mat_GMinvGt,Mat_Kc,Mat_K_dyn,Mat_H, &
@@ -368,7 +368,7 @@ contains
        case(2)
           vec(1)=rsfv(j3)
           vec(2)=f0 ! Zero normal velocity
-       case (3)
+       case(3)
           flt_qs=flt_ndf(rw_loc)+st_init(j3,:)
           vec(1)=rsfv(j3)*flt_qs(1)/sqrt(flt_qs(1)**2+flt_qs(2)**2)
           vec(2)=rsfv(j3)*flt_qs(2)/sqrt(flt_qs(1)**2+flt_qs(2)**2)
@@ -387,10 +387,11 @@ contains
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
 #include "petsc.h"
 #endif
-    integer :: j,j1,j2,j3,workpos(dmn),workneg(dmn)
-    real(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r,dip(dmn),nrm(dmn),           &
-       matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn)
+    integer :: j,j1,j2,j3,j4,j5,workpos(dmn),workneg(dmn),row_p(1)
+    real(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r,dip(dmn),nrm(dmn),pn(1),     &
+       pp(1),ptmp,matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn)
     call VecGetOwnershipRange(Vec_flc,j2,j3,ierr)
+    if (poro) call VecGetOwnershipRange(Vec_Um,j4,j5,ierr)
     do j=1,nfnd
        matrot=reshape(vecf(j,:),(/dmn,dmn/))
        vecfl=f0; vecss=f0; vecsh=f0
@@ -411,6 +412,23 @@ contains
        call MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecsh=vec
+       pn=f0; pp=f0
+       if (poro) then
+          row_p=(dmn+1)*node_neg(j)-1
+          if (row_p(1)>=j4 .and. row_p(1)<j5) then
+             call VecGetValues(Vec_Um,1,row_p,pn,ierr)
+          end if
+          row_p=(dmn+1)*node_pos(j)-1
+          if (row_p(1)>=j4 .and. row_p(1)<j5) then
+             call VecGetValues(Vec_Um,1,row_p,pp,ierr)
+          end if
+          call MPI_Reduce(pn,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
+             ierr) 
+          pn=ptmp
+          call MPI_Reduce(pp,ptmp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
+             ierr) 
+          pp=ptmp
+       end if
        if (rank==nprcs-1) then
           select case(dmn)
           case(2)
@@ -427,6 +445,7 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss=matst(:,dmn)
+          vecss(dmn)=vecss(dmn)-biot(j)*pp(1)*scale
           r=sqrt(sum(vecss*vecss)/sum(vecfl*vecfl))
           call VecSetValues(Vec_f2s,dmn,workpos,(/r,r,r/),Insert_Values,ierr)
           call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
@@ -467,6 +486,7 @@ contains
           end select
           matst=matmul(matmul(transpose(matrot),st),matrot)
           vecss=matst(:,dmn)
+          vecss(dmn)=vecss(dmn)-biot(j)*pn(1)*scale
           r=(r+sqrt(sum(vecss*vecss)/sum(vecfl*vecfl)))/f2
           ! Convert prestress to nodal force
           if (r>f0) then
@@ -1126,36 +1146,40 @@ contains
 #endif
     integer :: l1,l2,j,j1,r1,r2,row_l(1),row_f2s(1),row_p(1) 
     real(8) :: lm(dmn),vec(dmn),rvec(dmn),rf2s(dmn),mattmp(dmn,dmn),           &
-       vectmp(dmn,1),pval(1),fltp
+       vectmp(dmn,1),pn(1),pp(1),fltpn,fltpp
     call VecGetOwnershipRange(Vec_Um,l1,l2,ierr)
     call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
     do j=1,nfnd
-       lm=f0; vec=f0; rf2s=0; rvec=f0; pval=f0; fltp=f0
+       lm=f0; vec=f0; rf2s=0; rvec=f0; pn=f0; pp=f0; fltpn=f0; fltpp=f0
        do j1=1,dmn 
           if (poro) then
              row_l=(dmn+1)*nnds+nceqs_ncf+(j-1)*dmn+sum(perm(1:j-1))+j1-1
           else
              row_l=dmn*nnds+nceqs_ncf+(j-1)*dmn+j1-1
           end if
-          row_f2s=dmn*node_pos(j)-dmn+j1-1
           if (row_l(1)>=l1 .and. row_l(1)<l2) then
              call VecGetValues(Vec_Um,1,row_l,lm(j1),ierr)
           end if
+          row_f2s=dmn*node_pos(j)-dmn+j1-1
           if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
              call VecGetValues(Vec_f2s,1,row_f2s,rf2s(j1),ierr)
           end if
        end do
        if (poro) then
+          row_p=(dmn+1)*node_neg(j)-1
+          if (row_p(1)>=l1 .and. row_p(1)<l2) then
+             call VecGetValues(Vec_Um,1,row_p,pn,ierr)
+          end if
           row_p=(dmn+1)*node_pos(j)-1
           if (row_p(1)>=l1 .and. row_p(1)<l2) then
-             call VecGetValues(Vec_Um,1,row_p,pval,ierr)
+             call VecGetValues(Vec_Um,1,row_p,pp,ierr)
           end if
        end if
        call MPI_Reduce(lm,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
        call MPI_Reduce(rf2s,rvec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
-       call MPI_Reduce(pval,fltp,1,MPI_Real8,MPI_Sum,nprcs-1,                  &
-          MPI_Comm_World,ierr)
+       call MPI_Reduce(pn,fltpn,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
+       call MPI_Reduce(pp,fltpp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
        ! Rotate vec to fault coordinate
        if (rank==nprcs-1) then
           vectmp=reshape(vec,(/dmn,1/))
@@ -1165,8 +1189,8 @@ contains
           ! Nodal force to stress
           flt_ss(j,:)=(vec*wt+st_init(j,:))*rvec(dmn)
           if (poro) then 
-             flt_p(j)=fltp*scale 
-             flt_ss(j,dmn)=flt_ss(j,dmn)+max(f0,biot(j)*fltp*scale)
+             flt_p(j)=0.5*(fltpn+fltpp)*scale 
+             flt_ss(j,dmn)=flt_ss(j,dmn)+max(f0,biot(j)*flt_p(j))
           end if 
        end if
     end do
