@@ -9,6 +9,16 @@ LDLIBS =
 -include ${PETSC_DIR}/lib/petsc/conf/variables
 -include ${PETSC_DIR}/lib/petsc/conf/rules
 
+ifeq ($(debug),true)
+	FFLAGS += -O0 -g
+else
+	ifeq ($(CC),icc)
+		FFLAGS += -ipo -diag-disable ipo -static_intel 
+	else
+		FFLAGS += -Wno-maybe-uninitialized
+	endif
+endif
+
 OBJS = main.o m_galpha.o m_fefd.o m_global.o m_local.o m_elems.o m_utils.o
 
 m_utils.o  : m_utils.F90
