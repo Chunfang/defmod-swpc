@@ -6,7 +6,7 @@ module galpha
 #include <petscversion.h>
 
   use global
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petscdef.h"
 #else
@@ -24,7 +24,7 @@ contains
   ! Output initial Mat_K_dyn, Vec_Fa for generalized-alpha method
   subroutine AlphaInit
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     Mat :: Mat_tmp
@@ -74,7 +74,7 @@ contains
   ! RHS of implicit dynamics 
   subroutine AlphaRHS
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     Mat :: Mat_tmp
@@ -131,7 +131,7 @@ contains
   ! Update velocity and acceleration
   subroutine AlphaUpdate
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     Vec,pointer :: Vec_tmp(:)
@@ -178,7 +178,7 @@ contains
   ! Constrain solution
   subroutine AlphaCnstr
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     ! Form lambda=(GUp-Flm)/(dt^2GMinvGt)

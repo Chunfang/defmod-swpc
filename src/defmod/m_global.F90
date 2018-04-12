@@ -6,7 +6,7 @@ module global
 #include <petscversion.h>
 
   use local
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petscdef.h"
 #else
@@ -18,7 +18,7 @@ module global
   integer :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,lm_str,  &
      bod_frc,steps,tstep,steps_dyn,tstep_dyn,nfnd,hyb,frq_dyn,nobs,n_log,      &
      n_log_dyn,n_log_wave,ih,igf,rsf,n_log_slip,nceqs_ncf,init,frq_wave,       &
-     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc
+     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,fvin
   real(8) :: alpha,beta,t,dt,t_dyn,dt_dyn,t_lim,val,wt,scale,rslip,t_sta,t_abs,&
      t_hyb,v_bg,vtol,trunc
   integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
@@ -35,10 +35,10 @@ module global
      flt_slip(:),tot_flt_slip(:),qs_flt_slip(:)
   character(12) :: stype
   character(256) :: output_file
-  logical :: poro,visco,fault,dyn,fail,dsp_dyn,crp,gf
+  logical :: poro,visco,fault,dyn,fail,dsp_dyn,crp,gf,kfv
   Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,Vec_U_dyn,  &
      Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up_dyn,Vec_I_dyn,Vec_fp,Vec_qu,Vec_Uu,Vec_Ul,&
-     Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip,Vec_nrm,              &
+     Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip,Vec_nrm,Vec_Cp,       &
      Vec_lambda_sta,Vec_lambda_sta0,Vec_lambda_bk,Vec_lm_pn,Vec_lm_pp,         &
      Vec_lm_f2s,Vec_Fm_dyn,Vec_F_dyn ! For implicit alpha
   Vec,pointer :: Vec_W(:),Vec_Wlm(:)
@@ -57,7 +57,7 @@ module global
   integer :: nprcs,rank,ierr
   integer,allocatable :: epart(:),npart(:) ! Partitioning
   integer,allocatable :: nmap(:),emap(:),nl2g(:,:),indxmap(:,:),               &
-     indxmap_u(:,:),FltMap(:,:),ol2g(:),gpl2g(:) ! L-G Mapping
+     indxmap_u(:,:),FltMap(:,:),ol2g(:) ! L-G Mapping
   Vec :: Seq_U,Seq_U_dyn,Seq_fp,Seq_fl,Seq_flc,Seq_ql,Seq_qu,Seq_SS,Seq_SH,    &
      Seq_f2s,Seq_dip,Seq_nrm
   IS :: From,To,RI,From_u,To_u,RIu,From_p,To_p,RIl
@@ -92,13 +92,34 @@ contains
     end if
     call AddWinklerFdn(el,k)
     if (.not. dyn) call FixBCinLocalK(el,k)
+    if (poro .and. kfv) call FixFVLocalK(el,k)
     if (dyn) then
        call FormLocalIndx_dyn(enodes,indx)
     else
        call FormLocalIndx(enodes,indx)
     end if
   end subroutine FormLocalK
- 
+
+  ! Custom permeability from FV
+  subroutine FormLocalKPerm(el,k,indx,m_perm,strng)
+    implicit none
+    integer :: el,indx(:)
+    real(8) :: k(:,:),estress(nip,cdmn),m_perm(dmn,dmn)
+    character(2) :: strng
+    enodes=nodes(el,:)
+    ecoords=coords(enodes,:)
+    if (visco) estress=stress(el,:,:)
+    E=mat(id(el),1); nu=mat(id(el),2)
+    visc=mat(id(el),3); expn=mat(id(el),4)
+    B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
+    call FormElKPerm(ecoords,estress,E,nu,visc,expn,m_perm,B,phi,Kf,1.0d0,     &
+       scale,dt,k,strng)
+    call AddWinklerFdn(el,k)
+    call FixBCinLocalK(el,k)
+    if (strng=="Kp") call FixFVLocalKBD(el,k)
+    call FormLocalIndx(enodes,indx)
+  end subroutine FormLocalKPerm
+
   ! Rescale local [Kv] for dt
   subroutine RscKv(el,k,indx,ddt)
     implicit none
@@ -135,7 +156,7 @@ contains
   ! Rescale [K] for new dt = fdt*dt (poro and/or linear visco) 
   subroutine Rscdt(fdt)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h" 
 #endif
     integer :: i,ndof
@@ -176,7 +197,7 @@ contains
   ! Account for constraint eqns
   subroutine ApplyConstraints
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,n,j1,j2,j3,j4
@@ -195,8 +216,8 @@ contains
                 call MatSetValue(Mat_K,j3,j2,wt*vvec(j1),Add_Values,ierr)
              end do
           end if
-          if ((stype=="explicit" .and. .not. gf).or. (fault .and.              &
-             i<=nceqs_ncf)) then
+          if ((stype=="explicit" .and. .not. gf) .or. (fault .and.             &
+             i<=nceqs_ncf .and. .not. kfv)) then ! Consider non-conforming grid
              do j1=1,dmn
                 j2=dmn*node-dmn+j1-1; j3=i-1
                 if (poro .and. mod(i,dmn+1)>0) then
@@ -219,7 +240,7 @@ contains
   ! Create full Mat_Gt for dynamic constraints
   subroutine GetMat_Gt
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,j4,j5
@@ -230,10 +251,10 @@ contains
              do j2=1,2
                 if (j2==1) then 
                    node=node_pos(j)
-                   vvec=vecf(j,(j1-1)*dmn+1:j1*dmn)
+                   vvec(:dmn)=vecf(j,(j1-1)*dmn+1:j1*dmn)
                 else
                    node=node_neg(j)
-                   vvec=-vecf(j,(j1-1)*dmn+1:j1*dmn) 
+                   vvec(:dmn)=-vecf(j,(j1-1)*dmn+1:j1*dmn) 
                 end if
                 do j4=1,dmn
                    j5=dmn*node-dmn+j4-1
@@ -249,7 +270,7 @@ contains
   ! Scatter LMs to solution space
   subroutine GetVec_flambda
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j3,j4,u1,u2,workpos(dmn),workneg(dmn),row(1)
@@ -301,7 +322,7 @@ contains
   ! Extract the LM in fault's strike, dip and normal directions
   subroutine GetVec_fcoulomb
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,u1,u2,r1,r2,workpos(dmn),workneg(dmn),row(1),row_f2s(1)
@@ -352,7 +373,7 @@ contains
   ! Pass pseudo velocity to dynamic model
   subroutine Rsfv2dyn
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer:: j,j1,j2,j3,rw_loc(dmn)
@@ -384,7 +405,7 @@ contains
   ! Force to stress ratio and normal dip vector of the fault nodes
   subroutine GetVec_f2s
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,j4,j5,workpos(dmn),workneg(dmn),row_p(1)
@@ -520,7 +541,7 @@ contains
   ! Fault dip and normal vectors
   subroutine GetVec_ft
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,workpos(dmn)
@@ -552,7 +573,7 @@ contains
   ! RSF pseudo time update 
   subroutine RSF_QS_update(flt_ndf0,flt_ndf1,slip_loc)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,j4,rw_loc(dmn),nqs,ncut,slip_loc(nfnd),ntol,nslip
@@ -682,7 +703,7 @@ contains
   ! Update slip from the static model (from Vec_lambda_sta)
   subroutine GetSlip_sta 
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,slip_loc(nfnd),rw_loc(dmn)
@@ -779,7 +800,7 @@ contains
   ! Scatter from Vec_Ul to Vec_lambda_sta 
   subroutine LM_s2d
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,rw_dyn(dmn),rw_loc(dmn),rw_sta(dmn),                 &
@@ -833,7 +854,7 @@ contains
   ! Scatter two side fault pressure to dynamic LM space 
   subroutine Up_s2d
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,jn,jp,idxmp_n(nfnd_loc,2),idxmp_p(nfnd_loc,2)
@@ -875,7 +896,7 @@ contains
   ! Cap dynamic LM by frictional laws 
   subroutine CapLM_dyn
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer ::j,j1,j2,j3,rw_loc(dmn)
@@ -998,7 +1019,7 @@ contains
   ! Record latest moment fault stress from the hybrid run
   subroutine GetVec_lambda_hyb
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j,j1,j2,j3,rw_loc(dmn),nqs
@@ -1066,7 +1087,7 @@ contains
   ! Determine if the dynamic slip is stabilized
   subroutine GetSlip_dyn
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,i,nc,nr,rw_loc(dmn),slip_loc(nfnd),slip_sum_loc(nfnd)
@@ -1123,7 +1144,7 @@ contains
     call MPI_AllReduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
        MPI_Comm_World,ierr)
     ! Identify aseismic slip, nc=10 for SCEC10/14 (slow weakening)
-    nc=10; nr=15
+    nc=5; nr=15
     if (ih>nc+rsf*nr .and. sum((slip0-slip_sum)*(slip0-slip_sum))==0) then 
        slip=0
        crp=.true.
@@ -1141,7 +1162,7 @@ contains
   ! Get fault QS state 
   subroutine GetVec_flt_qs
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: l1,l2,j,j1,r1,r2,row_l(1),row_f2s(1),row_p(1) 
@@ -1201,7 +1222,7 @@ contains
   ! Add fault slip from dynamic model to static model as constraint functions
   subroutine FaultSlip
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,rw_loc(dmn),rw_sta(dmn)
@@ -1265,7 +1286,7 @@ contains
   ! Apply nodal force
   subroutine ApplyNodalForce(node,vvec)
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: node,i,j
@@ -1299,7 +1320,7 @@ contains
   ! Form RHS
   subroutine FormRHS
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: i,j
@@ -1462,37 +1483,51 @@ contains
   ! Scatter stress to vertices (normal: SS, shear: SH)
   subroutine GetVec_Stress
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petscdef.h"
 #include "petsc.h"
 #endif
     integer:: i,j,indx(eldof),row(dmn)
-    real(8):: sigma(cdmn)
+    real(8):: sigma(cdmn),stvec(cdmn),cst(dmn),ecoords(npel,dmn),detj
+    Vec :: Vec_Cst
+    call VecDuplicate(Vec_SS,Vec_Cst,ierr)
+    call VecZeroEntries(Vec_Cst,ierr)
     do i=1,nels
        enodes=nodes(i,:)
        call FormElIndx(enodes,indx)
        indx=indxmap_u(indx,2)
-       sigma=sum(stress(i,:,:),dim=1)
+       ecoords=coords(enodes,:)
+       stvec=f0; cst=f0
        do j=1,nip
+          sigma=stress(i,j,:)
+          call FormdetJ(ipoint(j,:),ecoords,detj)
+          stvec=stvec+sigma*weight(j)*detj
+          cst=cst+weight(j)*detj
+       end do
+       do j=1,npel
           select case(dmn)
           case(2)
              row=(/indx((j-1)*dmn+1),indx((j-1)*dmn+2)/)
-             sigma(:)=stress(i,j,:)
-             call VecSetValues(Vec_SS,dmn,row,sigma(1:dmn),Insert_Values,ierr)
-             call VecSetValues(Vec_SH,dmn,row,(/sigma(dmn+1:cdmn),             &
-                sigma(dmn+1:cdmn)/),Insert_Values,ierr)
+             call VecSetValues(Vec_SS,dmn,row,stvec(1:dmn),Add_Values,ierr)
+             call VecSetValues(Vec_SH,dmn,row,(/stvec(dmn+1:cdmn),             &
+                stvec(dmn+1:cdmn)/),Add_Values,ierr)
           case(3)
              row=(/indx((j-1)*dmn+1),indx((j-1)*dmn+2),indx((j-1)*dmn+3)/)
-             sigma(:)=stress(i,j,:)
-             call VecSetValues(Vec_SS,dmn,row,sigma(1:dmn),Insert_Values,ierr)
-             call VecSetValues(Vec_SH,dmn,row,sigma(dmn+1:cdmn),Insert_Values, &
-                ierr)
+             call VecSetValues(Vec_SS,dmn,row,stvec(1:dmn),Add_Values,ierr)
+             call VecSetValues(Vec_SH,dmn,row,stvec(dmn+1:cdmn),Add_Values,ierr)
           end select
+          call VecSetValues(Vec_Cst,dmn,row,cst,Add_Values,ierr)
        end do
     end do
     call VecAssemblyBegin(Vec_SS,ierr)
     call VecAssemblyEnd(Vec_SS,ierr)
     call VecAssemblyBegin(Vec_SH,ierr)
     call VecAssemblyEnd(Vec_SH,ierr)
+    call VecAssemblyBegin(Vec_Cst,ierr)
+    call VecAssemblyEnd(Vec_Cst,ierr)
+    call VecPointwiseDivide(Vec_SS,Vec_SS,Vec_Cst,ierr)
+    call VecPointwiseDivide(Vec_SH,Vec_SH,Vec_Cst,ierr)
+    call VecDestroy(Vec_Cst,ierr)
   end subroutine GetVec_Stress
 
   ! Form local Hs
@@ -1507,7 +1542,8 @@ contains
     E=mat(id(el),1); nu=mat(id(el),2)
     call FormElHs(ecoords,uu(indxp),E,nu,scale,Hs)
     do j=1,npel
-       if (bc(nodes(el,j),dmn+1)==0) Hs(j)=f0
+       ! Fixed or synced to FV 
+       if (bc(nodes(el,j),dmn+1)==0 .or. bc(nodes(el,j),dmn+1)==2) Hs(j)=f0
     end do
   end subroutine FormLocalHs
 
@@ -1530,9 +1566,9 @@ contains
   ! Observation/FD nodal base 
   subroutine GetObsNd(strng)
     implicit none
-    character(2) :: strng
-    integer :: typ,nloop,ob,el
-    integer,allocatable :: nd_full(:,:),pick(:)
+    character(2) :: strng 
+    integer :: neval,ob,el
+    integer,allocatable :: nd_full(:,:),gpl2g(:),pick(:)
     real(8) :: xmin,xmax,ymin,ymax,zmin,zmax,xmind,xmaxd,ymind,ymaxd,zmind,    &
        zmaxd,dd,du,dl,dr,df,db,d,eta,nu,psi,xob(dmn),N(npel),c,vec12(dmn),     &
        vec13(dmn),vec14(dmn),vec23(dmn),vec24(dmn),vec34(dmn),vec1o(dmn),      &
@@ -1543,22 +1579,16 @@ contains
     c=0.125d0
 
     ! Type of the evaluation Obs or FD
-    if (strng=="ob") then
-       typ=0
-       nloop=nobs
-       allocate(pick(nobs))
-    elseif (strng=="fd") then 
-       typ=1
-       nloop=ngp
-       allocate(pick(nloop))
-    end if
+    if (strng=="ob") neval=nobs
+    if (strng=="fd") neval=ngp
+    allocate(pick(neval))
     pick=0
 
     select case(eltype) 
-    case("tri"); allocate(nd_full(nloop,3),N_full(nloop,3))
-    case("qua"); allocate(nd_full(nloop,4),N_full(nloop,4))
-    case("tet"); allocate(nd_full(nloop,4),N_full(nloop,4))
-    case("hex"); allocate(nd_full(nloop,8),N_full(nloop,8))
+    case("tri"); allocate(nd_full(neval,3),N_full(neval,3))
+    case("qua"); allocate(nd_full(neval,4),N_full(neval,4))
+    case("tet"); allocate(nd_full(neval,4),N_full(neval,4))
+    case("hex"); allocate(nd_full(neval,8),N_full(neval,8))
     end select
     xmind=minval(coords(:,1)); xmaxd=maxval(coords(:,1))
     ymind=minval(coords(:,2)); ymaxd=maxval(coords(:,2))
@@ -1566,11 +1596,10 @@ contains
        zmind=minval(coords(:,3)); zmaxd=maxval(coords(:,3))
     end if
 
-    do ob=1,nloop ! Observation loop
-       p_in_dom=.false.
-       if (typ==0) then
+    do ob=1,neval ! Observation loop
+       if (strng=='ob') then
           xob=ocoord(ob,:)*km2m
-       elseif (typ==1) then
+       elseif (strng=='fd') then
           xob=xgp(ob,:)
        end if
        p_in_dom=(xob(1)>=xmind .and. xob(1)<=xmaxd .and. xob(2)>=ymind .and.   &
@@ -1701,7 +1730,7 @@ contains
           end do ! Element loop
        end if ! Point probably in domain
     end do ! Observation loop
-    if (typ==0) then
+    if (strng=='ob') then
        nobs_loc=size(pack(pick,pick/=0))
        allocate(ol2g(nobs_loc),ocoord_loc(nobs_loc,dmn))
        select case(eltype) 
@@ -1714,7 +1743,7 @@ contains
        ocoord_loc=ocoord(ol2g,:)
        onlst=nd_full(ol2g,:)
        oshape=N_full(ol2g,:)
-    elseif (typ==1) then
+    elseif (strng=='fd') then
        ngp_loc=size(pack(pick,pick/=0))
        allocate(gpl2g(ngp_loc),idgp_loc(ngp_loc,dmn))
        select case(eltype) 
@@ -1753,17 +1782,16 @@ contains
   ! Apply body force
   subroutine ApplyGravity
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
-    real(8) :: dns,gip,gsca,gvec(npel*dmn),ecoords(npel,dmn),detj
-    integer :: el,i,j,indx((dmn+p)*npel),row(dmn*npel)
+    real(8) :: dns,gip,gsca,gvec(eldof),ecoords(npel,dmn),detj
+    integer :: el,i,indx(eldof+eldofp),row(eldof)
     do el=1,nels
        enodes=nodes(el,:)
        ecoords=coords(enodes,:)
-       call FormElIndx(enodes,indx)
-       row=indx(1:dmn*npel)
-       row=indxmap(row,2)
+       call FormLocalIndx(enodes,indx)
+       row=indxmap(indx(:eldof),2)
        dns=mat(id(el),5)
        gsca=dns*gravity/dble(npel)
        gip=f0; gvec=f0
@@ -1773,8 +1801,7 @@ contains
        end do
        ! Assume last dim aligned with gravity
        do i=1,npel
-          j=i*dmn
-          if (bc(nodes(el,i),dmn)/=0) gvec(j)=-gip
+          if (bc(nodes(el,i),dmn)/=0) gvec(i*dmn)=-gip
        end do
        call VecSetValues(Vec_F,dmn*npel,row,gvec,Add_Values,ierr)
     end do
@@ -1785,17 +1812,16 @@ contains
   ! Apply fluid body source
   subroutine ApplySource
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
-    real(8) :: sdns,sip,ssca,svec((dmn+1)*npel),ecoords(npel,dmn),detj
-    integer :: el,i,j,indx((dmn+1)*npel),row((dmn+1)*npel)
+    real(8) :: sdns,sip,ssca,svec(eldofp),ecoords(npel,dmn),detj
+    integer :: el,i,indx(eldof+eldofp),row(eldofp)
     do el=1,nels
        enodes=nodes(el,:)
        ecoords=coords(enodes,:)
        call FormElIndxp(enodes,indx)
-       row=indx(1:(dmn+1)*npel)
-       row=indxmap(row,2)
+       row=indxmap(indx(eldof+1:),2)
        sdns=mat(id(el),10)
        ssca=sdns/dble(npel)
        sip=f0; svec=f0
@@ -1804,10 +1830,9 @@ contains
           sip=sip+ssca*weight(i)*detj
        end do
        do i=1,npel
-          j=i*(dmn+1)
-          if (bc(nodes(el,i),dmn+1)/=0) svec(j)=sip*scale
+          if (bc(nodes(el,i),dmn+1)/=0) svec(i)=sip
        end do
-       call VecSetValues(Vec_F,(dmn+1)*npel,row,svec,Add_Values,ierr)
+       call VecSetValues(Vec_F,npel,row,svec*scale,Add_Values,ierr)
     end do
     call VecAssemblyBegin(Vec_F,ierr)
     call VecAssemblyEnd(Vec_F,ierr)
@@ -1891,6 +1916,33 @@ contains
        end if
     end do
   end subroutine FixBCinLocalK
+
+  ! Fixed pressure at local [k]
+  subroutine FixFVLocalK(el,k)
+    implicit none
+    integer :: el,j,j2
+    real(8) :: k(:,:),tmp
+    do j=1,npel
+       j2=dmn*npel+j
+       tmp=k(j2,j2)
+       k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
+       k(j2,j2)=tmp
+    end do
+  end subroutine FixFVLocalK
+ 
+  subroutine FixFVLocalKBD(el,k) ! Only for boundary condition
+    implicit none
+    integer :: el,j,j2
+    real(8) :: k(:,:),tmp
+    do j=1,npel
+       if (bc(nodes(el,j),dmn+1)==2) then
+          j2=dmn*npel+j
+          tmp=k(j2,j2)
+          k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
+          k(j2,j2)=tmp
+       end if
+    end do
+  end subroutine FixFVLocalKBD
 
   ! Print message
   subroutine PrintMsg(msg)
@@ -2515,7 +2567,7 @@ contains
   ! Write temporal fault slip (and theta for rate state friction) 
   subroutine WriteOutput_slip
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     character(256) :: name,name0,name1

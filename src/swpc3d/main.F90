@@ -117,7 +117,7 @@ program SWPC_3D
     call medium__setup( io_prm )
 
      ! FE vmodel overwrite
-     call vmodel__fe
+     if (have_rs) call vmodel__fe
      ! wait until deallocation by medium__setup
      call mpi_barrier( mpi_comm_world, ierr ) 
 

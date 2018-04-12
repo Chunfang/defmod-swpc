@@ -6,7 +6,7 @@ module fefd
 #include <petscversion.h>
 
   use global
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #else
 #include <petsc/finclude/petscksp.h>
@@ -53,9 +53,9 @@ contains
   ! FD domain grid blocks containing fault nodes (idgp, xgp) 
   subroutine GetFDFnd
     implicit none
-    integer :: j2,j3,xid,yid,zid,rowfd(2**dmn),iddf(nfnd*(2**dmn),dmn),        &
+    integer :: j2,j3,xid,yid,zid,rowfd(2**dmn),idgp_full(nfnd*(2**dmn),dmn),   &
        uniq(nfnd*(2**dmn))
-    real(8) :: x0,x1,y0,y1,z0,z1,xfe(nfnd*(2**dmn),dmn)
+    real(8) :: x0,x1,y0,y1,z0,z1,xgp_full(nfnd*(2**dmn),dmn)
     do j3=1,nfnd
        rowfd=(/((j3-1)*(2**dmn)+j2,j2=1,2**dmn)/)
        uniq(rowfd)=rowfd
@@ -63,48 +63,48 @@ contains
        case(2)
           xid=int( (xfnd(j3,1)*km2m-xref)/dx)+1
           yid=int(-(xfnd(j3,2)*km2m-yref)/dy)+1
-          iddf(rowfd(1),:)=(/xid  ,yid  /)
-          iddf(rowfd(2),:)=(/xid+1,yid  /)
-          iddf(rowfd(3),:)=(/xid  ,yid+1/)
-          iddf(rowfd(4),:)=(/xid+1,yid+1/)
+          idgp_full(rowfd(1),:)=(/xid  ,yid  /)
+          idgp_full(rowfd(2),:)=(/xid+1,yid  /)
+          idgp_full(rowfd(3),:)=(/xid  ,yid+1/)
+          idgp_full(rowfd(4),:)=(/xid+1,yid+1/)
           x1=dble(xid)*dx+xref; y1=-dble(yid)*dy+yref
           x0=x1-dx; y0=y1-dy
-          xfe(rowfd(1),:)=(/x0,y0/)
-          xfe(rowfd(2),:)=(/x1,y0/)
-          xfe(rowfd(3),:)=(/x0,y1/)
-          xfe(rowfd(4),:)=(/x1,y1/)
+          xgp_full(rowfd(1),:)=(/x0,y0/)
+          xgp_full(rowfd(2),:)=(/x1,y0/)
+          xgp_full(rowfd(3),:)=(/x0,y1/)
+          xgp_full(rowfd(4),:)=(/x1,y1/)
        case(3)
           xid=int( (xfnd(j3,1)*km2m-xref)/dx)+1
           yid=int( (xfnd(j3,2)*km2m-yref)/dy)+1
           zid=int(-(xfnd(j3,3)*km2m-zref)/dz)+1 ! deep positive in swpc
           ! FD node index of the containing block
-          iddf(rowfd(1),:)=(/xid  ,yid  ,zid  /)
-          iddf(rowfd(2),:)=(/xid+1,yid  ,zid  /)
-          iddf(rowfd(3),:)=(/xid  ,yid+1,zid  /)
-          iddf(rowfd(4),:)=(/xid  ,yid  ,zid+1/)
-          iddf(rowfd(5),:)=(/xid+1,yid+1,zid  /)
-          iddf(rowfd(6),:)=(/xid+1,yid  ,zid+1/)
-          iddf(rowfd(7),:)=(/xid  ,yid+1,zid+1/)
-          iddf(rowfd(8),:)=(/xid+1,yid+1,zid+1/)
+          idgp_full(rowfd(1),:)=(/xid  ,yid  ,zid  /)
+          idgp_full(rowfd(2),:)=(/xid+1,yid  ,zid  /)
+          idgp_full(rowfd(3),:)=(/xid  ,yid+1,zid  /)
+          idgp_full(rowfd(4),:)=(/xid  ,yid  ,zid+1/)
+          idgp_full(rowfd(5),:)=(/xid+1,yid+1,zid  /)
+          idgp_full(rowfd(6),:)=(/xid+1,yid  ,zid+1/)
+          idgp_full(rowfd(7),:)=(/xid  ,yid+1,zid+1/)
+          idgp_full(rowfd(8),:)=(/xid+1,yid+1,zid+1/)
           x1=dble(xid)*dx+xref; y1=dble(yid)*dy+yref; z1=-dble(zid)*dz+zref
           x0=x1-dx; y0=y1-dy; z0=z1+dz ! deep positive in swpc
-          xfe(rowfd(1),:)=(/x0,y0,z0/)
-          xfe(rowfd(2),:)=(/x1,y0,z0/)
-          xfe(rowfd(3),:)=(/x0,y1,z0/)
-          xfe(rowfd(4),:)=(/x0,y0,z1/)
-          xfe(rowfd(5),:)=(/x1,y1,z0/)
-          xfe(rowfd(6),:)=(/x1,y0,z1/)
-          xfe(rowfd(7),:)=(/x0,y1,z1/)
-          xfe(rowfd(8),:)=(/x1,y1,z1/)
+          xgp_full(rowfd(1),:)=(/x0,y0,z0/)
+          xgp_full(rowfd(2),:)=(/x1,y0,z0/)
+          xgp_full(rowfd(3),:)=(/x0,y1,z0/)
+          xgp_full(rowfd(4),:)=(/x0,y0,z1/)
+          xgp_full(rowfd(5),:)=(/x1,y1,z0/)
+          xgp_full(rowfd(6),:)=(/x1,y0,z1/)
+          xgp_full(rowfd(7),:)=(/x0,y1,z1/)
+          xgp_full(rowfd(8),:)=(/x1,y1,z1/)
        end select
        ! Create a unique index set
-       call GetUniq(iddf(:rowfd(2**dmn),:),rowfd(2**dmn),uniq(rowfd(2**dmn)-2**&
-          dmn+1:rowfd(2**dmn)))
-    end do ! Local fault nodes
+       call GetUniq(idgp_full(:rowfd(2**dmn),:),rowfd(2**dmn),                 &
+          uniq(rowfd(2**dmn)-2**dmn+1:rowfd(2**dmn)))
+    end do ! Fault nodes
     ngp=size(pack(uniq,uniq/=0))
     allocate(idgp(ngp,dmn),xgp(ngp,dmn))
-    idgp=iddf(pack(uniq,uniq/=0),:)
-    xgp=xfe(pack(uniq,uniq/=0),:)
+    idgp=idgp_full(pack(uniq,uniq/=0),:)
+    xgp=xgp_full(pack(uniq,uniq/=0),:)
   end subroutine GetFDFnd
 
   ! Find if the idset content is unique
@@ -125,11 +125,8 @@ contains
   ! Extract FD grid velocity, only for dynamic
   subroutine GetVec_fd
     implicit none
-    integer :: igp,i,j,ind(npel)
-    integer,allocatable :: row(:)
-    real(8) :: vecshp(npel,1)
-    real(8),allocatable :: vectmp(:,:),mattmp(:,:)
-    allocate(row(dmn*npel),vectmp(dmn,1),mattmp(dmn,npel))
+    integer :: igp,i,j,ind(npel),row(dmn*npel)
+    real(8) :: vecshp(npel,1),vectmp(dmn,1),mattmp(dmn,npel)
     do igp=1,ngp_loc
        ind=gpnlst(igp,:)
        do i=1,npel
@@ -145,10 +142,10 @@ contains
   ! FE to FD MPI rank match (depending on FD partitioning) 
   subroutine NndFE2FD 
     implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
-    integer :: rankfd,rankxy,igp,i,j,k,hit(ngp_loc),buf(nprcs*nprc_fd),        &
+    integer :: rankfd,rankxy,igp,i,j,k,hit,buf(nprcs*nprc_fd),                 &
        nnd_fe2fd(nprcs,nprc_fd),nnd_loc(nprc_fd)
     character(256) :: name,name0,name1
     ! Find index size for local FD ranks
@@ -158,9 +155,9 @@ contains
           i=idgp_loc(igp,1) 
           j=idgp_loc(igp,2)
           rankxy=((j-1)/nyp)*nprc_x+(i-1)/nxp
-          if (rankxy==rankfd) hit(igp)=1
+          if (rankxy==rankfd) hit=hit+1
        end do
-       nnd_loc(rankfd+1)=sum(hit)
+       nnd_loc(rankfd+1)=hit
     end do
     call MPI_Gather(nnd_loc,nprc_fd,MPI_Integer,buf,nprc_fd,MPI_Integer,       &
        nprcs-1,MPI_Comm_World,ierr)
@@ -181,7 +178,7 @@ contains
   ! Mat type from FE to FD (matFD(idx0,idx1,idy0,idy1,idz0,idz1,idmat))
   subroutine MatFE2FD
      implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
      integer :: k,el,matFD(nels,dmn*2+1),hasFD(nprc_fd),ixmin,iymin,izmin,     &

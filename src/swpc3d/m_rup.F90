@@ -171,7 +171,7 @@ contains
     close(251)
   end subroutine RupSrc
 
-  ! add rupture source
+  ! Add rupture source
   subroutine rup__setSrc(it)
     implicit none
     integer :: it,i,i_rup,ii,jj,kk
@@ -185,7 +185,7 @@ contains
         ii=idx_src(i,1)
         jj=idx_src(i,2)
         kk=idx_src(i,3)
-        ! linear interpolate the source velocity
+        ! Linearly interpolate the source velocity
         vx(kk,ii,jj)=((1-w)*v_src(i,i_rup,1)+w*v_src(i,i_rup+1,1))
         vy(kk,ii,jj)=((1-w)*v_src(i,i_rup,2)+w*v_src(i,i_rup+1,2))
         vz(kk,ii,jj)=((1-w)*v_src(i,i_rup,3)+w*v_src(i,i_rup+1,3))
@@ -195,7 +195,7 @@ contains
         ii=idx_src(i,1)
         jj=idx_src(i,2)
         kk=idx_src(i,3)
-        ! Hard source zero velocity 
+        ! Zero velocity (hard source) to prevent back slip
         vx(kk,ii,jj)=0.d0
         vy(kk,ii,jj)=0.d0
         vz(kk,ii,jj)=0.d0

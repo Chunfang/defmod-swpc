@@ -113,13 +113,67 @@ contains
     end if
   end subroutine FormElKp
 
-  ! Rescale element [Kp] for new dt
-  subroutine RscElKp(ecoords,estress,E,nu,visc,expn,H,theta,scale,dt,   &
-    k,ddt,strng)
+  subroutine FormElKPerm(ecoords,estress,E,nu,visc,expn,Q,Bc,fi,Kf,theta,      &
+    scale,dt,k,strng)
     implicit none
-    real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,H,  &
-       theta,scale,dt,ddt,D(cdmn,cdmn),alpha,V(cdmn,cdmn),Q(dmn,dmn),s,  &
-       dN(dmn,npel),detj,B(cdmn,eldof),N(1,npel),betad(cdmn,cdmn)
+    real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,Bc,fi,Kf,    &
+       theta,scale,dt,D(cdmn,cdmn),alpha,V(cdmn,cdmn),Q(dmn,dmn),s,m(cdmn,1),  &
+       pN,G,Kb,Ksinv,dN(dmn,npel),detj,B(cdmn,eldof),N(1,npel),                &
+       betad(cdmn,cdmn)
+    real(8),target :: k(eldof+eldofp,eldof+eldofp)
+    real(8),pointer :: kl(:,:)
+    integer :: i
+    character(2) :: strng
+    k=f0
+    call DMat(D,E,nu)
+    if (strng=="Kv") then
+       alpha=f1
+       call MatInv(D,V)
+    end if
+    s=scale
+    if (dmn==2) m(:,1)=(/f1,f1,f0/)
+    if (dmn==3) m(:,1)=(/f1,f1,f1,f0,f0,f0/)
+    pN=f1/dble(npel)
+    G=E/(f2*(f1+nu))
+    Kb=E/(f3*(f1-f2*nu))
+    Ksinv=(f1-Bc)/Kb
+    if (strng=="Kp" .or. strng=="Kv") then
+       do i=1,nip
+          call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+          call BMat(dN,B)
+          call ShapeFunc(N(1,:),ipoint(i,:))
+          kl=>k(:eldof,:eldof)
+          if (strng=="Kv") then
+             call Matbetad(betad,estress(i,:),visc,expn)
+             call MatInv(V+alpha*dt*betad,D)
+          end if
+          kl=kl+matmul(transpose(B),matmul(D,B))*weight(i)*detj
+          kl=>k(eldof+1:,eldof+1:)
+          kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*theta*dt*s*s
+          kl=kl+matmul(transpose(N-pN),N-pN)*weight(i)*detj*s*s*0.5d0/G
+          kl=kl+matmul(transpose(N),N)*((Bc-fi)*Ksinv+fi/Kf)*weight(i)*detj*s*s
+          kl=>k(:eldof,eldof+1:)
+          kl=kl+matmul(transpose(B),matmul(m,N))*Bc*weight(i)*detj*s
+          kl=>k(eldof+1:,:eldof)
+          kl=kl-transpose(matmul(transpose(B),matmul(m,N))*Bc*weight(i)*detj)*s
+       end do
+    end if
+    if (strng=="Kc") then
+       do i=1,nip
+          call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+          kl=>k(eldof+1:,eldof+1:)
+          kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*s*s
+       end do
+    end if
+  end subroutine FormElKPerm
+
+  ! Rescale element [Kp] for new dt
+  subroutine RscElKp(ecoords,estress,E,nu,visc,expn,H,theta,scale,dt, k,ddt,   &
+    strng)
+    implicit none
+    real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,H,theta,     &
+       scale,dt,ddt,D(cdmn,cdmn),alpha,V(cdmn,cdmn),Q(dmn,dmn),s,dN(dmn,npel), &
+       detj,B(cdmn,eldof),N(1,npel),betad(cdmn,cdmn)
     real(8),target :: k(eldof+eldofp,eldof+eldofp)
     real(8),pointer :: kl(:,:)
     integer :: i

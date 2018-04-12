@@ -8,7 +8,8 @@ program main
   use global
   use galpha
   use fefd 
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+  use fvfe
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petsc.h"
 #else
@@ -16,8 +17,8 @@ program main
   use petscksp
   implicit none
 #endif
-  character(256) :: input_file,viz,fd
-  logical :: l,v,w
+  character(256) :: input_file,viz,fd,fv
+  logical :: l,v,w,pbc
   integer,pointer :: null_i=>null()
   real(8),pointer :: null_r=>null()
   real(8) :: fdt
@@ -32,13 +33,16 @@ program main
   call PetscOptionsGetString(Petsc_Null_Character,'-f',input_file,l,ierr)
   call PetscOptionsGetString(Petsc_Null_Character,'-ss',viz,v,ierr)
   call PetscOptionsGetString(Petsc_Null_Character,'-fd',fd,w,ierr)
-#elif (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR==7)
+  call PetscOptionsGetString(Petsc_Null_Character,'-fv',fv,pbc,ierr)
+#elif (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR==7 && PETSC_VERSION_SUBMINOR<5)
   call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-f',      &
      input_file,l,ierr)
   call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-ss',     &
      viz,v,ierr)
   call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-fd',     &
      fd,w,ierr)
+  call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-fv',     &
+     fv,pbc,ierr)
 #else
   call PetscOptionsGetString(Petsc_Null_Options,Petsc_Null_Character,'-f',     &
      input_file,l,ierr)
@@ -46,6 +50,8 @@ program main
      viz,v,ierr)
   call PetscOptionsGetString(Petsc_Null_Options,Petsc_Null_Character,'-fd',    &
      fd,w,ierr)
+  call PetscOptionsGetString(Petsc_Null_Options,Petsc_Null_Character,'-fv',    &
+     fv,pbc,ierr)
 #endif
   if (.not. l) then
      call PrintMsg("Usage: [mpiexec -n <np>] defmod -f <input_filename>")
@@ -82,7 +88,16 @@ program main
 
   call PrintMsg("Reading input ...")
   call ReadParameters
-
+  ! Bounding box pressure (from pflotran) option
+  if (poro) then
+     fvin=0
+     if (pbc) then
+        read (fv,'(I1.0)')fvin
+        if (fvin/=0) call PrintMsg("FV model expected")
+     else
+        call PrintMsg("Use -fv 1 (or 2) to load pflotran model.")
+     end if
+  end if
   ! Set element specific constants
   call InitializeElement
   p=0; ef_eldof=eldof
@@ -166,7 +181,8 @@ program main
   j=1
   do i=1,nnds
      if (npart(i)==1) then
-        read(10,*)coords(j,:),bc(j,:); j=j+1
+        read(10,*)coords(j,:),bc(j,:)
+        j=j+1
      else
         read(10,*)val
      end if
@@ -247,6 +263,8 @@ program main
      call MatSetOption(Mat_K_dyn,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
         ierr)
   end if
+
+  kfv=.false. ! Full matrix without FV Bc
   do i=1,nels
      if (poro) then
         call FormLocalK(i,k,indx,"Kp")
@@ -461,7 +479,7 @@ program main
      n_log_dyn=0
   end if
   
-  ! FD domain grid bocks containing fault nodes, xgp, idgp(_loc), gpl2g, gpnlst, 
+  ! FD domain grid bocks containing fault nodes, xgp, idgp(_loc), gpnlst, 
   ! gpshape
   if (nceqs-nceqs_ncf>0 .and. fdout==1) then
      call PrintMsg("Locating FD grid points ...")
@@ -638,7 +656,7 @@ program main
               call FormLocalK(i,k,indx,"Kc")
               kc=k(eldof+1:,eldof+1:)
               indxp=indx(eldof+1:); indxp=indxmap(indxp,2)
-              indxp=((indxp+1)/(dmn+1))-1
+              indxp=(indxp+1)/(dmn+1)-1
               call MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,           &
                  Add_Values,ierr)
            end do
@@ -1175,16 +1193,15 @@ program main
            if (vout==1) call WriteOutput_x
            if (nobs_loc>0) call WriteOutput_obs 
            if (init==1) then
-              call PrintMsg("Pore fluid initialization...")
+              call PrintMsg("Pore fluid initialization ...")
               ! Zero initial pressure 
               call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
               call VecZeroEntries(Vec_Up,ierr)
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-              tot_uu=f0
               call VecZeroEntries(Vec_F,ierr)
               call ApplySource
               call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-              call GetVec_U; tot_uu=tot_uu+uu
+              call GetVec_U; tot_uu=uu
               call VecAXPY(Vec_Um,f1,Vec_U,ierr)
               call Rscdt(fdt) ! Scale [K] with dt = fdt*24hr (pv)
               if (vout==1) then
@@ -1195,10 +1212,35 @@ program main
                     call GetVec_flc
                     call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
                  end if
-                 ! Initial state should be analyzed to see if any initial slip 
+                 ! Should be analyzed to see if any initial slip 
                  call WriteOutput_init
               end if
            end if 
+           if (fvin/=0) then
+              call PrintMsg("Initializing FV pressure ...")
+              call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
+              call FVInit
+              kfv=.true. ! FV bc 
+              call FVReformKF(ef_eldof)
+              call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+              call GetVec_U; tot_uu=uu
+              call VecAXPY(Vec_Um,f1,Vec_U,ierr)
+              if (vout==1) then
+                 if (nceqs>0) then
+                    call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                    call VecZeroEntries(Vec_flc,ierr)
+                    call GetVec_fcoulomb
+                    call GetVec_flc
+                    call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                 end if
+                 ! Should be analyzed to see if any initial slip 
+                 call WriteOutput_init
+              end if
+              ! Remove hydrostatic pressure gradient from Vec_Um 
+              call FVReset
+              ! Single phase FV model 
+              if (fvin==1) call FVReformKPerm(f0,ef_eldof) 
+           end if
            if (nceqs-nceqs_ncf>0) then
               allocate(flt_ss(nfnd,dmn),flt_p(nfnd))
               call GetVec_flt_qs 
@@ -1340,7 +1382,8 @@ program main
            t_abs=t_abs+dt
            if (rank==0) print'(A11,I0)'," Time Step ",tstep
            ! Reform stiffness matrix, if needed
-           if (visco .and. (tstep==1 .or. maxval(mat(:,4))>f1)) then
+           if (visco .and. (tstep==1 .or. maxval(mat(:,4))>f1) .and. .not.     &
+              (poro .and. fvin==2)) then
               call PrintMsg(" Reforming [K] ...")
               call MatZeroEntries(Mat_K,ierr)
               do i=1,nels
@@ -1353,6 +1396,10 @@ program main
               if (rank==0 .and. nceqs>0) call ApplyConstraints
               call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
               call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+           end if
+           if (poro .and. fvin==2) then ! Multiphase FV model
+              call PrintMsg(" Reforming [Kp] ...")
+              call FVReformKPerm(t_abs,ef_eldof)
            end if
            ! Reform RHS
            call VecZeroEntries(Vec_F,ierr)
@@ -1389,9 +1436,11 @@ program main
               qs_flt_slip=qs_flt_slip+tot_flt_slip
               fail=.false.
            end if
-           ! Solve
            call VecAssemblyBegin(Vec_F,ierr)
            call VecAssemblyEnd(Vec_F,ierr)
+           ! Impose FV pressure
+           if (fvin/=0) call FVSyncBD(t_abs)
+           ! Solve
            call PrintMsg(" Solving ...")
            call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
            ! Reset dynamic (slip) solutions 
@@ -1416,10 +1465,8 @@ program main
               end do
               call GetVec_Stress
               call GetVec_S
-              !if (fault) then
               call GetVec_flt_qs
               if (rank==0) call WriteOutput_flt_qs
-              !end if 
            end if
            ! Extract nodal force by p
            if (poro) then
