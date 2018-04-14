@@ -19,6 +19,19 @@ To install and run this "mixed" code, see doc/INSTALL
 2. Adaptive (Quasi-)static-dynamic "hybrid" (FE) solver that covers multi-temporal scales, e.g. fault slip (fast) triggered by pore pressure changes (slow).  
 3. Finite element and finite difference coupling that covers multi-spatial scales, e.g. localized fault slip and resulting ground motions. 
 4. Generalized-alpha (implicit dynamic) solver that is unconditionally stable, i.e. does not suffer CFL restriction, while allowing fault rupture.  
+5. (Partially) synchrize FE domain pressure/permeability with a finite volume code [pflotran](https://bitbucket.org/pflotran/pflotran/wiki/Home).
+
+## Example descriptions:
+* F3D, slip on curved fault induced by increasing differential loading, 3D domain.
+* F2Dp, production fluctuation and rate-and-state friction scenarios, 2D domain.
+* F3Dp, production induced rupture on curved fault, 3D domain.
+* F3Db, minimalistic example of injection induced fault slip to demonstrate FV(pflotran)-FE(defmod)-FD(swpc) binding, 3D domain, transient and tensor valued permeability. 
+* HF3D, injection induced rupture on splay fault, 3D domain (modified from SCEC14/15).
+* FE, legacy examples including Mandel (2D/3D) benchmarks.
+* SCEC, SCEC problems number 10, 14, 15, 102 and 205, waveforms produced by both the FE and FD modules.
+* SCEC2D, SCEC 2D problems number 10, 11 and 102 to compare hybrid (implicit-explicit) models against generalized-alpha (implicit dynamic) models. 
+
+Examples F3D, F3Db, F2Dp, SCEC2D and FE can run on a desktop computer, while others shall run on a cluster. The execution commands are equivalent for both the desktop and cluster, see <model>.sh files for details.
 
 * * *
 
@@ -31,7 +44,6 @@ The authors appreciate that the users cite the following papers in any publicati
 * * *
 
 ## REFERENCES
-
 Chunfang Meng, Benchmarking Defmod, an open source FEM code for modeling episodic fault rupture, Computers & Geosciences, Volume 100, March 2017, Pages 10-26, ISSN 0098-3004, https://doi.org/10.1016/j.cageo.2016.11.014.
 
 Takuto Maeda, Shunsuke Takemura and Takashi Furumura (2017), OpenSWPC: An open-source integrated parallel simulation code for modeling seismic wave propagation in 3D heterogeneous viscoelastic media, Earth, Planets and Space, 69:102, https://doi.org/10.1186/s40623-017-0687-2. 
