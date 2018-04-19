@@ -25,7 +25,7 @@ To install and run this "mixed" code, see doc/INSTALL
 * F3D, slip on curved fault induced by increasing differential loading, 3D domain.
 * F2Dp, production fluctuation and rate-and-state friction scenarios, 2D domain.
 * F3Dp, production induced rupture on curved fault, 3D domain.
-* F3Db, minimalistic example of injection induced fault slip to demonstrate FV(pflotran)-FE(defmod)-FD(swpc) binding, 3D domain, transient and tensor valued permeability. 
+* F3Db (F3db\_usg for unstructured and shared FV/FE mesh), minimalistic example of injection induced fault slip to demonstrate FV(pflotran)-FE(defmod)-FD(swpc) binding, 3D domain, transient and tensor valued permeability.
 * HF3D, injection induced rupture on splay fault, 3D domain (modified from SCEC14/15).
 * FE, legacy examples including Mandel (2D/3D) benchmarks.
 * SCEC, SCEC problems number 10, 14, 15, 102 and 205, waveforms produced by both the FE and FD modules.
