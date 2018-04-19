@@ -1,0 +1,51 @@
+${Units('si')}
+undo off
+reset
+Set Duplicate Block Elements on
+# Block is 6 km x 6 km x 4 km
+brick x 6. y 6. z 4.
+volume 1 move x 0 y 0 z -2.
+Webcut volume 1 With Cylinder Radius 4.05 Axis 0 1 0 center -3.25 0 0.0 
+webcut volume all with plane zplane offset -1
+webcut volume all with plane zplane offset -3
+webcut volume all with plane yplane offset -1
+webcut volume all with plane yplane offset 1 
+merge all
+imprint all
+
+# mesh domain
+surface 138 size .1
+Mesh surface 138 
+Volume all size .2
+Mesh Volume all 
+unmerge surface 138
+
+# fault face
+nodeset 1 surface 150 
+nodeset 2 surface 138
+sideset 1 surface 150
+sideset 2 surface 138
+
+# Domain boundaries (east, north, botom, west, south, top)
+nodeset 3 surface 61 81 99 120 124 140 144 158 166 # East 
+nodeset 4 surface 19 31 38 46 50 54 # North 
+nodeset 5 surface 98 108 161 163 171 173 # Bottom 
+sideset 3 surface 61 81 99 120 124 140 144 158 166  
+sideset 4 surface 19 31 38 46 50 54
+sideset 5 surface 98 108 161 163 171 173
+nodeset 6 surface 69 89 111 128 136 148 156 170 174 # West
+nodeset 7 surface 21 29 40 44 48 56 # South 
+nodeset 8 surface 58 68 121 123 131 133 # Top
+sideset 6 surface 69 89 111 128 136 148 156 170 174
+sideset 7 surface 21 29 40 44 48 56
+sideset 8 surface 58 68 121 123 131 133
+
+group "mat_top" add hex in volume 1 2 7 8 13 14  
+group "mat_mid" add hex in volume 3 4 9 10 15 16  
+group "mat_bot" add hex in volume 5 6 11 12 17 18 
+block 1 group mat_top
+block 2 group mat_mid
+block 3 group mat_bot
+volume all move x 0 y 0 z -1
+export mesh "./F3D_bd.exo" dimension 3 overwrite
+quit

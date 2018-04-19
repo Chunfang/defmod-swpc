@@ -561,6 +561,7 @@ program main
      end if
   end if
   close(10)
+  if (fvin>2) call MakeEl2g
   deallocate(nmap,emap) ! End of input reading
 
   ! Initialize arrays to communicate ghost node values
@@ -1219,9 +1220,14 @@ program main
            if (fvin/=0) then
               call PrintMsg("Initializing FV pressure ...")
               call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
-              call FVInit
               kfv=.true. ! FV bc 
-              call FVReformKF(ef_eldof)
+              if (fvin<3) then
+                 call FVInit
+                 call FVReformKF(ef_eldof)
+              else
+                 call FVInitUsg
+                 call FVReformKFUsg(ef_eldof)
+              end if
               call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
               call GetVec_U; tot_uu=uu
               call VecAXPY(Vec_Um,f1,Vec_U,ierr)
@@ -1237,9 +1243,14 @@ program main
                  call WriteOutput_init
               end if
               ! Remove hydrostatic pressure gradient from Vec_Um 
-              call FVReset
+              if (fvin<3) then
+                 call FVReset
+              else 
+                 call FVResetUsg
+              end if
               ! Single phase FV model 
               if (fvin==1) call FVReformKPerm(f0,ef_eldof) 
+              if (fvin==3) call FVReformKPermUsg(f0,ef_eldof)
            end if
            if (nceqs-nceqs_ncf>0) then
               allocate(flt_ss(nfnd,dmn),flt_p(nfnd))
@@ -1397,9 +1408,10 @@ program main
               call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
               call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
            end if
-           if (poro .and. fvin==2) then ! Multiphase FV model
+           if (poro .and. (fvin==2 .or. fvin==4)) then ! Multiphase FV model
               call PrintMsg(" Reforming [Kp] ...")
-              call FVReformKPerm(t_abs,ef_eldof)
+              if (fvin==2) call FVReformKPerm(t_abs,ef_eldof)
+              if (fvin==4) call FVReformKPermUsg(t_abs,ef_eldof)
            end if
            ! Reform RHS
            call VecZeroEntries(Vec_F,ierr)
@@ -1439,7 +1451,8 @@ program main
            call VecAssemblyBegin(Vec_F,ierr)
            call VecAssemblyEnd(Vec_F,ierr)
            ! Impose FV pressure
-           if (fvin/=0) call FVSyncBD(t_abs)
+           if (fvin==1 .or. fvin==2) call FVSyncBD(t_abs)
+           if (fvin==3 .or. fvin==4) call FVSyncBDUsg(t_abs)
            ! Solve
            call PrintMsg(" Solving ...")
            call KSPSolve(Krylov,Vec_F,Vec_U,ierr)

@@ -1,0 +1,299 @@
+# Pflotran (unstructured) part of F3D_bd  
+
+SIMULATION
+  SIMULATION_TYPE SUBSURFACE
+  PROCESS_MODELS
+    SUBSURFACE_FLOW flow
+      MODE RICHARDS
+    /
+  /
+END
+
+SUBSURFACE
+
+#=========================== flow mode ========================================
+
+#=========================== solver options ===================================
+TIMESTEPPER FLOW
+  TS_ACCELERATION 8
+/
+
+NEWTON_SOLVER FLOW
+  #RTOL 1.d-4
+  #ATOL 1.d-4
+  #STOL 1.e-60
+  #DTOL 1.e4
+  #ITOL_UPDATE 1.d0
+  #NO_INFINITY_NORM
+  #:NO_PRINT_CONVERGENCE
+  #PRINT_DETAILED_CONVERGENCE
+/
+
+LINEAR_SOLVER FLOW
+  KSP_TYPE GMRES
+  #PC_TYPE NONE
+  #KSP_TYPE PREONLY
+  #PC_TYPE LU
+  #SOLVER GMRES
+/
+
+#=========================== discretization ===================================
+GRID
+  TYPE unstructured F3D_bd.h5
+  GRAVITY 0 0 0
+END
+
+#=========================== fluid properties =================================
+FLUID_PROPERTY
+  DIFFUSION_COEFFICIENT 1.d-9
+/
+
+#=========================== material properties ==============================
+MATERIAL_PROPERTY layer1
+  ID 1
+  POROSITY 0.25d0
+  TORTUOSITY 1.d0
+  SATURATION_FUNCTION default
+  PERMEABILITY
+    PERM_X 1.d-14
+    PERM_Y 1.d-14
+    PERM_Z 3.3d-15
+  /
+/
+
+MATERIAL_PROPERTY layer2
+  ID 2
+  POROSITY 0.25d0
+  TORTUOSITY 1.d0
+  SATURATION_FUNCTION default
+  PERMEABILITY
+    PERM_X 1.d-14
+    PERM_Y 1.d-14
+    PERM_Z 3.3d-15
+  /
+/
+
+MATERIAL_PROPERTY layer3
+  ID 3 
+  POROSITY 0.25d0
+  TORTUOSITY 1.d0
+  SATURATION_FUNCTION default
+  PERMEABILITY
+    PERM_X 1.d-14
+    PERM_Y 1.d-14
+    PERM_Z 3.3d-15
+  /
+/
+
+#=========================== saturation functions =============================
+#SATURATION_FUNCTION default
+#/
+CHARACTERISTIC_CURVES default
+  SATURATION_FUNCTION VAN_GENUCHTEN
+    M 0.286d0
+    ALPHA  1.9401d-4
+    LIQUID_RESIDUAL_SATURATION 0.115
+  /
+  PERMEABILITY_FUNCTION MUALEM_VG_LIQ
+    M 0.286d0
+    LIQUID_RESIDUAL_SATURATION 0.115
+  /
+END
+
+#=========================== output options ===================================
+OUTPUT
+  #MASS_BALANCE
+  #TIMES y 0.25d0 0.5d0 0.75d0
+  #FORMAT TECPLOT BLOCK
+  VARIABLES
+    LIQUID_PRESSURE
+    PERMEABILITY
+  /
+  FORMAT HDF5
+  FORMAT VTK
+  #VELOCITY_AT_CENTER
+  PERIODIC TIME 1 d 
+/
+
+#=========================== times ============================================
+TIME
+  FINAL_TIME 36 d 
+  INITIAL_TIMESTEP_SIZE 1.d-2 d 
+  MAXIMUM_TIMESTEP_SIZE 5.d-1 d
+/
+
+#=========================== regions ==========================================
+REGION All
+  FILE F3D_bd.h5 
+END
+
+REGION top_layer
+  FILE F3D_bd.h5
+END
+
+REGION mid_layer
+  FILE F3D_bd.h5
+END
+
+REGION bottom_layer
+  FILE F3D_bd.h5
+END
+
+REGION Bottom_sidesets
+   FILE F3D_bd.h5 
+END
+
+REGION East_sidesets
+  FILE F3D_bd.h5
+END
+
+REGION West_sidesets
+  FILE F3D_bd.h5   
+END
+
+REGION North_sidesets
+  FILE F3D_bd.h5
+END
+
+REGION South_sidesets 
+  FILE F3D_bd.h5
+END
+
+REGION Top_sidesets
+  FILE F3D_bd.h5
+END
+
+
+REGION well1
+  COORDINATES
+    -5.d1 0.d0 -3.d3 
+    -5.d1 0.d0 -3.d3
+  /
+END
+
+REGION well2
+  COORDINATES
+    5.d2 0.d0 -3.d3 
+    5.d2 0.d0 -3.d3
+  /
+END
+
+#=========================== flow conditions ==================================
+FLOW_CONDITION initial
+  TYPE
+    PRESSURE Dirichlet !hydrostatic
+  /
+  PRESSURE 1956741.84 ! 200 meter piezometric head (200*997.32*9.81)
+  IPHASE 1
+/
+
+FLOW_CONDITION noflow 
+  TYPE
+    FLUX NEUMANN
+  /
+  FLUX 0 
+  IPHASE 1
+/
+
+FLOW_CONDITION source1
+  TYPE
+    RATE volumetric_rate
+  /
+  #RATE 2.77777778d-3  ! 10 m^3/hr
+  SYNC_TIMESTEP_WITH_UPDATE
+  RATE LIST
+    TIME_UNITS day
+    DATA_UNITS m^3/day
+    0.     0.
+    1.     2.D4 
+    6.     0.
+  /
+  IPHASE 1
+/
+
+FLOW_CONDITION source2
+  TYPE
+    RATE volumetric_rate
+  /
+  #RATE 2.77777778d-3  ! 10 m^3/hr
+  SYNC_TIMESTEP_WITH_UPDATE
+  RATE LIST
+    TIME_UNITS day
+    DATA_UNITS m^3/day
+    0.     0.
+    2.     1.D4 
+    8.     0.
+  /
+  IPHASE 1
+/
+
+#=========================== condition couplers ===============================
+# initial condition
+INITIAL_CONDITION
+  FLOW_CONDITION initial
+  REGION All
+END
+
+# west boundary condition
+BOUNDARY_CONDITION west
+  FLOW_CONDITION noflow !initial
+  REGION West_sidesets 
+END
+
+# east boundary condition
+BOUNDARY_CONDITION east
+  FLOW_CONDITION noflow !initial
+  REGION East_sidesets 
+END
+
+# north boundary condition
+BOUNDARY_CONDITION north
+  FLOW_CONDITION noflow !initial
+  REGION North_sidesets 
+END
+
+# south boundary condition
+BOUNDARY_CONDITION south
+  FLOW_CONDITION noflow !initial
+  REGION South_sidesets 
+END
+
+# top boundary condition
+BOUNDARY_CONDITION top
+  FLOW_CONDITION noflow !initial
+  REGION Top_sidesets 
+END
+
+# bottom boundary condition
+BOUNDARY_CONDITION bottom
+  FLOW_CONDITION noflow !initial
+  REGION Bottom_sidesets
+END
+
+# well source/sink
+SOURCE_SINK well1
+  FLOW_CONDITION source1
+  REGION well1
+END
+
+#SOURCE_SINK well2
+#  FLOW_CONDITION source2
+#  REGION well2
+#END
+
+#=========================== stratigraphy couplers ============================
+STRATA
+  REGION top_layer
+  MATERIAL layer1
+END
+
+STRATA
+  REGION mid_layer
+  MATERIAL layer2
+END
+
+STRATA
+  REGION bottom_layer
+  MATERIAL layer3
+END
+END_SUBSURFACE

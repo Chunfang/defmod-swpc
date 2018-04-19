@@ -19,53 +19,50 @@ module fvfe
   save
 
   !! Public routines
+  public :: MakeEl2g
   public :: FVInit
   public :: FVInitUsg
   public :: FVReformKF
+  public :: FVReformKFUsg
   public :: FVReformKPerm
+  public :: FVReformKPermUsg
   public :: FVReset
+  public :: FVResetUsg
   public :: FVSyncBD
+  public :: FVSyncBDUsg
  
   !! Local vars
   character(256) :: nameh5
+  integer :: stp0
   integer(hsize_t) :: off_dom(3),dim_dom(3) ! H5 offset and dim
-  real(8) :: xmin,ymin,zmin,dx,dy,dz,r_perm(3),p_top ! Local FV/FE domain vars 
-  integer, allocatable :: bdnd(:) ! Boundary nodes
+  real(8) :: xmin,ymin,zmin,dx,dy,dz,r_perm(3),p_top,dt_fv ! Local FV/FE vars 
+  integer, allocatable :: el2g(:),bdnd(:) ! Boundary nodes
   !! Pressure and time
   real(8), allocatable :: p_fv0(:),p_fv_sta(:),p_fv_bd(:,:),t_fv(:),t_fe(:) 
 
 contains
 
-  subroutine FVInitUsg
-    implicit none
-    character(256) :: name,name0,name1
-    integer :: it,nt_fv
-    real(8) :: t0_fv,dt_fv
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A)')trim(name0),trim(name1),"_fvfe.cfg"
-    open(153,file=adjustl(name),status='old')
-    read(153,*)nt_fv,t0_fv,dt_fv,p_top
-    read(153,*)r_perm ! Inverse viscosity with scales
-    close(153)
-    do it=1,nt_fv
-       t_fv(it)=(t0_fv+dble(it-1)*dt_fv)
+  ! Local to original element map
+  subroutine MakeEl2g
+    integer :: el 
+    allocate(el2g(nels))
+    do el=1,size(emap,1)  
+       if(emap(el)/=0) el2g(emap(el))=el 
     end do
-  end subroutine FVInitUsg
+  end subroutine MakeEl2g
 
   subroutine FVInit ! Read <model>_fvfe.cfg and <model>.h5 files
     implicit none
     character(256) :: name,name0,name1,namegrp,namedat
     integer :: i,iv,nbd,it,nt_fv,nx,ny,nz,idfile,err,idgrp,iddat,spc_dat,      &
-       spc_dom,lnnds
-    integer(hsize_t) :: ix,iy,iz
-    real(8) :: t0_fv,dt_fv,xref,yref,zref,xmax,ymax,zmax
+       spc_dom,lnnds,ix,iy,iz
+    real(8) :: xref,yref,zref,xmax,ymax,zmax
     real(8),allocatable :: p_dom(:,:,:)
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,A,A)')trim(name0),trim(name1),"_fvfe.cfg"
     open(153,file=adjustl(name),status='old')
-    read(153,*)nt_fv,t0_fv,dt_fv,p_top
+    read(153,*)nt_fv,stp0,dt_fv,p_top
     read(153,*)nx,ny,nz
     read(153,*)dx,dy,dz
     read(153,*)xref,yref,zref
@@ -115,7 +112,7 @@ contains
     end do
     ! Sampling pressure from FV
     do it=1,nt_fv
-       t_fv(it)=(t0_fv+dble(it-1)*dt_fv)
+       t_fv(it)=dble(stp0+it-1)*dt_fv
        write(namegrp,'(AES12.5E2A)')"/Time: ",t_fv(it)," d" 
        write(namedat,'(A,A)')trim(namegrp),"/Liquid_Pressure [Pa]"
        call h5gopen_f(idfile,trim(namegrp),idgrp,err)
@@ -146,6 +143,82 @@ contains
     p_fv_bd(2:nt_fv,:)=p_fv_bd(2:nt_fv,:)-p_fv_bd(1:nt_fv-1,:)
     p_fv_bd(1,:)=f0
   end subroutine FVInit
+
+  subroutine FVInitUsg
+    implicit none
+    character(256) :: name,name0,name1,namegrp,namedat
+    integer :: i,j,row,nt_fv,idfile,idgrp,iddat,err,spc_dat,spc_cell,nbd
+    integer(hsize_t) :: off(1),dim_cell(1)
+    real(8) :: p_cell,cp,detj
+    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
+    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
+    write(name,'(A,A,A)')trim(name0),trim(name1),"_fvfe.cfg"
+    open(153,file=adjustl(name),status='old')
+    read(153,*)nt_fv,stp0,dt_fv,p_top
+    read(153,*)r_perm ! Inverse viscosity with scales
+    close(153)
+    write(nameh5,'(A,A,A)')trim(name0),trim(name1),"_usg.h5"
+    allocate(t_fv(nt_fv),t_fe(nt_fv))
+    do i=1,nt_fv
+       t_fv(i)=dble(stp0+i-1)*dt_fv
+    end do
+    t_fe=t_fv*24.d0*3600.d0 ! Day to sec
+    ! Zero based incremental
+    t_fe=t_fe-t_fe(1)
+    ! Form hydrostatic pressure
+    call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecDuplicate(Vec_Up,Vec_Up_sta,ierr)
+    call VecDuplicate(Vec_Up,Vec_Cp0,ierr)
+    call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecZeroEntries(Vec_Up_sta,ierr)
+    call VecZeroEntries(Vec_Cp0,ierr)
+    call h5open_f(err)
+    call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
+    write(namegrp,'(AI4AES12.5E2A)')"/",0," Time ",f0," d"
+    write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
+    call h5gopen_f(idfile,trim(namegrp),idgrp,err)
+    call h5dopen_f(idfile,trim(namedat),iddat,err)
+    call h5dget_space_f(iddat,spc_dat,err)
+    dim_cell=1
+    call h5screate_simple_f(1,dim_cell,spc_cell,err)
+    do i=1,nels
+       off=el2g(i)-1
+       call h5sselect_hyperslab_f(spc_dat,H5S_SELECT_SET_F,off,dim_cell,err)
+       call h5dread_f(iddat,h5t_native_double,p_cell,dim_cell,err,spc_cell,    &
+          spc_dat)
+       ecoords=coords(nodes(i,:),:)
+       cp=f0
+       do j=1,nip
+          call FormdetJ(ipoint(j,:),ecoords,detj)
+          cp=cp+weight(j)*detj
+       end do
+       do j=1,npel
+          row=nl2g(nodes(i,j),2)-1
+          call VecSetValue(Vec_Cp0,row,cp,Add_Values,ierr)
+          call VecSetValue(Vec_Up_sta,row,-cp*(p_cell-p_top)/scale,Add_Values, &
+             ierr)
+       end do
+    end do
+    call h5dclose_f(iddat,err)
+    call h5gclose_f(idgrp,err)
+    call h5fclose_f(idfile,err)
+    call h5close_f(err) 
+    call VecAssemblyBegin(Vec_Cp0,ierr)
+    call VecAssemblyEnd(Vec_Cp0,ierr)
+    call VecAssemblyBegin(Vec_Up_sta,ierr)
+    call VecAssemblyEnd(Vec_Up_sta,ierr)
+    ! Take cell-wise average
+    call VecPointwiseDivide(Vec_Up_sta,Vec_Up_sta,Vec_Cp0,ierr)
+    nbd=size(pack(bc(:,dmn+1),bc(:,dmn+1)==2))
+    allocate(bdnd(nbd))
+    j=1
+    do i=1,size(coords,1)
+       if (bc(i,dmn+1)==2) then
+          bdnd(j)=i 
+          j=j+1
+       end if
+    end do
+  end subroutine FVInitUsg
 
   ! Reform [Kp] and [F] to impose FE domain pressure
   subroutine FVReformKF(ef_eldof) 
@@ -182,8 +255,72 @@ contains
     ! Rescale RHS by pressure coefficient
     call VecPointwiseMult(Vec_up,Vec_Up,Vec_Cp,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    deallocate(p_fv0)
   end subroutine FVReformKF
-  
+
+  subroutine FVReformKFUsg(ef_eldof) 
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h" 
+#endif
+    character(256) :: namegrp,namedat
+    integer :: i,j,j2,row,ef_eldof,idfile,idgrp,iddat,spc_dat,spc_cell,err
+    integer(hsize_t) :: off(1),dim_cell(1)
+    real(8) :: p_cell,cp,detj
+    call MatZeroEntries(Mat_K,ierr)
+    call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecDuplicate(Vec_Up,Vec_Cp,ierr)
+    call VecZeroEntries(Vec_Cp,ierr)
+    ! Initial pressure
+    call h5open_f(err)
+    call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
+    write(namegrp,'(AI4AES12.5E2A)')"/",stp0," Time ",t_fv(1)," d"
+    write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
+    call h5gopen_f(idfile,trim(namegrp),idgrp,err)
+    call h5dopen_f(idfile,trim(namedat),iddat,err)
+    call h5dget_space_f(iddat,spc_dat,err)
+    dim_cell=1
+    call h5screate_simple_f(1,dim_cell,spc_cell,err)
+    do i=1,nels 
+       off=el2g(i)-1
+       call h5sselect_hyperslab_f(spc_dat,H5S_SELECT_SET_F,off,dim_cell,err)
+       call h5dread_f(iddat,h5t_native_double,p_cell,dim_cell,err,spc_cell,    &
+          spc_dat)
+       call FormLocalK(i,k,indx,"Kp") 
+       indx=indxmap(indx,2)
+       call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
+       ecoords=coords(nodes(i,:),:)
+       cp=f0
+       do j=1,nip
+          call FormdetJ(ipoint(j,:),ecoords,detj)
+          cp=cp+weight(j)*detj
+       end do
+       do j=1,npel
+          j2=dmn*npel+j      
+          row=nl2g(nodes(i,j),2)-1
+          call VecSetValue(Vec_Cp,row,k(j2,j2),Add_Values,ierr)
+          call VecSetValue(Vec_Up,row,cp*p_cell/scale,Add_Values,ierr)
+       end do
+    end do
+    call h5dclose_f(iddat,err) 
+    call h5gclose_f(idgrp,err)
+    call h5fclose_f(idfile,err)
+    call h5close_f(err)
+    ! Account for constraint eqn's
+    if (rank==0 .and. nceqs>0) call ApplyConstraints
+    call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+    call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+    call VecAssemblyBegin(Vec_Cp,ierr)
+    call VecAssemblyEnd(Vec_Cp,ierr)
+    call VecAssemblyBegin(Vec_Up,ierr)
+    call VecAssemblyEnd(Vec_Up,ierr)
+    ! Average by weight
+    call VecPointwiseDivide(Vec_up,Vec_Up,Vec_Cp0,ierr)
+    ! Rescale RHS by pressure coefficient
+    call VecPointwiseMult(Vec_up,Vec_Up,Vec_Cp,ierr)
+    call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+  end subroutine FVReformKFUsg 
+
   subroutine FVReformKPerm(t_sync,ef_eldof)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h" 
@@ -244,7 +381,7 @@ contains
        do j=1,npel
           j2=dmn*npel+j      
           row=nl2g(nodes(i,j),2)-1
-          if (bc(nodes(i,j),dmn+1)==2) call VecSetValue(Vec_Cp,row,k(j2,j2),  &
+          if (bc(nodes(i,j),dmn+1)==2) call VecSetValue(Vec_Cp,row,k(j2,j2),   &
              Add_Values,ierr)
        end do
        ! Update [Kc]
@@ -269,6 +406,93 @@ contains
     call VecAssemblyEnd(Vec_Cp,ierr)
   end subroutine FVReformKPerm
 
+  subroutine FVReformKPermUsg(t_sync,ef_eldof)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h" 
+#endif
+    implicit none
+    character(256) :: namegrp,namedat
+    integer :: it,i,j,j2,row,ef_eldof,idfile,err,idgrp1,idgrp2,iddat1,iddat2,  &
+        spc_dat1,spc_dat2,spc_cell
+    integer(hsize_t) :: off(1),dim_cell(1)
+    real(8) :: t_sync,perm1,perm2,m_perm(dmn,dmn),wfv
+    it=size(pack(t_fe,t_fe<=t_sync))
+    wfv=(t_sync-t_fe(it))/(t_fe(it+1)-t_fe(it))
+    call MatZeroEntries(Mat_K,ierr)
+    call MatZeroEntries(Mat_Kc,ierr)
+    call VecZeroEntries(Vec_Cp,ierr)
+    ! Read permeability
+    call h5open_f(err)
+    call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
+    ! Time 1
+    write(namegrp,'(AI4AES12.5E2A)')"/",it-1," Time ",t_fv(it)," d"
+    write(namedat,'(A,A)')trim(namegrp),"/Permeability X [m^2]"
+    call h5gopen_f(idfile,trim(namegrp),idgrp1,err)
+    call h5dopen_f(idfile,trim(namedat),iddat1,err)
+    call h5dget_space_f(iddat1,spc_dat1,err)
+    ! Time 2
+    write(namegrp,'(AI4AES12.5E2A)')"/",it," Time ",t_fv(it+1)," d"
+    write(namedat,'(A,A)')trim(namegrp),"/Permeability X [m^2]"
+    call h5gopen_f(idfile,trim(namegrp),idgrp2,err)
+    call h5dopen_f(idfile,trim(namedat),iddat2,err)
+    call h5dget_space_f(iddat2,spc_dat2,err)
+    dim_cell=1
+    call h5screate_simple_f(1,dim_cell,spc_cell,err)
+    do i=1,nels
+       off=el2g(i)-1
+       ! Time 1 
+       call h5sselect_hyperslab_f(spc_dat1,H5S_SELECT_SET_F,off,dim_cell,err)
+       call h5dread_f(iddat1,h5t_native_double,perm1,dim_cell,err,spc_cell,    &
+          spc_dat1)
+       ! Time 2
+       call h5sselect_hyperslab_f(spc_dat2,H5S_SELECT_SET_F,off,dim_cell,err)
+       call h5dread_f(iddat2,h5t_native_double,perm2,dim_cell,err,spc_cell,    &
+          spc_dat2)
+       ! Interpolate
+       perm1=(f1-wfv)*perm1+wfv*perm2
+       m_perm=f0
+       do j=1,dmn ! Tensor valued permeability
+          m_perm(j,j)=perm1*r_perm(j) 
+       end do
+       call FormLocalKPerm(i,k,indx,m_perm,"Kp") 
+       indx=indxmap(indx,2)
+       call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
+       ! Record pressure coefficient
+       do j=1,npel
+          j2=dmn*npel+j      
+          row=nl2g(nodes(i,j),2)-1
+          if (bc(nodes(i,j),dmn+1)==2) call VecSetValue(Vec_Cp,row,k(j2,j2),   &
+             Add_Values,ierr)
+       end do
+       ! Update [Kc]
+       call FormLocalKPerm(i,k,indx,m_perm,"Kc")
+       kc=k(eldof+1:,eldof+1:)
+       indxp=(indxmap(indx(eldof+1:),2)+1)/(dmn+1)-1
+       call MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,Add_Values,ierr)
+    end do
+    call h5dclose_f(iddat1,err) 
+    call h5gclose_f(idgrp1,err)
+    call h5dclose_f(iddat2,err) 
+    call h5gclose_f(idgrp2,err) 
+    call h5fclose_f(idfile,err)
+    call h5close_f(err)
+    ! Account for constraint eqn's
+    if (rank==0 .and. nceqs>0) call ApplyConstraints
+    call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+    call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+    call MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
+    call MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
+    call VecAssemblyBegin(Vec_Cp,ierr)
+    call VecAssemblyEnd(Vec_Cp,ierr)
+    do i=1,size(coords,1)
+       row=nl2g(i,2)-1
+       if (bc(i,dmn+1)/=2) call VecSetValue(Vec_Cp,row,f1,Insert_Values,ierr)  
+    end do
+    call VecAssemblyBegin(Vec_Cp,ierr)
+    call VecAssemblyEnd(Vec_Cp,ierr)
+  end subroutine FVReformKPermUsg
+
+  ! Remove hydrostatic pressure gradient
   subroutine FVReset
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h" 
@@ -282,10 +506,22 @@ contains
     end do
     call VecAssemblyBegin(Vec_Um,ierr)
     call VecAssemblyEnd(Vec_Um,ierr)
-    deallocate(p_fv_sta,p_fv0)
+    deallocate(p_fv_sta)
   end subroutine FVReset
 
-  subroutine FVSyncBD(t_sync) ! Impose boundary pore pressure via RHS
+  subroutine FVResetUsg
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h" 
+#endif
+    implicit none
+    call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+    call VecAXPY(Vec_Up,f1,Vec_Up_sta,ierr)
+    call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+    call VecDestroy(Vec_Up_sta,ierr)
+  end subroutine FVResetUsg
+
+  ! Impose boundary pore pressure via RHS
+  subroutine FVSyncBD(t_sync)  
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h" 
@@ -308,5 +544,82 @@ contains
     call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr) 
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
   end subroutine FVSyncBD 
+
+  subroutine FVSyncBDUsg(t_sync)
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h" 
+#endif
+    character(256) :: namegrp,namedat
+    integer :: i,j,it,row,idfile,idgrp1,iddat1,idgrp2,iddat2,err,spc_dat1,     &
+       spc_dat2,spc_cell
+    integer(hsize_t) :: off(1),dim_cell(1)
+    real(8) :: t_sync,pfv1,pfv2,cp,detj
+    it=size(pack(t_fe,t_fe<t_sync))
+    call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecSet(Vec_Cp0,f1,ierr)
+    do i=1,size(bdnd)
+       row=nl2g(bdnd(i),2)-1 
+       call VecSetValue(Vec_Up,row,f0,Insert_Values,ierr)
+       call VecSetValue(Vec_Cp0,row,f0,Insert_Values,ierr)
+    end do
+    call VecAssemblyBegin(Vec_Up,ierr)
+    call VecAssemblyEnd(Vec_Up,ierr)
+    call VecAssemblyBegin(Vec_Cp0,ierr)
+    call VecAssemblyEnd(Vec_Cp0,ierr)
+    ! Read pressure
+    call h5open_f(err)
+    call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
+    ! Time 1
+    write(namegrp,'(AI4AES12.5E2A)')"/",it-1," Time ",t_fv(it)," d"
+    write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
+    call h5gopen_f(idfile,trim(namegrp),idgrp1,err)
+    call h5dopen_f(idfile,trim(namedat),iddat1,err)
+    call h5dget_space_f(iddat1,spc_dat1,err)
+    ! Time 2
+    write(namegrp,'(AI4AES12.5E2A)')"/",it," Time ",t_fv(it+1)," d"
+    write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
+    call h5gopen_f(idfile,trim(namegrp),idgrp2,err)
+    call h5dopen_f(idfile,trim(namedat),iddat2,err)
+    call h5dget_space_f(iddat2,spc_dat2,err)
+    dim_cell=1
+    call h5screate_simple_f(1,dim_cell,spc_cell,err)
+    do i=1,nels
+       off=el2g(i)-1 
+       ! Time 1  
+       call h5sselect_hyperslab_f(spc_dat1,H5S_SELECT_SET_F,off,dim_cell,err)
+       call h5dread_f(iddat1,h5t_native_double,pfv1,dim_cell,err,              &
+          spc_cell,spc_dat1)
+       ! Time 2
+       call h5sselect_hyperslab_f(spc_dat2,H5S_SELECT_SET_F,off,dim_cell,err)
+       call h5dread_f(iddat2,h5t_native_double,pfv2,dim_cell,err,spc_cell,     &
+          spc_dat2)
+       pfv1=(pfv2-pfv1)*dt/dt_fv/3600/24 ! Incremental pressure
+       do j=1,nip
+          call FormdetJ(ipoint(j,:),ecoords,detj)
+          cp=cp+weight(j)*detj
+       end do
+       do j=1,npel
+          if (bc(nodes(i,j),dmn+1)==2) then 
+             row=nl2g(nodes(i,j),2)-1 
+             call VecSetValue(Vec_Up,row,cp*pfv1/scale,Add_Values,ierr) 
+             call VecSetValue(Vec_Cp0,row,cp,Add_Values,ierr)
+          end if
+       end do 
+    end do
+    call h5dclose_f(iddat1,err) 
+    call h5gclose_f(idgrp1,err)
+    call h5dclose_f(iddat2,err) 
+    call h5gclose_f(idgrp2,err)
+    call h5fclose_f(idfile,err)
+    call h5close_f(err)
+    call VecAssemblyBegin(Vec_Up,ierr)
+    call VecAssemblyEnd(Vec_Up,ierr)
+    call VecAssemblyBegin(Vec_Cp0,ierr)
+    call VecAssemblyEnd(Vec_Cp0,ierr)
+    call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr) 
+    call VecPointwiseDivide(Vec_Up,Vec_Up,Vec_Cp0,ierr)
+    call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+  end subroutine FVSyncBDUsg 
 
 end module fvfe 

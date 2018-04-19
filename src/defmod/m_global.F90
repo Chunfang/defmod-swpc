@@ -40,7 +40,7 @@ module global
      Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up_dyn,Vec_I_dyn,Vec_fp,Vec_qu,Vec_Uu,Vec_Ul,&
      Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip,Vec_nrm,Vec_Cp,       &
      Vec_lambda_sta,Vec_lambda_sta0,Vec_lambda_bk,Vec_lm_pn,Vec_lm_pp,         &
-     Vec_lm_f2s,Vec_Fm_dyn,Vec_F_dyn ! For implicit alpha
+     Vec_lm_f2s,Vec_Fm_dyn,Vec_F_dyn,Vec_Cp0,Vec_Up_sta 
   Vec,pointer :: Vec_W(:),Vec_Wlm(:)
   Mat :: Mat_K,Mat_M,Mat_Minv,Mat_Gt,Mat_G,Mat_GMinvGt,Mat_Kc,Mat_K_dyn,Mat_H, &
      Mat_Ht
