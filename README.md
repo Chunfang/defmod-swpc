@@ -21,11 +21,15 @@ To install and run this "mixed" code, see doc/INSTALL
 4. Generalized-alpha (implicit dynamic) solver that is unconditionally stable, i.e. does not suffer CFL restriction, while allowing fault rupture.  
 5. (Partially) synchrize FE domain pressure/permeability with a finite volume code [pflotran](https://bitbucket.org/pflotran/pflotran/wiki/Home).
 
-## Example descriptions:
+## Example descriptions
 * F3D, slip on curved fault induced by increasing differential loading, 3D domain.
 * F2Dp, production fluctuation and rate-and-state friction scenarios, 2D domain.
 * F3Dp, production induced rupture on curved fault, 3D domain.
-* F3Db (F3db\_usg for unstructured and shared FV/FE mesh), minimalistic example of injection induced fault slip to demonstrate FV(pflotran)-FE(defmod)-FD(swpc) binding, 3D domain, transient and tensor valued permeability.
+* F3Db (F3Db\_usg for unstructured and shared FV/FE mesh), minimalistic example of injection induced fault slip to demonstrate FV(pflotran)-FE(defmod)-FD(swpc) binding, 3D domain, transient and tensor valued permeability. To activate FV-FE binding, launch defmod with -fv [argv]:
+    * -fv 1: structured FV single phase;
+    * -fv 2: structured FV multiphase;
+    * -fv 3: unstructured FV single phase;
+    * -fv 4: unstructured FV multiphase.
 * HF3D, injection induced rupture on splay fault, 3D domain (modified from SCEC14/15).
 * FE, legacy examples including Mandel (2D/3D) benchmarks.
 * SCEC, SCEC problems number 10, 14, 15, 102 and 205, waveforms produced by both the FE and FD modules.
