@@ -35,8 +35,8 @@
   vcut             = 1.5              !! minimum velocity
                                       !- smaller velocity will be raised
 
-  xbeg             = -2.495           !! minimum in x-dir
-  ybeg             = -2.495           !! minimum in y-dir
+  xbeg             = -24.95           !! minimum in x-dir
+  ybeg             = -24.95           !! minimum in y-dir
   zbeg             = -0.2             !! minimum in z-dir deep positive!
   tbeg             = 0.0              !! start time
 

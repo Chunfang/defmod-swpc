@@ -95,7 +95,7 @@ contains
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
     call h5screate_simple_f(dmn,dim_dom,spc_dom,err)
     ! Hydrostatic pressure from FV
-    write(namegrp,'(AES12.5E2A)')"/Time: ",f0," d" 
+    write(namegrp,'(A,ES12.5E2,A)')"/Time: ",f0," d" 
     write(namedat,'(A,A)')trim(namegrp),"/Liquid_Pressure [Pa]"
     call h5gopen_f(idfile,trim(namegrp),idgrp,err)
     call h5dopen_f(idfile,trim(namedat),iddat,err)
@@ -113,7 +113,7 @@ contains
     ! Sampling pressure from FV
     do it=1,nt_fv
        t_fv(it)=dble(stp0+it-1)*dt_fv
-       write(namegrp,'(AES12.5E2A)')"/Time: ",t_fv(it)," d" 
+       write(namegrp,'(A,ES12.5E2,A)')"/Time: ",t_fv(it)," d" 
        write(namedat,'(A,A)')trim(namegrp),"/Liquid_Pressure [Pa]"
        call h5gopen_f(idfile,trim(namegrp),idgrp,err)
        call h5dopen_f(idfile,trim(namedat),iddat,err)
@@ -174,7 +174,7 @@ contains
     call VecZeroEntries(Vec_Cp0,ierr)
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
-    write(namegrp,'(AI4AES12.5E2A)')"/",0," Time ",f0," d"
+    write(namegrp,'(A,I4,A,ES12.5E2,A)')"/",0," Time ",f0," d"
     write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
     call h5gopen_f(idfile,trim(namegrp),idgrp,err)
     call h5dopen_f(idfile,trim(namedat),iddat,err)
@@ -274,7 +274,7 @@ contains
     ! Initial pressure
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
-    write(namegrp,'(AI4AES12.5E2A)')"/",stp0," Time ",t_fv(1)," d"
+    write(namegrp,'(A,I4,A,ES12.5E2,A)')"/",stp0," Time ",t_fv(1)," d"
     write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
     call h5gopen_f(idfile,trim(namegrp),idgrp,err)
     call h5dopen_f(idfile,trim(namedat),iddat,err)
@@ -338,7 +338,7 @@ contains
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
     call h5screate_simple_f(dmn,dim_dom,spc_dom,err)
     ! Time 1
-    write(namegrp,'(AES12.5E2A)')"/Time: ",t_fv(it)," d"
+    write(namegrp,'(A,ES12.5E2,A)')"/Time: ",t_fv(it)," d"
     call h5gopen_f(idfile,trim(namegrp),idgrp,err)
     write(namedat,'(A,A)')trim(namegrp),"/Permeability_X [m^2]"
     call h5dopen_f(idfile,trim(namedat),iddat,err)
@@ -348,7 +348,7 @@ contains
     call h5dclose_f(iddat,err) 
     call h5gclose_f(idgrp,err)
     ! Time 2
-    write(namegrp,'(AES12.5E2A)')"/Time: ",t_fv(it+1)," d"
+    write(namegrp,'(A,ES12.5E2,A)')"/Time: ",t_fv(it+1)," d"
     call h5gopen_f(idfile,trim(namegrp),idgrp,err)
     write(namedat,'(A,A)')trim(namegrp),"/Permeability_X [m^2]"
     call h5dopen_f(idfile,trim(namedat),iddat,err)
@@ -425,13 +425,13 @@ contains
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
     ! Time 1
-    write(namegrp,'(AI4AES12.5E2A)')"/",it-1," Time ",t_fv(it)," d"
+    write(namegrp,'(A,I4,A,ES12.5E2,A)')"/",it-1," Time ",t_fv(it)," d"
     write(namedat,'(A,A)')trim(namegrp),"/Permeability X [m^2]"
     call h5gopen_f(idfile,trim(namegrp),idgrp1,err)
     call h5dopen_f(idfile,trim(namedat),iddat1,err)
     call h5dget_space_f(iddat1,spc_dat1,err)
     ! Time 2
-    write(namegrp,'(AI4AES12.5E2A)')"/",it," Time ",t_fv(it+1)," d"
+    write(namegrp,'(A,I4,A,ES12.5E2,A)')"/",it," Time ",t_fv(it+1)," d"
     write(namedat,'(A,A)')trim(namegrp),"/Permeability X [m^2]"
     call h5gopen_f(idfile,trim(namegrp),idgrp2,err)
     call h5dopen_f(idfile,trim(namedat),iddat2,err)
@@ -571,13 +571,13 @@ contains
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
     ! Time 1
-    write(namegrp,'(AI4AES12.5E2A)')"/",it-1," Time ",t_fv(it)," d"
+    write(namegrp,'(A,I4,A,ES12.5E2,A)')"/",it-1," Time ",t_fv(it)," d"
     write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
     call h5gopen_f(idfile,trim(namegrp),idgrp1,err)
     call h5dopen_f(idfile,trim(namedat),iddat1,err)
     call h5dget_space_f(iddat1,spc_dat1,err)
     ! Time 2
-    write(namegrp,'(AI4AES12.5E2A)')"/",it," Time ",t_fv(it+1)," d"
+    write(namegrp,'(A,I4,A,ES12.5E2,A)')"/",it," Time ",t_fv(it+1)," d"
     write(namedat,'(A,A)')trim(namegrp),"/Liquid Pressure [Pa]"
     call h5gopen_f(idfile,trim(namegrp),idgrp2,err)
     call h5dopen_f(idfile,trim(namedat),iddat2,err)
