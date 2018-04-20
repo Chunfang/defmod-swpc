@@ -94,12 +94,12 @@ for i in nc.variables['eb_prop1'][:]:
 print '%d nodes, %d elements' %(nnd, len(hx_node))
 
 # Observation locations 
-ogrid = np.array([[-0.0, 0., 0.],
-                  [-0.5, 0., 0.],
-                  [-1.0, 0., 0.],
-                  [-1.5, 0., 0.],
-                  [-2.0, 0., 0.],
-                  [-2.5, 0., 0.]])
+ogrid = np.array([[-0.0, 0., -1.],
+                  [-0.5, 0., -1.],
+                  [-1.0, 0., -1.],
+                  [-1.5, 0., -1.],
+                  [-2.0, 0., -1.],
+                  [-2.5, 0., -1.]])
 
 # boundary data
 bnd_el = []
@@ -183,7 +183,7 @@ dep = 0.; rho = np.array(mat)[0,4]; g = 9.80665
 Kx = 0.; Ky=0.
 #--------------uniform BC----------------------
 #trac_val = [20E4, 20E4, -20E4]
-trac_val = [16E6, 16E6, -41E6] #-42E6 to trigger
+trac_val = [16E6, 16E6, -42E6] #-42E6 to trigger
 #----------------------------------------------
 if poro:
     trac_bc1 = np.zeros(shape=[len(trac_el1), 6])
@@ -245,7 +245,7 @@ abs_bc3 = np.hstack((abs_bc3, 3*np.ones((len(abs_bc3),1))))
 abs_bc4 = np.hstack((trac_el1, np.ones((len(trac_el1),1))))
 abs_bc5 = np.hstack((trac_el2, 2*np.ones((len(trac_el2),1))))
 abs_bc6 = np.hstack((trac_el3, 3*np.ones((len(trac_el3),1))))
-abs_bc = np.vstack((abs_bc1, abs_bc2, abs_bc3, abs_bc4, abs_bc5, abs_bc6))
+abs_bc = np.vstack((abs_bc1, abs_bc2, abs_bc3, abs_bc4, abs_bc5))
 # abs_bc6 upper bound is traction free not absorbing
 
 # fault constraint coefficient
@@ -490,3 +490,118 @@ if len(ogrid)>0:
 if (explicit or fault): np.savetxt(f, abs_bc, delimiter=' ', fmt='%d %d %d') 
 f.close(); 
 print 'Defmod imput ' + fout + ' created' 
+
+# Heal fault for flow model
+for i in range(len(ft_pos_nodes)):
+    slv = ft_pos_nodes[i]; mst = ft_neg_nodes[i]
+    if slv != mst:
+        hx_node[hx_node==slv]=mst
+        coord=np.vstack((coord[:slv-1,:],coord[slv:,:]))
+        id_shift=hx_node>slv
+        hx_node[id_shift]=hx_node[id_shift]-1
+        id_shift=ft_pos_nodes>slv
+        ft_pos_nodes[id_shift]=ft_pos_nodes[id_shift]-1
+        id_shift=ft_neg_nodes>slv
+        ft_neg_nodes[id_shift]=ft_neg_nodes[id_shift]-1
+nnd = len(coord)
+
+# h5 file for pflotran
+import h5py
+col1 = 8*np.ones((len(hx_node),1),dtype=np.int32)
+id_cell = np.array(range(len(hx_node)))+1
+fout = fin.rsplit('.')[0] + '_h5.h5'
+f = h5py.File(fout, "w")
+print 'Outputting pflotran file ' + fout + '...'
+grp = f.create_group('Domain')
+grp.create_dataset('Cells', data=np.hstack((col1,hx_node)), dtype=np.int32)
+grp.create_dataset('Vertices', data=coord*1E3, dtype=np.float64)
+grp_reg = f.create_group('Regions')
+grp = grp_reg.create_group('All')
+grp.create_dataset('Cell Ids', data=id_cell, dtype=np.int32)
+grp = grp_reg.create_group('top_layer')
+grp.create_dataset('Cell Ids', data=id_cell[:n_elem[0]], dtype=np.int32)
+grp = grp_reg.create_group('mid_layer')
+grp.create_dataset('Cell Ids', data=id_cell[n_elem[0]:sum(n_elem[:2])], dtype=np.int32)
+grp = grp_reg.create_group('bottom_layer')
+grp.create_dataset('Cell Ids', data=id_cell[sum(n_elem[:2]):sum(n_elem)], dtype=np.int32)
+
+# Absorbing sides
+ss = np.empty((0,5), dtype=np.int32)
+for el, side in zip(abs_bc6[:,0],abs_bc1[:,1]):
+    el_node = hx_node[int(el)-1,:]
+    if   side == 1: q_node = el_node[[0,1,5,4]]; 
+    elif side == 2: q_node = el_node[[1,2,6,5]]; 
+    elif side == 3: q_node = el_node[[2,3,7,6]]; 
+    elif side == 4: q_node = el_node[[3,0,4,7]]; 
+    elif side == 5: q_node = el_node[[0,1,2,3]]; 
+    elif side == 6: q_node = el_node[[4,5,6,7]]; 
+    ss = np.vstack((ss, np.hstack((4,q_node))));
+grp = grp_reg.create_group('East_sidesets')
+grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
+
+ss = np.empty((0,5), dtype=np.int32)
+for el, side in zip(abs_bc6[:,0],abs_bc2[:,1]):
+    el_node = hx_node[int(el)-1,:]
+    if   side == 1: q_node = el_node[[0,1,5,4]]; 
+    elif side == 2: q_node = el_node[[1,2,6,5]]; 
+    elif side == 3: q_node = el_node[[2,3,7,6]]; 
+    elif side == 4: q_node = el_node[[3,0,4,7]]; 
+    elif side == 5: q_node = el_node[[0,1,2,3]]; 
+    elif side == 6: q_node = el_node[[4,5,6,7]]; 
+    ss = np.vstack((ss, np.hstack((4,q_node))));
+grp = grp_reg.create_group('North_sidesets')
+grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
+
+ss = np.empty((0,5), dtype=np.int32)
+for el, side in zip(abs_bc6[:,0],abs_bc3[:,1]):
+    el_node = hx_node[int(el)-1,:]
+    if   side == 1: q_node = el_node[[0,1,5,4]]; 
+    elif side == 2: q_node = el_node[[1,2,6,5]]; 
+    elif side == 3: q_node = el_node[[2,3,7,6]]; 
+    elif side == 4: q_node = el_node[[3,0,4,7]]; 
+    elif side == 5: q_node = el_node[[0,1,2,3]]; 
+    elif side == 6: q_node = el_node[[4,5,6,7]]; 
+    ss = np.vstack((ss, np.hstack((4,q_node))));
+grp = grp_reg.create_group('Bottom_sidesets')
+grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
+
+ss = np.empty((0,5), dtype=np.int32)
+for el, side in zip(abs_bc6[:,0],abs_bc4[:,1]):
+    el_node = hx_node[int(el)-1,:]
+    if   side == 1: q_node = el_node[[0,1,5,4]]; 
+    elif side == 2: q_node = el_node[[1,2,6,5]]; 
+    elif side == 3: q_node = el_node[[2,3,7,6]]; 
+    elif side == 4: q_node = el_node[[3,0,4,7]]; 
+    elif side == 5: q_node = el_node[[0,1,2,3]]; 
+    elif side == 6: q_node = el_node[[4,5,6,7]]; 
+    ss = np.vstack((ss, np.hstack((4,q_node))));
+grp = grp_reg.create_group('West_sidesets')
+grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
+
+ss = np.empty((0,5), dtype=np.int32)
+for el, side in zip(abs_bc6[:,0],abs_bc5[:,1]):
+    el_node = hx_node[int(el)-1,:]
+    if   side == 1: q_node = el_node[[0,1,5,4]]; 
+    elif side == 2: q_node = el_node[[1,2,6,5]]; 
+    elif side == 3: q_node = el_node[[2,3,7,6]]; 
+    elif side == 4: q_node = el_node[[3,0,4,7]]; 
+    elif side == 5: q_node = el_node[[0,1,2,3]]; 
+    elif side == 6: q_node = el_node[[4,5,6,7]]; 
+    ss = np.vstack((ss, np.hstack((4,q_node))));
+grp = grp_reg.create_group('South_sidesets')
+grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
+
+ss = np.empty((0,5), dtype=np.int32)
+for el, side in zip(abs_bc6[:,0],abs_bc6[:,1]):
+    el_node = hx_node[int(el)-1,:]
+    if   side == 1: q_node = el_node[[0,1,5,4]]; 
+    elif side == 2: q_node = el_node[[1,2,6,5]]; 
+    elif side == 3: q_node = el_node[[2,3,7,6]]; 
+    elif side == 4: q_node = el_node[[3,0,4,7]]; 
+    elif side == 5: q_node = el_node[[0,1,2,3]]; 
+    elif side == 6: q_node = el_node[[4,5,6,7]]; 
+    ss = np.vstack((ss, np.hstack((4,q_node))));
+grp = grp_reg.create_group('Top_sidesets')
+grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
+f.close()
+print fout + ' created.'

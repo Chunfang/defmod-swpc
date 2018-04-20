@@ -94,12 +94,12 @@ for i in nc.variables['eb_prop1'][:]:
 print '%d nodes, %d elements' %(nnd, len(hx_node))
 
 # Observation locations 
-ogrid = np.array([[-0.0, 0., 0.],
-                  [-0.5, 0., 0.],
-                  [-1.0, 0., 0.],
-                  [-1.5, 0., 0.],
-                  [-2.0, 0., 0.],
-                  [-2.5, 0., 0.]])
+ogrid = np.array([[-0.0, 0., -1.],
+                  [-0.5, 0., -1.],
+                  [-1.0, 0., -1.],
+                  [-1.5, 0., -1.],
+                  [-2.0, 0., -1.],
+                  [-2.5, 0., -1.]])
 
 # boundary data
 bnd_el = []
