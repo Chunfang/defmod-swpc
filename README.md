@@ -32,7 +32,8 @@ To install and run this "mixed" code, see doc/INSTALL
     * -fv 4: unstructured FV multiphase.
 * HF3D, injection induced rupture on splay fault, 3D domain (modified from SCEC14/15).
 * FE, legacy examples including Mandel (2D/3D) benchmarks.
-* SCEC, SCEC problems number 10, 14, 15, 102 and 205, waveforms produced by both the FE and FD modules.
+* SCEC, SCEC problems number 10, 102 and 205, waveforms produced by both the FE and FD modules.
+* F3DX, Modified SCEC problems number 14 and 15 to have intersecting faults.
 * SCEC2D, SCEC 2D problems number 10, 11 and 102 to compare hybrid (implicit-explicit) models against generalized-alpha (implicit dynamic) models. 
 
 Examples F3D, F3Db, F2Dp, SCEC2D and FE can run on a desktop computer, while others shall run on a cluster. The execution commands are equivalent for both the desktop and cluster, see <model>.sh files for details.
