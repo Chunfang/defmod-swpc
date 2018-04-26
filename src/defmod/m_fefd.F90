@@ -36,14 +36,19 @@ contains
     open(149,file=adjustl(name),status='old')
     select case(dmn)
     case(2)
-        read(149,*)nprc_x
-        read(149,*)nx,ny
-        read(149,*)xref,yref
+       read(149,*)nprc_x
+       read(149,*)nx,ny
+       read(149,*)dx,dy
+       read(149,*)xref,yref
+       dx=km2m*dx; dy=km2m*dy
+       xref=km2m*xref; yref=km2m*yref
     case(3)
-        read(149,*)nprc_x,nprc_y
-        read(149,*)nx,ny,nz
-        read(149,*)dx,dy,dz
-        read(149,*)xref,yref,zref
+       read(149,*)nprc_x,nprc_y
+       read(149,*)nx,ny,nz
+       read(149,*)dx,dy,dz
+       read(149,*)xref,yref,zref
+       dx=km2m*dx; dy=km2m*dy; dz=km2m*dz
+       xref=km2m*xref; yref=km2m*yref; zref=km2m*zref
     end select
     nxp=nx/nprc_x; nyp=ny/nprc_y
     nprc_fd=nprc_x*nprc_y 
@@ -132,10 +137,10 @@ contains
        do i=1,npel
           row((/((i-1)*dmn+j,j=1,dmn)/))=(/((ind(i)-1)*dmn+j,j=1,dmn)/)
        end do
-       mattmp=reshape(uu_dyn(row),(/dmn,npel/))
+       mattmp=reshape(tot_uu_dyn(row),(/dmn,npel/))
        vecshp=reshape(gpshape(igp,:),(/npel,1/))
        vectmp=matmul(mattmp,vecshp)
-       uu_fd(igp,:)=vectmp(:,1)/dt_dyn
+       uu_fd(igp,:)=vectmp(:,1)
     end do
   end subroutine GetVec_fd
 
@@ -283,8 +288,8 @@ contains
        open(10,file=adjustl(name),status='old',position='append',action='write')
     end if
     select case(dmn)
-       case(2); fmt="(2(F0.6,1X))"
-       case(3); fmt="(3(F0.6,1X))"
+       case(2); fmt="(2(ES11.2E3,1X))"
+       case(3); fmt="(3(ES11.2E3,1X))"
     end select
     do i=1,ngp_loc
        vec=(/uu_fd(i,1),uu_fd(i,2),-uu_fd(i,3)/) ! deep positive in swpc

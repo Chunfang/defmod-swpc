@@ -27,7 +27,7 @@ elif fault:
     # dsp_str=1 output fault stress; bod_frc=1 body force; hyb=1 engage hybrid
     t = 30*24*3600.; dt = 24*3600.; nviz=1
     t_dyn=0.1; dt_dyn=0.002; t_lim=6.; dsp=1; dsp_hyb=0; dsp_str=1; rsf=0
-    bod_frc=0; hyb=1; nviz_dyn=20; nviz_wave=1; nviz_slip=1; init=0
+    bod_frc=0; hyb=1; nviz_dyn=20; nviz_wave=8; nviz_slip=8; init=0
     alpha=0.; beta=0.0025; rfrac=0
     if  poro and visc:
         line1 = ["fault-pv hex 51"]
@@ -94,12 +94,12 @@ for i in nc.variables['eb_prop1'][:]:
 print '%d nodes, %d elements' %(nnd, len(hx_node))
 
 # Observation locations 
-ogrid = np.array([[-0.0, 0., -1.],
-                  [-0.5, 0., -1.],
-                  [-1.0, 0., -1.],
-                  [-1.5, 0., -1.],
-                  [-2.0, 0., -1.],
-                  [-2.5, 0., -1.]])
+ogrid = np.array([[-0.0, 0., -3.],
+                  [-0.5, 0., -3.],
+                  [-1.0, 0., -3.],
+                  [-1.5, 0., -3.],
+                  [-2.0, 0., -3.],
+                  [-2.5, 0., -3.]])
 
 # boundary data
 bnd_el = []

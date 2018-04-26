@@ -23,20 +23,20 @@
   nproc_x          = 2                !! parallelization in x-dir
   nproc_y          = 2                !! parallelization in x-dir
   nx               = 500              !! total grid number in x-dir
-  ny               = 500              !! total grid number in y-dir
+  ny               = 450              !! total grid number in y-dir
   nz               = 200              !! total grid number in z-dir
-  nt               = 10000            !! time step number
+  nt               = 2500             !! time step number
 
   dx               = 0.1              !! grid width in x-dir
   dy               = 0.1              !! grid width in y-dir
   dz               = 0.1              !! grid width in z-dir
-  dt               = 0.002            !! time step width
+  dt               = 0.008            !! time step width
 
   vcut             = 1.5              !! minimum velocity
                                       !- smaller velocity will be raised
 
   xbeg             = -24.95           !! minimum in x-dir
-  ybeg             = -24.95           !! minimum in y-dir
+  ybeg             = -22.45           !! minimum in y-dir
   zbeg             = -0.2             !! minimum in z-dir deep positive!
   tbeg             = 0.0              !! start time
 

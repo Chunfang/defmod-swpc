@@ -65,7 +65,9 @@ contains
     read(153,*)nt_fv,stp0,dt_fv,p_top
     read(153,*)nx,ny,nz
     read(153,*)dx,dy,dz
+    dx=km2m*dx; dy=km2m*dy; dz=km2m*dz
     read(153,*)xref,yref,zref
+    xref=km2m*xref; yref=km2m*yref; zref=km2m*zref
     read(153,*)r_perm ! Inverse viscosity with scales
     close(153)
     write(nameh5,'(A,A,A)')trim(name0),trim(name1),".h5"

@@ -20,25 +20,25 @@
   !! Model/Grid Size and Area
   !!
 
-  nproc_x          = 2                !! parallelization in x-dir
-  nproc_y          = 2                !! parallelization in x-dir
-  nx               = 500              !! total grid number in x-dir
-  ny               = 450              !! total grid number in y-dir
-  nz               = 200              !! total grid number in z-dir
-  nt               = 2500             !! time step number
+  nproc_x          = 4                !! parallelization in x-dir
+  nproc_y          = 6                !! parallelization in x-dir
+  nx               = 960              !! total grid number in x-dir
+  ny               = 1200             !! total grid number in y-dir
+  nz               = 600              !! total grid number in z-dir
+  nt               = 4000             !! time step number
 
   dx               = 0.1              !! grid width in x-dir
   dy               = 0.1              !! grid width in y-dir
   dz               = 0.1              !! grid width in z-dir
-  dt               = 0.008            !! time step width
+  dt               = 0.005            !! time step width
 
   vcut             = 1.5              !! minimum velocity
                                       !- smaller velocity will be raised
 
-  xbeg             = -24.95           !! minimum in x-dir
-  ybeg             = -22.45           !! minimum in y-dir
-  zbeg             = -0.2             !! minimum in z-dir deep positive!
-  tbeg             = 0.0              !! start time
+  xbeg             = -47.95           !! minimum in x-dir
+  ybeg             = -59.95           !! minimum in y-dir
+  zbeg             = -0.3             !! minimum in z-dir deep positive!
+  tbeg             =  0.0             !! start time
 
   clon             = 139.7604         !! center longitude
   clat             = 35.7182          !! center latitude
@@ -46,8 +46,8 @@
                                       !- measured clockwise from north
 
   fq_min           = 0.02             !! minimum freq. for Q-const model
-  fq_max           = 5.0              !! maximum freq. for Q-const model
-  fq_ref           = 2.5              !! ref. freq. for physical dispersion
+  fq_max           = 0.5              !! maximum freq. for Q-const model
+  fq_ref           = 0.15              !! ref. freq. for physical dispersion
 
   !! ----------------------------------------------------------------------- !!
   !! Snapshot Output
@@ -55,35 +55,35 @@
 
   snp_format       = 'netcdf'         !! snapshot format (native or netcdf)
 
-  xy_ps%sw         = .true.          !! P&S amp. for xy section
-  xz_ps%sw         = .true.           !! P&S amp. for xz section
+  xy_ps%sw         = .false.          !! P&S amp. for xy section
+  xz_ps%sw         = .false.          !! P&S amp. for xz section
   yz_ps%sw         = .false.          !! P&S amp. for yz section
-  fs_ps%sw         = .true.           !! P&S amp. for free surface
+  fs_ps%sw         = .false.          !! P&S amp. for free surface
   ob_ps%sw         = .false.          !! P&S amp. for ocean bottom
 
-  xy_v%sw          = .true.          !! 3-comp. velocity for xy section
+  xy_v%sw          = .true.           !! 3-comp. velocity for xy section
   xz_v%sw          = .true.           !! 3-comp. velocity for xz section
   yz_v%sw          = .false.          !! 3-comp. velocity for yz section
   fs_v%sw          = .true.           !! 3-comp. velocity for free surface
-  ob_v%sw          = .false.          !! 3-comp. velocity for ocean bottom
+  ob_v%sw          = .true.           !! 3-comp. velocity for ocean bottom
 
-  xy_u%sw          = .true.          !! 3-comp. disp. for xy section
+  xy_u%sw          = .true.           !! 3-comp. disp. for xy section
   xz_u%sw          = .true.           !! 3-comp. disp. for xz section
   yz_u%sw          = .false.          !! 3-comp. disp. for yz section
   fs_u%sw          = .true.           !! 3-comp. disp. for free surface
-  ob_u%sw          = .false.          !! 3-comp. disp. for ocean bottom
+  ob_u%sw          = .true.           !! 3-comp. disp. for ocean bottom
 
 
-  z0_xy            =  3.0            !! depth for xy cross section
+  z0_xy            =  3.5             !! depth for xy cross section
   x0_yz            =  0.0             !! x-value for yz cross section
-  y0_xz            =  0.0             !! y-value for xz cross section
+  y0_xz            =  5.23            !! y-value for xz cross section
 
-  ntdec_s          = 50               !! time decimation of snapshot
+  ntdec_s          = 20                !! time decimation of snapshot
                                       !- (specify 1 for no decimation)
 
-  idec             = 1                !! x-decimation for snapshot
-  jdec             = 1                !! y-decimation for snapshot
-  kdec             = 1                !! z-decimation for snapshot
+  idec             = 2                !! x-decimation for snapshot
+  jdec             = 2                !! y-decimation for snapshot
+  kdec             = 2                !! z-decimation for snapshot
 
   !! ----------------------------------------------------------------------- !!
   !! Waveform Output
@@ -145,7 +145,7 @@
   !! Velocity model
   !!
 
-  vmodel_type      = 'lhm'            !! velocity model type 'uni'/'grd'/'lhm'
+  vmodel_type      = 'uni'            !! velocity model type 'uni'/'grd'/'lhm'
   is_ocean         = .false.           !! topography z<0 is covered by ocean
   is_flatten       = .false.          !! Force topography variation zero
 
@@ -169,7 +169,7 @@
     !! --------------------------------------------------------------------- !!
     !! For layered homogeneous medium model ('lhm')
     !!
-    fn_lhm           = 'lhm.dat'    !! 1D velocity structure
+    fn_lhm           = 'example/lhm.dat'    !! 1D velocity structure
 
     !! --------------------------------------------------------------------- !!
     !! For random medium models

@@ -37,7 +37,7 @@ module m_rup
   real(sp) :: km2m
   real(SP), allocatable :: xobsFE(:,:) ! Global obs coordinates, by FE 
   real(SP), allocatable :: xobsFE_loc(:,:) ! Global obs coordinates, by FE
-  real(MP), allocatable :: v_src(:,:,:) ! Local rupture source 
+  real(MP), allocatable :: u_src(:,:,:) ! Local rupture source 
   real(MP), allocatable :: obsFD(:,:)   ! Local obs passed from FE
 
 contains
@@ -53,6 +53,7 @@ contains
       read(248,*)
     end do
     read(248,*)xref,yref,zref
+    xref=km2m*xref; yref=km2m*yref; zref=km2m*zref
     read(248,*) nviz,nobsFE
     allocate(xobsFE(nobsFE,3),idobsFE(nobsFE))
     do i=1,nobsFE 
@@ -85,13 +86,13 @@ contains
     !if (myid==0) print('(A,I0,A,I0)'), 'Event ', eid,', nframe ', nt_rup
   end subroutine rup__getTime
 
-  ! Read rupture source from FE outputs -> idx_src(:,:), v_src(:,:,:)
+  ! Read rupture source from FE outputs -> idx_src(:,:), u_src(:,:,:)
   subroutine rup__getFE2FD
     implicit none
     integer :: j,j2,nfile,nproc_fe2fd,ierr
     integer, allocatable :: idfile_pt(:),np_pt(:),idx_src_loc(:,:),rw(:),      &
        fe2fd(:),idfile(:),mattmp(:,:)
-    real(MP), allocatable :: v_src_loc(:,:,:) 
+    real(MP), allocatable :: u_src_loc(:,:,:) 
     character(256) :: name0,name1
     write(name0,'(A,A)')trim(name_fe),"_fe2fd.txt"
     open(250,file=adjustl(name0),status='old')
@@ -118,27 +119,27 @@ contains
     np_tot=sum(fe2fd)
     !if (np_tot>0) print('(A,I0,A,I0,A)'), 'Rank ', myid,' has ',np_tot,' sources.'
     call MPI_AllReduce(np_tot,np_rup,1,MPI_INTEGER,MPI_Sum,MPI_Comm_World,ierr)
-    allocate(idfile_pt(nfile),np_pt(nfile),idx_src(np_tot,3),v_src(np_tot,nt_rup,3)) 
+    allocate(idfile_pt(nfile),np_pt(nfile),idx_src(np_tot,3),u_src(np_tot,nt_rup,3)) 
     idfile_pt=pack(idfile,idfile>-1)
     np_pt=pack(fe2fd,fe2fd/=0)
     do j=1,nfile
       write(name1,'(A,A,I0.6,A)')trim(name_fe),"_",idfile_pt(j),"_fd.txt"
-      allocate(rw(np_pt(j)),idx_src_loc(np_pt(j),3),v_src_loc(np_pt(j),nt_rup,3))
+      allocate(rw(np_pt(j)),idx_src_loc(np_pt(j),3),u_src_loc(np_pt(j),nt_rup,3))
       rw=(/(sum(np_pt(:j))-np_pt(j)+j2,j2=1,np_pt(j))/)
-      call RupSrc(name1,idx_src_loc,v_src_loc,size(rw),nt_rup)
+      call RupSrc(name1,idx_src_loc,u_src_loc,size(rw),nt_rup)
       idx_src(rw,:)=idx_src_loc
-      v_src(rw,:,:)=v_src_loc 
-      deallocate(rw,idx_src_loc,v_src_loc)
+      u_src(rw,:,:)=u_src_loc 
+      deallocate(rw,idx_src_loc,u_src_loc)
     end do
   end subroutine rup__getFE2FD
 
   ! Read rupture source from FE patch
-  subroutine RupSrc(name1,idx_src,v_src,nrw,nt_rup)
+  subroutine RupSrc(name1,idx_src,u_src,nrw,nt_rup)
     implicit none
     character(256) :: name1
     integer :: rankxy,isrc,hit,i,j,k,n_glb,idt,nrw,nt_rup,idx_src(nrw,3)
     integer,allocatable :: on_rank(:) 
-    real(MP) :: vx,vy,vz,v_src(nrw,nt_rup,3)
+    real(MP) :: vx,vy,vz,u_src(nrw,nt_rup,3)
     open(251,file=adjustl(name1),status='old')
     read(251,*)n_glb
     allocate(on_rank(n_glb))
@@ -164,7 +165,7 @@ contains
         read(251,*)vx,vy,vz
         if (on_rank(isrc)==1) then
           hit=hit+1 
-          v_src(hit,idt,:)=(/vx,vy,vz/)
+          u_src(hit,idt,:)=(/vx,vy,vz/)
         end if
       end do
     end do
@@ -175,20 +176,19 @@ contains
   subroutine rup__setSrc(it)
     implicit none
     integer :: it,i,i_rup,ii,jj,kk
-    real(MP) :: t_rup,w,t,vxs,vys,vzs
+    real(MP) :: t_rup,t,vxs,vys,vzs
     t = dble(it-1)*dt
     i_rup=int(t/dt_rup)
     if (i_rup>0 .and. i_rup<nt_rup) then 
       t_rup=i_rup*dt_rup
-      w=(t-t_rup)/dt_rup
       do i=1,np_tot
         ii=idx_src(i,1)
         jj=idx_src(i,2)
         kk=idx_src(i,3)
         ! Linearly interpolate the source velocity
-        vx(kk,ii,jj)=((1-w)*v_src(i,i_rup,1)+w*v_src(i,i_rup+1,1))
-        vy(kk,ii,jj)=((1-w)*v_src(i,i_rup,2)+w*v_src(i,i_rup+1,2))
-        vz(kk,ii,jj)=((1-w)*v_src(i,i_rup,3)+w*v_src(i,i_rup+1,3))
+        vx(kk,ii,jj)=(u_src(i,i_rup+1,1)-u_src(i,i_rup,1))/dt_rup
+        vy(kk,ii,jj)=(u_src(i,i_rup+1,2)-u_src(i,i_rup,2))/dt_rup
+        vz(kk,ii,jj)=(u_src(i,i_rup+1,3)-u_src(i,i_rup,3))/dt_rup
       end do
     elseif (i_rup>=nt_rup) then
       do i=1,np_tot

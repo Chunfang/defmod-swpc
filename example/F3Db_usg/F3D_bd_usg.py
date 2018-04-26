@@ -27,7 +27,7 @@ elif fault:
     # dsp_str=1 output fault stress; bod_frc=1 body force; hyb=1 engage hybrid
     t = 30*24*3600.; dt = 24*3600.; nviz=1
     t_dyn=0.1; dt_dyn=0.002; t_lim=6.; dsp=1; dsp_hyb=0; dsp_str=1; rsf=0
-    bod_frc=0; hyb=1; nviz_dyn=20; nviz_wave=1; nviz_slip=1; init=0
+    bod_frc=0; hyb=1; nviz_dyn=20; nviz_wave=8; nviz_slip=8; init=0
     alpha=0.; beta=0.0025; rfrac=0
     if  poro and visc:
         line1 = ["fault-pv hex 51"]
@@ -55,7 +55,7 @@ else:
     line3 = np.array([t, dt, nviz, 1]).reshape(1,4)
 
 # node data
-print 'Extracting mesh...'
+print 'Extracting FE mesh...'
 coord = np.hstack((nc.variables['coordx'][:].\
         reshape(len(nc.variables['coordx']),1),
         nc.variables['coordy'][:].\
@@ -94,12 +94,12 @@ for i in nc.variables['eb_prop1'][:]:
 print '%d nodes, %d elements' %(nnd, len(hx_node))
 
 # Observation locations 
-ogrid = np.array([[-0.0, 0., -1.],
-                  [-0.5, 0., -1.],
-                  [-1.0, 0., -1.],
-                  [-1.5, 0., -1.],
-                  [-2.0, 0., -1.],
-                  [-2.5, 0., -1.]])
+ogrid = np.array([[-0.0, 0., -3.],
+                  [-0.5, 0., -3.],
+                  [-1.0, 0., -3.],
+                  [-1.5, 0., -3.],
+                  [-2.0, 0., -3.],
+                  [-2.5, 0., -3.]])
 
 # boundary data
 bnd_el = []
@@ -492,24 +492,39 @@ f.close();
 print 'Defmod imput ' + fout + ' created' 
 
 # Heal fault for flow model
-for i in range(len(ft_pos_nodes)):
-    slv = ft_pos_nodes[i]; mst = ft_neg_nodes[i]
-    if slv != mst:
-        hx_node[hx_node==slv]=mst
-        coord=np.vstack((coord[:slv-1,:],coord[slv:,:]))
-        id_shift=hx_node>slv
-        hx_node[id_shift]=hx_node[id_shift]-1
-        id_shift=ft_pos_nodes>slv
-        ft_pos_nodes[id_shift]=ft_pos_nodes[id_shift]-1
-        id_shift=ft_neg_nodes>slv
-        ft_neg_nodes[id_shift]=ft_neg_nodes[id_shift]-1
-nnd = len(coord)
+#for i in range(len(ft_pos_nodes)):
+#    slv = ft_pos_nodes[i]; mst = ft_neg_nodes[i]
+#    if slv != mst:
+#        hx_node[hx_node==slv]=mst
+#        coord=np.vstack((coord[:slv-1,:],coord[slv:,:]))
+#        id_shift=hx_node>slv
+#        hx_node[id_shift]=hx_node[id_shift]-1
+#        id_shift=ft_pos_nodes>slv
+#        ft_pos_nodes[id_shift]=ft_pos_nodes[id_shift]-1
+#        id_shift=ft_neg_nodes>slv
+#        ft_neg_nodes[id_shift]=ft_neg_nodes[id_shift]-1
+
+print 'Extracting FV mesh...'
+fin = fin.rsplit('.')[0] + '_fv.exo'
+nc = netCDF4.Dataset(fin)
+coord = np.hstack((nc.variables['coordx'][:].\
+        reshape(len(nc.variables['coordx']),1),
+        nc.variables['coordy'][:].\
+        reshape(len(nc.variables['coordy']),1),
+        nc.variables['coordz'][:].\
+        reshape(len(nc.variables['coordz']),1)))
+hx_node = np.empty(shape=[0, 8], dtype=np.uint32)
+n_elem = []
+for i in nc.variables['eb_prop1'][:]:
+    cnct = nc.variables["connect"+str(i)][:]
+    n_elem.append(len(cnct))
+    hx_node = np.vstack((hx_node, cnct))
 
 # h5 file for pflotran
 import h5py
 col1 = 8*np.ones((len(hx_node),1),dtype=np.int32)
 id_cell = np.array(range(len(hx_node)))+1
-fout = fin.rsplit('.')[0] + '.h5'
+fout = fout.rsplit('.')[0] + '.h5'
 f = h5py.File(fout, "w")
 print 'Outputting pflotran file ' + fout + '...'
 grp = f.create_group('Domain')
@@ -526,8 +541,14 @@ grp = grp_reg.create_group('bottom_layer')
 grp.create_dataset('Cell Ids', data=id_cell[sum(n_elem[:2]):sum(n_elem)], dtype=np.int32)
 
 # Absorbing sides
+bnd_el = []
+for i in nc.variables['ss_prop1']:
+    els = nc.variables['elem_ss' + str(i-2)][:]
+    sides = nc.variables['side_ss' + str(i-2)][:]
+    bnd_el.append(np.hstack((els.reshape(len(els),1),sides.reshape(len(sides),1))))
+
 ss = np.empty((0,5), dtype=np.int32)
-for el, side in zip(abs_bc6[:,0],abs_bc1[:,1]):
+for el, side in zip(bnd_el[0][:,0],bnd_el[0][:,1]):
     el_node = hx_node[int(el)-1,:]
     if   side == 1: q_node = el_node[[0,1,5,4]]; 
     elif side == 2: q_node = el_node[[1,2,6,5]]; 
@@ -540,7 +561,7 @@ grp = grp_reg.create_group('East_sidesets')
 grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
 
 ss = np.empty((0,5), dtype=np.int32)
-for el, side in zip(abs_bc6[:,0],abs_bc2[:,1]):
+for el, side in zip(bnd_el[1][:,0],bnd_el[1][:,1]):
     el_node = hx_node[int(el)-1,:]
     if   side == 1: q_node = el_node[[0,1,5,4]]; 
     elif side == 2: q_node = el_node[[1,2,6,5]]; 
@@ -553,7 +574,7 @@ grp = grp_reg.create_group('North_sidesets')
 grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
 
 ss = np.empty((0,5), dtype=np.int32)
-for el, side in zip(abs_bc6[:,0],abs_bc3[:,1]):
+for el, side in zip(bnd_el[2][:,0],bnd_el[2][:,1]):
     el_node = hx_node[int(el)-1,:]
     if   side == 1: q_node = el_node[[0,1,5,4]]; 
     elif side == 2: q_node = el_node[[1,2,6,5]]; 
@@ -566,7 +587,7 @@ grp = grp_reg.create_group('Bottom_sidesets')
 grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
 
 ss = np.empty((0,5), dtype=np.int32)
-for el, side in zip(abs_bc6[:,0],abs_bc4[:,1]):
+for el, side in zip(bnd_el[3][:,0],bnd_el[3][:,1]):
     el_node = hx_node[int(el)-1,:]
     if   side == 1: q_node = el_node[[0,1,5,4]]; 
     elif side == 2: q_node = el_node[[1,2,6,5]]; 
@@ -579,7 +600,7 @@ grp = grp_reg.create_group('West_sidesets')
 grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
 
 ss = np.empty((0,5), dtype=np.int32)
-for el, side in zip(abs_bc6[:,0],abs_bc5[:,1]):
+for el, side in zip(bnd_el[4][:,0],bnd_el[4][:,1]):
     el_node = hx_node[int(el)-1,:]
     if   side == 1: q_node = el_node[[0,1,5,4]]; 
     elif side == 2: q_node = el_node[[1,2,6,5]]; 
@@ -592,7 +613,7 @@ grp = grp_reg.create_group('South_sidesets')
 grp.create_dataset('Vertex Ids', data=ss, dtype=np.int32)
 
 ss = np.empty((0,5), dtype=np.int32)
-for el, side in zip(abs_bc6[:,0],abs_bc6[:,1]):
+for el, side in zip(bnd_el[5][:,0],bnd_el[5][:,1]):
     el_node = hx_node[int(el)-1,:]
     if   side == 1: q_node = el_node[[0,1,5,4]]; 
     elif side == 2: q_node = el_node[[1,2,6,5]]; 
