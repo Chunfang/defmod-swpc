@@ -84,4 +84,4 @@ m_wsac.o    : m_wsac.F90 m_daytim.F90 m_std.o
 	$(FC) $(FFLAGS) -o $@ $^ 
 
 clean:
-	/bin/rm -f *.o *.mod *~ ../../bin/read_snp.x ../../bin/diff_snp.x ../../bin/mapregion.x ../../bin/fdmcond.x ../../bin/qmodel_tau.x ../../bin/grdsnp.x ../../bin/gen_rmed2d.x ../../bin/gen_rmed3d.x ../../bin/ll2xy.x ../../bin/xy2ll.x
+	/bin/rm -f *.o *.mod *~ ../../bin/read_snp.x ../../bin/diff_snp.x ../../bin/mapregion.x ../../bin/fdmcond.x ../../bin/qmodel_tau.x ../../bin/grdsnp.x ../../bin/gen_rmed2d.x ../../bin/gen_rmed3d.x ../../bin/ll2xy.x ../../bin/xy2ll.x ../../bin/wav2sac.x
