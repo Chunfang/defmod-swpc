@@ -3,7 +3,7 @@
 !! terminal/logfile report
 !!
 !! @copyright
-!!   Copyright 2013-2017 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2018 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"
@@ -74,8 +74,8 @@ contains
         write(STDERR,'(3A,I0,A,I0,A,I0)') "  SWPC_3D (FE rupture) ",trim(name_fe),": event ",eid," pixel ",np_rup," nframe ",nt_rup 
       else
         write(STDERR,'(A)') "  SWPC_3D                                                                     "
-       end if
-       write(STDERR,'(A)') " ------------------------------------------------------------------------------"
+      end if
+      write(STDERR,'(A)') " ------------------------------------------------------------------------------"
 
     end if
 
@@ -101,7 +101,7 @@ contains
       write(STDERR,'(A)') " ------------------------------------------------------------------------------"
       write(STDERR,*)
 
-      if( r < 5 .and. have_ps  ) then
+      if (r < 5 .and. have_ps) then
         call info( 'wavelength condition is violated! ' )
         call info( 'use smaller grid and/or decrease maximum frequency' )
       end if

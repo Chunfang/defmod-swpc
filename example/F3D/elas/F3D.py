@@ -9,9 +9,9 @@ explicit = False
 implicit = False
 fault = True 
 # One and only one of aboves must be True
-poro = True 
+poro = False 
 visc = False
-grad_BC = False 
+grad_BC = True 
 dim = 3
 if explicit: 
     t = 7.5; dt = 0.001; nviz = 25; dsp=0
@@ -26,8 +26,8 @@ if explicit:
 elif fault: 
     # dsp_str=1 output fault stress; bod_frc=1 body force; hyb=1 engage hybrid
     t = 30*24*3600.; dt = 24*3600.; nviz=1
-    t_dyn=0.1; dt_dyn=0.002; t_lim=6.; dsp=1; dsp_hyb=0; dsp_str=1; rsf=0
-    bod_frc=0; hyb=1; nviz_dyn=20; nviz_wave=1; nviz_slip=1; init=0
+    t_dyn=0.1; dt_dyn=0.002; t_lim=4.; dsp=1; dsp_hyb=1; dsp_str=1; rsf=0
+    bod_frc=1; hyb=1; nviz_dyn=20; nviz_wave=8; nviz_slip=8; init=0
     alpha=0.; beta=0.0025; rfrac=0
     if  poro and visc:
         line1 = ["fault-pv hex 51"]
@@ -94,12 +94,12 @@ for i in nc.variables['eb_prop1'][:]:
 print '%d nodes, %d elements' %(nnd, len(hx_node))
 
 # Observation locations 
-ogrid = np.array([[-0.0, 0., 0.],
-                  [-0.5, 0., 0.],
-                  [-1.0, 0., 0.],
-                  [-1.5, 0., 0.],
-                  [-2.0, 0., 0.],
-                  [-2.5, 0., 0.]])
+ogrid = np.array([[-0.0, 0., -3.],
+                  [-0.5, 0., -3.],
+                  [-1.0, 0., -3.],
+                  [-1.5, 0., -3.],
+                  [-2.0, 0., -3.],
+                  [-2.5, 0., -3.]])
 
 # boundary data
 bnd_el = []
@@ -151,38 +151,39 @@ bcz_nodes = nc.variables['node_ns5'][:]
 
 for node in bcx_nodes:
     bc_typ[node - 1, 0] = 0
-    bc_typ[node - 1,3] = 2 
+    if poro: bc_typ[node - 1,3] = 2 
 for node in bcy_nodes:
     bc_typ[node - 1, 1] = 0   
-    bc_typ[node - 1,3] = 2 
+    if poro: bc_typ[node - 1,3] = 2 
 for node in bcz_nodes:
     bc_typ[node - 1, 2] = 0
-    bc_typ[node - 1,3] = 2 
+    if poro: bc_typ[node - 1,3] = 2 
 bcx_nodes = nc.variables['node_ns6'][:] 
 bcy_nodes = nc.variables['node_ns7'][:]
 bcz_nodes = nc.variables['node_ns8'][:]
-for node in bcx_nodes:
-    bc_typ[node - 1,3] = 2 
-for node in bcy_nodes:
-    bc_typ[node - 1,3] = 2
-for node in bcz_nodes:
-    bc_typ[node - 1,3] = 2
+if poro:
+    for node in bcx_nodes:
+        bc_typ[node - 1,3] = 2 
+    for node in bcy_nodes:
+        bc_typ[node - 1,3] = 2
+    for node in bcz_nodes:
+        bc_typ[node - 1,3] = 2
 
 # fix all side walls when have gravity
 if grad_BC:
-    bcx_nodes = nc.variables['node_ns6'][:]
-    bcy_nodes = nc.variables['node_ns7'][:]
-    for node in bcx_nodes:
-        bc_typ[node - 1, 0] = 0
+    #bcx_nodes = nc.variables['node_ns6'][:]
+    #for node in bcx_nodes:
+    #    bc_typ[node - 1, 0] = 0
+    #bcy_nodes = nc.variables['node_ns7'][:]
     for node in bcy_nodes:
         bc_typ[node - 1, 1] = 0
 #--------------gradient traction BC------------
-dep = 0.; rho = np.array(mat)[0,4]; g = 9.80665
+dep = -1.; rho = np.array(mat)[0,4]; g = 9.80665
 # Horizontal vertical stress ratio
-#Kx = 0.748; Ky=0.795
-Kx = 0.; Ky=0.
+Kx = 2*nu # 0.748
+Ky = 2*nu #0.795
 #--------------uniform BC----------------------
-trac_val = [1E6, 1E6, -1E6] 
+trac_val = [1E3, 1E3, -1E3] 
 #----------------------------------------------
 if poro:
     trac_bc1 = np.zeros(shape=[len(trac_el1), 6])
@@ -194,7 +195,7 @@ else:
     trac_bc3 = np.zeros(shape=[len(trac_el3), 5])
 if grad_BC:
     # uniform vertical traction on the top
-    trac_bc3[:,2] = -dep*1E3*rho*g;  
+    trac_bc3[:,2] = 0.05*dep*1E3*rho*g;  
     # gradient traction on the sides
     for el, side, i in zip(nc.variables['elem_ss6'][:], nc.variables['side_ss6'][:], range(len(trac_bc1))):
         el_node = hx_node[el-1,:] 
@@ -206,7 +207,8 @@ if grad_BC:
         elif side == 6: q_node = el_node[[4,5,6,7]]; 
         qcoord = coord[q_node-1,:]
         zcnt = np.mean(qcoord,0)[2]
-        trac_bc1[i,0]=Kx*g*1E3*(dep-zcnt)*rho
+        trac_bc1[i,0] = -Kx*g*1E3*zcnt*rho
+        #trac_bc1[i,0] = -dep*1E3*rho*g
     for el, side, i in zip(nc.variables['elem_ss7'][:], nc.variables['side_ss7'][:], range(len(trac_bc2))):
         el_node = hx_node[el-1,:]
         if   side == 1: q_node = el_node[[0,1,5,4]]; 
@@ -217,13 +219,36 @@ if grad_BC:
         elif side == 6: q_node = el_node[[4,5,6,7]];
         qcoord = coord[q_node-1,:]
         zcnt = np.mean(qcoord,0)[2]
-        trac_bc2[i,1]=Ky*g*1E3*(dep-zcnt)*rho
+        #trac_bc2[i,1] = -Ky*g*1E3*zcnt*rho
+        trac_bc2[i,1] = -.1*dep*1E3*rho*g
     if poro:
-        trac_bc3[:,2] = trac_val[2]; trac_bc3[:,4] = 0.; trac_bc3[:,5] = t
+        #trac_bc3[:,2] = trac_val[2]; 
+        #trac_bc1[:,4] = .5*dt; trac_bc1[:,5] = .5*dt
+        trac_bc3[:,4] = .5*dt; trac_bc3[:,5] = t 
+        trac_bc1[:,4] = 0.; trac_bc1[:,5] = 0. 
+        #trac_bc3[:,4] = 0.; trac_bc3[:,5] = t/4.
     else:
-        trac_bc3[:,2] = trac_val[2]; trac_bc3[:,3] = 0.; trac_bc3[:,4] = t
-    trac_el = np.vstack((trac_el3))
-    trac_bc = np.vstack((trac_bc3))
+        #trac_bc3[:,2] = trac_val[2]; 
+        #trac_bc1[:,3] = .5*dt; trac_bc1[:,4] = .5*dt
+        trac_bc3[:,3] = .5*dt; trac_bc3[:,4] = t
+        trac_bc1[:,3] = 0.; trac_bc1[:,4] = 0. 
+        #trac_bc3[:,3] = 0.; trac_bc3[:,4] = t/4. 
+    #trac_el = np.vstack((trac_el1,trac_el2,trac_el3))
+    #trac_bc = np.vstack((trac_bc1,trac_bc2,trac_bc3))
+    trac_el = np.vstack((trac_el1,trac_el3))
+    trac_bc = np.vstack((trac_bc1,trac_bc3))
+
+    # Add initial isotropic stress 
+    #trac_bc1[:,0] = trac_val[0]
+    trac_bc3[:,2] = dep*1E3*rho*g
+    if poro:
+        #trac_bc1[:,4] = 0.; trac_bc1[:,5] = 0. 
+        trac_bc3[:,4] = 0.; trac_bc3[:,5] = 0.
+    else:
+        #trac_bc1[:,3] = 0.; trac_bc1[:,4] = 0. 
+        trac_bc3[:,3] = 0.; trac_bc3[:,4] = 0.
+    trac_el = np.vstack((trac_el,trac_el3))
+    trac_bc = np.vstack((trac_bc,trac_bc3))
 else:
     if explicit: trac_val = [0., 0., 0.]
     if poro:
@@ -337,7 +362,7 @@ for node_pos, node_neg, i in zip(ft_pos_nodes, ft_neg_nodes,\
             #st_init[j,:]=[0., 2.745E7, -5E7]
             frc[j] = 1 
         else:
-            perm[j] = 0 
+            perm[j] = 1 
             #st_init[j,:]=[0., 2.325E7 , -5E7]
             frc[j] = 1 
         j = j+1

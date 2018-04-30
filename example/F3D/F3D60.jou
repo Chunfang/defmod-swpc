@@ -1,0 +1,64 @@
+${Units('si')}
+undo off
+reset
+Set Duplicate Block Elements on
+# Block is 6 km x 6 km x 4 km
+brick x 6. y 6. z 4.
+volume 1 move x 0 y 0 z -2.
+create planar surface with plane xplane offset 0. spin y 30. move x 1.
+Webcut volume all with plane surface 7 
+webcut volume all with plane zplane offset -1
+webcut volume all with plane zplane offset -3
+webcut volume all with plane yplane offset -2
+webcut volume all with plane yplane offset  2 
+delete body 2 5 8 11 14 17 20 23 26 
+unite body 1 3 10 12 19 21
+unite body 7 9 16 18 25 27
+unite body 22 24
+unite body 4  6
+imprint all
+merge all
+
+# mesh domain
+volume all size .1
+Mesh surface 151 
+mesh volume 4 13 15 22
+Mesh Volume 1 7 
+volume all move x 0 y 0 z -1
+
+#{beta=3.0}
+#{loop(5)}
+volume all smooth scheme condition number beta {beta} cpu 10
+smooth volume all
+#{beta=beta-0.2}
+#{endloop}
+
+# fault face
+unmerge surface 151
+nodeset 1 surface 165 
+nodeset 2 surface 151
+sideset 1 surface 165
+sideset 2 surface 151
+
+# Domain boundaries
+nodeset 3 surface 66 88 108 153 157 # East 
+nodeset 4 surface 20 41 49 # North 
+nodeset 5 surface 107 # Bottom 
+sideset 3 surface 66 88 108 153 157
+sideset 4 surface 20 41 49
+sideset 5 surface 107 
+nodeset 6 surface 76 98 122 163 171 # West 
+nodeset 7 surface 22 43 47 # South 
+nodeset 8 surface 63 # Top 
+sideset 6 surface 76 98 122 163 171
+sideset 7 surface 22 43 47
+sideset 8 surface 63 
+
+group "mat_top" add hex in volume 1 
+group "mat_mid" add hex in volume 4 13 15 22 
+group "mat_bot" add hex in volume 7 
+block 1 group mat_top
+block 2 group mat_mid
+block 3 group mat_bot
+export mesh "./F3D60.exo" dimension 3 overwrite
+quit

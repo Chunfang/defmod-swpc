@@ -1,4 +1,11 @@
-! Overwrite the FD velocity with FE velocity 
+!! ----------------------------------------------------------------------------------------------------------------------------- !!
+!>
+!!  Overwrite the FD velocity with FE velocity 
+!!
+!! @copyright
+!!   Copyright 2013-2018 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
+!<
+!! ----
 module m_vmodel_fe
   
   !! dependency

@@ -170,9 +170,9 @@ contains
     integer :: enodes(4),side,snodes(2),j(2)
     real(8) :: ecoords(4,2),area
     if (side==1) then; j(1)=1; j(2)=2
-    else if (side==2) then; j(1)=2; j(2)=3;
-    else if (side==3) then; j(1)=3; j(2)=4;
-    else if (side==4) then; j(1)=4; j(2)=1;
+    else if (side==2) then; j(1)=2; j(2)=3
+    else if (side==3) then; j(1)=3; j(2)=4
+    else if (side==4) then; j(1)=4; j(2)=1
     end if
     snodes=enodes(j)
     area=sqrt((ecoords(j(1),1)-ecoords(j(2),1))**2+                            &

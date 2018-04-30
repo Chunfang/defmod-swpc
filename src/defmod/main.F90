@@ -154,8 +154,11 @@ program main
      if (npart(i)==rank) j=j+1
   end do
   call MPI_AllGather(j,1,MPI_Integer,work,1,MPI_Integer,MPI_Comm_World,ierr)
-  if (rank==0) n=1
-  if (rank/=0) n=sum(work(0:rank-1))+1
+  if (rank==0) then
+     n=1
+  else
+     n=sum(work(0:rank-1))+1
+  end if
   do i=1,nnds
      if (npart(i)==rank) then
         nmap(i)=n; n=n+1
@@ -329,7 +332,7 @@ program main
         call MatDiagonalSet(Mat_Minv,Vec_U,Insert_Values,ierr)
         call VecZeroEntries(Vec_U,ierr)
      end if
-     if (stype/="alpha") call MatScale(Mat_M,alpha,ierr)
+     if (stype/="alpha") call MatScale(Mat_M,alpha,ierr) ! M -> alpha x M
   end if
 
   ! Allocate arrays to store loading history
@@ -1867,8 +1870,9 @@ program main
                       j1=nint(cval(i,2)/dt); j2=nint(cval(i,3)/dt)
                       if (tstep>=j1 .and. tstep<=j2) then
                          val=cval(i,1)
-                         ! Use a decaying function instead of boxcar ...
-                         !if (j2>j1) val=val*(dble(j2-tstep)/dble(j2-j1))**2.5
+!                        ! Use a decaying function instead of boxcar, e.g., ...
+!                        if (j2>j1) val=3.5d0*val*(dble(j2-tstep)/dble(j2-j1)) &
+!                           **2.5d0
                          call VecSetValue(Vec_I,i-1,val,Insert_Values,ierr)
                       end if
                    end do
