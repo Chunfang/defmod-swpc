@@ -1245,12 +1245,7 @@ program main
                  ! Should be analyzed to see if any initial slip 
                  call WriteOutput_init
               end if
-              ! Remove hydrostatic pressure gradient from Vec_Um 
-              if (fvin<3) then
-                 call FVReset
-              else 
-                 call FVResetUsg
-              end if
+              call FVReset ! Remove hydrostatic pressure gradient from Vec_Um 
               ! Single phase FV model 
               if (fvin==1) call FVReformKPerm(f0,ef_eldof) 
               if (fvin==3) call FVReformKPermUsg(f0,ef_eldof)
@@ -1544,8 +1539,9 @@ program main
               ! Determine if the fault shall fail
               call GetSlip_sta
               rslip=real(sum(slip))/real(size(slip))
-              if (rank==0) print'(F0.2,A)',rslip*100.0,"% fault critical."
-              if (rslip>f0) then ! Failure threshold
+              if (rank==0) print'(F0.2,A,I0,A)',rslip*100.0,"% (",sum(slip),   &
+                 ") fault nodes critical."
+              if (rslip>f0 .and. sum(slip)>=1) then ! Failure threshold 
                  dyn=.true. 
               end if
            end if

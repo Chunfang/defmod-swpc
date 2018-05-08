@@ -20,14 +20,13 @@ module fvfe
 
   !! Public routines
   public :: MakeEl2g
+  public :: FVReset
   public :: FVInit
   public :: FVInitUsg
   public :: FVReformKF
   public :: FVReformKFUsg
   public :: FVReformKPerm
   public :: FVReformKPermUsg
-  public :: FVReset
-  public :: FVResetUsg
   public :: FVSyncBD
   public :: FVSyncBDUsg
  
@@ -38,7 +37,7 @@ module fvfe
   real(8) :: xmin,ymin,zmin,dx,dy,dz,r_perm(3),p_top,dt_fv ! Local FV/FE vars 
   integer, allocatable :: el2g(:),bdnd(:) ! Boundary nodes
   !! Pressure and time
-  real(8), allocatable :: p_fv0(:),p_fv_sta(:),p_fv_bd(:,:),t_fv(:),t_fe(:) 
+  real(8), allocatable :: p_fv0(:),p_fv_bd(:,:),t_fv(:),t_fe(:) 
 
 contains
 
@@ -53,10 +52,13 @@ contains
 
   subroutine FVInit ! Read <model>_fvfe.cfg and <model>.h5 files
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h" 
+#endif
     character(256) :: name,name0,name1,namegrp,namedat
-    integer :: i,iv,nbd,it,nt_fv,nx,ny,nz,idfile,err,idgrp,iddat,spc_dat,      &
+    integer :: i,row,iv,nbd,it,nt_fv,nx,ny,nz,idfile,err,idgrp,iddat,spc_dat,  &
        spc_dom,lnnds,ix,iy,iz
-    real(8) :: xref,yref,zref,xmax,ymax,zmax
+    real(8) :: xref,yref,zref,xmax,ymax,zmax,p_hst
     real(8),allocatable :: p_dom(:,:,:)
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
@@ -90,8 +92,7 @@ contains
     end if
     lnnds=size(coords,1)
     nbd=size(pack(bc(:,dmn+1),bc(:,dmn+1)==2))
-    allocate(t_fv(nt_fv),t_fe(nt_fv),p_fv0(lnnds),bdnd(nbd),p_fv_bd(nt_fv,nbd),&
-       p_fv_sta(lnnds))
+    allocate(t_fv(nt_fv),t_fe(nt_fv),p_fv0(lnnds),bdnd(nbd),p_fv_bd(nt_fv,nbd))
     allocate(p_dom(dim_dom(1),dim_dom(2),dim_dom(3))) 
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
@@ -106,12 +107,21 @@ contains
     call h5dread_f(iddat,h5t_native_double,p_dom,dim_dom,err,spc_dom,spc_dat)
     call h5dclose_f(iddat,err) 
     call h5gclose_f(idgrp,err)
+    ! Form hydrostatic pressure
+    call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecDuplicate(Vec_Up,Vec_Up_hst,ierr)
+    call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecZeroEntries(Vec_Up_hst,ierr)
     do iv=1,lnnds
        ix=int((coords(iv,1)-xmin)/dx)+1 
        iy=int((coords(iv,2)-ymin)/dy)+1
        iz=int((coords(iv,3)-zmin)/dz)+1
-       p_fv_sta(iv)=p_dom(iz,iy,ix)
+       p_hst=p_dom(iz,iy,ix)
+       row=nl2g(i,2)-1
+       call VecSetValue(Vec_Up_hst,row,-(p_hst-p_top)/scale,Insert_Values,ierr)
     end do
+    call VecAssemblyBegin(Vec_Up_hst,ierr)
+    call VecAssemblyEnd(Vec_Up_hst,ierr) 
     ! Sampling pressure from FV
     do it=1,nt_fv
        t_fv(it)=dble(stp0+it-1)*dt_fv
@@ -148,6 +158,9 @@ contains
 
   subroutine FVInitUsg
     implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h" 
+#endif
     character(256) :: name,name0,name1,namegrp,namedat
     integer :: i,j,row,nt_fv,idfile,idgrp,iddat,err,spc_dat,spc_cell,nbd
     integer(hsize_t) :: off(1),dim_cell(1)
@@ -169,10 +182,10 @@ contains
     t_fe=t_fe-t_fe(1)
     ! Form hydrostatic pressure
     call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
-    call VecDuplicate(Vec_Up,Vec_Up_sta,ierr)
+    call VecDuplicate(Vec_Up,Vec_Up_hst,ierr)
     call VecDuplicate(Vec_Up,Vec_Cp0,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
-    call VecZeroEntries(Vec_Up_sta,ierr)
+    call VecZeroEntries(Vec_Up_hst,ierr)
     call VecZeroEntries(Vec_Cp0,ierr)
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
@@ -197,7 +210,7 @@ contains
        do j=1,npel
           row=nl2g(nodes(i,j),2)-1
           call VecSetValue(Vec_Cp0,row,cp,Add_Values,ierr)
-          call VecSetValue(Vec_Up_sta,row,-cp*(p_cell-p_top)/scale,Add_Values, &
+          call VecSetValue(Vec_Up_hst,row,-cp*(p_cell-p_top)/scale,Add_Values, &
              ierr)
        end do
     end do
@@ -207,10 +220,10 @@ contains
     call h5close_f(err) 
     call VecAssemblyBegin(Vec_Cp0,ierr)
     call VecAssemblyEnd(Vec_Cp0,ierr)
-    call VecAssemblyBegin(Vec_Up_sta,ierr)
-    call VecAssemblyEnd(Vec_Up_sta,ierr)
+    call VecAssemblyBegin(Vec_Up_hst,ierr)
+    call VecAssemblyEnd(Vec_Up_hst,ierr)
     ! Take cell-wise average
-    call VecPointwiseDivide(Vec_Up_sta,Vec_Up_sta,Vec_Cp0,ierr)
+    call VecPointwiseDivide(Vec_Up_hst,Vec_Up_hst,Vec_Cp0,ierr)
     nbd=size(pack(bc(:,dmn+1),bc(:,dmn+1)==2))
     allocate(bdnd(nbd))
     j=1
@@ -232,7 +245,9 @@ contains
     call MatZeroEntries(Mat_K,ierr)
     call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
     call VecDuplicate(Vec_Up,Vec_Cp,ierr)
+    call VecDuplicate(Vec_Up,Vec_Up_fv,ierr)
     call VecZeroEntries(Vec_Cp,ierr)
+    call VecZeroEntries(Vec_Up_fv,ierr)
     do i=1,nels 
        call FormLocalK(i,k,indx,"Kp") 
        indx=indxmap(indx,2)
@@ -244,6 +259,8 @@ contains
           call VecSetValue(Vec_Cp,row,k(j2,j2),Add_Values,ierr)
           call VecSetValue(Vec_Up,row,p_fv0(nodes(i,j))/scale,Insert_Values,   &
              ierr)
+          call VecSetValue(Vec_Up_fv,row,p_fv0(nodes(i,j))/scale,Insert_Values,&
+             ierr)
        end do
     end do
     ! Account for constraint eqn's
@@ -252,11 +269,18 @@ contains
     call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
     call VecAssemblyBegin(Vec_Cp,ierr)
     call VecAssemblyEnd(Vec_Cp,ierr)
+    call VecAssemblyBegin(Vec_Up_fv,ierr)
+    call VecAssemblyEnd(Vec_Up_fv,ierr)
     call VecAssemblyBegin(Vec_Up,ierr)
     call VecAssemblyEnd(Vec_Up,ierr)
     ! Rescale RHS by pressure coefficient
     call VecPointwiseMult(Vec_up,Vec_Up,Vec_Cp,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    ! Add FV pressure contribution to nodal force
+    call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
+    call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
+    call VecAXPY(Vec_Uu,-f1,Vec_fp,ierr)
+    call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)
     deallocate(p_fv0)
   end subroutine FVReformKF
 
@@ -272,7 +296,9 @@ contains
     call MatZeroEntries(Mat_K,ierr)
     call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
     call VecDuplicate(Vec_Up,Vec_Cp,ierr)
+    call VecDuplicate(Vec_Up,Vec_Up_fv,ierr)
     call VecZeroEntries(Vec_Cp,ierr)
+    call VecZeroEntries(Vec_Up_fv,ierr)
     ! Initial pressure
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
@@ -302,6 +328,7 @@ contains
           row=nl2g(nodes(i,j),2)-1
           call VecSetValue(Vec_Cp,row,k(j2,j2),Add_Values,ierr)
           call VecSetValue(Vec_Up,row,cp*p_cell/scale,Add_Values,ierr)
+          call VecSetValue(Vec_Up_fv,row,cp*p_cell/scale,Add_Values,ierr)
        end do
     end do
     call h5dclose_f(iddat,err) 
@@ -316,18 +343,26 @@ contains
     call VecAssemblyEnd(Vec_Cp,ierr)
     call VecAssemblyBegin(Vec_Up,ierr)
     call VecAssemblyEnd(Vec_Up,ierr)
+    call VecAssemblyBegin(Vec_Up_fv,ierr)
+    call VecAssemblyEnd(Vec_Up_fv,ierr)
     ! Average by weight
-    call VecPointwiseDivide(Vec_up,Vec_Up,Vec_Cp0,ierr)
+    call VecPointwiseDivide(Vec_Up,Vec_Up,Vec_Cp0,ierr)
+    call VecPointwiseDivide(Vec_Up_fv,Vec_Up_fv,Vec_Cp0,ierr)
     ! Rescale RHS by pressure coefficient
     call VecPointwiseMult(Vec_up,Vec_Up,Vec_Cp,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    ! Add FV pressure contribution to nodal force
+    call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
+    call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
+    call VecAXPY(Vec_Uu,-f1,Vec_fp,ierr)
+    call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)
   end subroutine FVReformKFUsg 
 
   subroutine FVReformKPerm(t_sync,ef_eldof)
+    implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h" 
 #endif
-    implicit none
     character(256) :: namegrp,namedat
     integer :: it,i,j,j2,ix,iy,iz,row,ef_eldof,idfile,err,idgrp,iddat,spc_dat, &
        spc_dom
@@ -409,10 +444,10 @@ contains
   end subroutine FVReformKPerm
 
   subroutine FVReformKPermUsg(t_sync,ef_eldof)
+    implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h" 
 #endif
-    implicit none
     character(256) :: namegrp,namedat
     integer :: it,i,j,j2,row,ef_eldof,idfile,err,idgrp1,idgrp2,iddat1,iddat2,  &
         spc_dat1,spc_dat2,spc_cell
@@ -496,31 +531,15 @@ contains
 
   ! Remove hydrostatic pressure gradient
   subroutine FVReset
+    implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h" 
 #endif
-    implicit none
-    integer :: i,row
-    do i=1,size(coords,1)
-       row=i*(dmn+1)
-       row=indxmap(row,2)
-       call VecSetValue(Vec_Um,row,-(p_fv_sta(i)-p_top)/scale,Add_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_Um,ierr)
-    call VecAssemblyEnd(Vec_Um,ierr)
-    deallocate(p_fv_sta)
-  end subroutine FVReset
-
-  subroutine FVResetUsg
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
-#include "petsc.h" 
-#endif
-    implicit none
     call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-    call VecAXPY(Vec_Up,f1,Vec_Up_sta,ierr)
+    call VecAXPY(Vec_Up,f1,Vec_Up_hst,ierr)
     call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-    call VecDestroy(Vec_Up_sta,ierr)
-  end subroutine FVResetUsg
+    call VecDestroy(Vec_Up_hst,ierr)
+  end subroutine FVReset
 
   ! Impose boundary pore pressure via RHS
   subroutine FVSyncBD(t_sync)  
@@ -530,6 +549,7 @@ contains
 #endif
     integer :: i,it,row
     real(8) :: t_sync,wfv,pfv
+    call VecZeroEntries(Vec_Up_fv,ierr)
     do it=1,size(t_fe)-1
        if (t_sync>=t_fe(it) .and. t_sync<t_fe(it+1)) then 
           wfv=(t_sync-t_fe(it))/(t_fe(it+1)-t_fe(it)) 
@@ -537,14 +557,23 @@ contains
              pfv=(p_fv_bd(it,i)*(f1-wfv)+p_fv_bd(it+1,i)*wfv)/scale
              row=indxmap(bdnd(i)*(dmn+1),2)
              call VecSetValue(Vec_F,row,pfv,Insert_Values,ierr)
+             row=nl2g(bdnd(i),2)-1
+             call VecSetValue(Vec_Up_fv,row,pfv,Insert_Values,ierr)
           end do
        end if
     end do
     call VecAssemblyBegin(Vec_F,ierr)
     call VecAssemblyEnd(Vec_F,ierr)
+    call VecAssemblyBegin(Vec_Up_fv,ierr)
+    call VecAssemblyEnd(Vec_Up_fv,ierr)
     call VecGetSubVector(Vec_F,RI,Vec_Up,ierr) 
     call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr) 
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    ! Add FV pressure contribution to nodal force
+    call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
+    call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
+    call VecAXPY(Vec_Uu,-f1,Vec_fp,ierr)
+    call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)  
   end subroutine FVSyncBD 
 
   subroutine FVSyncBDUsg(t_sync)
@@ -569,6 +598,7 @@ contains
     call VecAssemblyEnd(Vec_Up,ierr)
     call VecAssemblyBegin(Vec_Cp0,ierr)
     call VecAssemblyEnd(Vec_Cp0,ierr)
+    call VecZeroEntries(Vec_Up_fv,ierr)
     ! Read pressure
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
@@ -605,6 +635,7 @@ contains
           if (bc(nodes(i,j),dmn+1)==2) then 
              row=nl2g(nodes(i,j),2)-1 
              call VecSetValue(Vec_Up,row,cp*pfv1/scale,Add_Values,ierr) 
+             call VecSetValue(Vec_Up_fv,row,cp*pfv1/scale,Add_Values,ierr)
              call VecSetValue(Vec_Cp0,row,cp,Add_Values,ierr)
           end if
        end do 
@@ -617,11 +648,19 @@ contains
     call h5close_f(err)
     call VecAssemblyBegin(Vec_Up,ierr)
     call VecAssemblyEnd(Vec_Up,ierr)
+    call VecAssemblyBegin(Vec_Up_fv,ierr)
+    call VecAssemblyEnd(Vec_Up_fv,ierr)
     call VecAssemblyBegin(Vec_Cp0,ierr)
     call VecAssemblyEnd(Vec_Cp0,ierr)
     call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr) 
     call VecPointwiseDivide(Vec_Up,Vec_Up,Vec_Cp0,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecPointwiseDivide(Vec_Up_fv,Vec_Up_fv,Vec_Cp0,ierr)
+    ! Add FV pressure contribution to nodal force
+    call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
+    call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
+    call VecAXPY(Vec_Uu,-f1,Vec_fp,ierr)
+    call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)
   end subroutine FVSyncBDUsg 
 
 end module fvfe 
