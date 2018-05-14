@@ -43,10 +43,10 @@ contains
 
   ! Local to original element map
   subroutine MakeEl2g
-    integer :: el 
+    integer :: i 
     allocate(el2g(nels))
-    do el=1,size(emap,1)  
-       if(emap(el)/=0) el2g(emap(el))=el 
+    do i=1,size(emap,1)  
+       if(emap(i)/=0) el2g(emap(i))=i 
     end do
   end subroutine MakeEl2g
 
@@ -402,13 +402,14 @@ contains
     call MatZeroEntries(Mat_Kc,ierr)
     call VecZeroEntries(Vec_Cp,ierr)
     do i=1,nels
-       enodes=nodes(el,:)
+       enodes=nodes(i,:)
        ecoords=coords(enodes,:)
        ix=int((sum(ecoords(:,1))/dble(size(ecoords,1))-xmin)/dx)+1
        iy=int((sum(ecoords(:,2))/dble(size(ecoords,1))-ymin)/dy)+1
        iz=int((sum(ecoords(:,3))/dble(size(ecoords,1))-zmin)/dz)+1
        m_perm=f0
        do j=1,dmn ! Tensor valued permeability
+          !m_perm(j,j)=mat(id(i),6) ! Original permeability
           m_perm(j,j)=perm1(iz,iy,ix)*r_perm(j) ! HDF5 reverse order
        end do
        call FormLocalKPerm(i,k,indx,m_perm,"Kp") 
