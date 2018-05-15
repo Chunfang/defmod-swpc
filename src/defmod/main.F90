@@ -1481,6 +1481,11 @@ program main
            end if
            ! Extract nodal force by p
            if (poro) then
+              ! Reset tot_uu at step 1
+              if (tstep==1 .and. fvin>0) then
+                 tot_uu=f0 
+                 if (nobs_loc>0) tot_uu_obs=f0
+              end if
               if (vout==1) then
                  ! Extract force by p
                  call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
@@ -1509,7 +1514,6 @@ program main
                  ! Write output
                  if (mod(tstep,frq)==0) call WriteOutput_x
               end if
-              !if (rank==0 .and. nobs>0) call WriteOutput_obs
               if (nobs_loc>0) call WriteOutput_obs
            else
               if (vout==1) then
@@ -1527,7 +1531,6 @@ program main
                  ! Write output
                  if (mod(tstep,frq)==0) call WriteOutput_x
               end if
-              !if (rank==0 .and. nobs>0) call WriteOutput_obs
               if (nobs_loc>0) call WriteOutput_obs
            end if
 

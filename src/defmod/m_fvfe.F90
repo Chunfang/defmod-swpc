@@ -410,7 +410,7 @@ contains
        m_perm=f0
        do j=1,dmn ! Tensor valued permeability
           !m_perm(j,j)=mat(id(i),6) ! Original permeability
-          m_perm(j,j)=perm1(iz,iy,ix)*r_perm(j) ! HDF5 reverse order
+          m_perm(j,j)=perm1(iz,iy,ix)*r_perm(j) ! FV perm, reverse order
        end do
        call FormLocalKPerm(i,k,indx,m_perm,"Kp") 
        indx=indxmap(indx,2)

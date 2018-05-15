@@ -666,8 +666,8 @@ contains
           do j=1,nfnd_loc
              j3=FltMap(j,2)
              select case(dmn)
-                case(2); write(10,'(2(F0.3,X),I0)')xfnd(j3,:),j3
-                case(3); write(10,'(3(F0.3,X),I0)')xfnd(j3,:),j3
+                case(2); write(10,'(2(F0.6,X),I0)')xfnd(j3,:),j3
+                case(3); write(10,'(3(F0.6,X),I0)')xfnd(j3,:),j3
              end select
           end do
        else
@@ -1981,7 +1981,7 @@ contains
     write(10,'(A)')"ASCII"
     write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
     write(10,'(A,I0,A)')"POINTS ",lnnds," double"
-    fmt="(3(F0.3,1X))"
+    fmt="(3(F0.6,1X))"
     select case(dmn)
     case(2)
        do i=1,lnnds
@@ -2061,7 +2061,7 @@ contains
     write(10,'(A)')"ASCII"
     write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
     write(10,'(A,I0,A)')"POINTS ",lnnds," double"
-    fmt="(3(F0.3,1X))"
+    fmt="(3(F0.6,1X))"
     select case(dmn)
     case(2)
        do i=1,lnnds
@@ -2241,7 +2241,7 @@ contains
     write(10,'(A)')"ASCII"
     write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
     write(10,'(A,I0,A)')"POINTS ",lnnds," double"
-    fmt="(3(F0.3,1X))"
+    fmt="(3(F0.6,1X))"
     select case(dmn)
     case(2)
        do i=1,lnnds
@@ -2344,7 +2344,7 @@ contains
     write(10,'(A)')"ASCII"
     write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
     write(10,'(A,I0,A)')"POINTS ",lnnds," double"
-    fmt="(3(F0.3,1X))"
+    fmt="(3(F0.6,1X))"
     select case(dmn)
     case(2)
        do i=1,lnnds
@@ -2446,8 +2446,8 @@ contains
     if (j==0) then
        open(10,file=adjustl(name),status='replace')
        select case(dmn)
-       case(2); fmt="(2(F0.3,1X),I0)"
-       case(3); fmt="(3(F0.3,1X),I0)"
+       case(2); fmt="(2(F0.6,1X),I0)"
+       case(3); fmt="(3(F0.6,1X),I0)"
        end select
        write(10,"(I0)")nobs_loc
        do i=1,nobs_loc
@@ -2595,8 +2595,8 @@ contains
           do j1=1,nfnd_loc
              j3=FltMap(j1,2) 
              select case(dmn)
-                case(2); write(10,'(2(F0.3,X),I0)')xfnd(j3,:),j3
-                case(3); write(10,'(3(F0.3,X),I0)')xfnd(j3,:),j3
+                case(2); write(10,'(2(F0.6,X),I0)')xfnd(j3,:),j3
+                case(3); write(10,'(3(F0.6,X),I0)')xfnd(j3,:),j3
              end select
           end do
        else
@@ -2651,8 +2651,8 @@ contains
        do i=1,nfnd
           if (frc(i)>0) then
              select case(dmn)
-                case(2); write(10,'(2(F0.3,1X))')xfnd(i,:)
-                case(3); write(10,'(3(F0.3,1X))')xfnd(i,:)
+                case(2); write(10,'(2(F0.6,1X))')xfnd(i,:)
+                case(3); write(10,'(3(F0.6,1X))')xfnd(i,:)
              end select
           end if
        end do
