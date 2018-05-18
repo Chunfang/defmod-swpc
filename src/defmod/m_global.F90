@@ -23,7 +23,7 @@ module global
      t_hyb,v_bg,vtol,trunc
   integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
      worku(:),workl(:),node_pos(:),node_neg(:),slip(:),perm(:),onlst(:,:),     &
-     frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),          &
+     frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),gpl2g(:), &
      nnd_fe2fd(:)
   real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:),xfnd(:,:),     &
@@ -1568,7 +1568,7 @@ contains
     implicit none
     character(2) :: strng 
     integer :: neval,ob,el
-    integer,allocatable :: nd_full(:,:),gpl2g(:),pick(:)
+    integer,allocatable :: nd_full(:,:),pick(:)
     real(8) :: xmin,xmax,ymin,ymax,zmin,zmax,xmind,xmaxd,ymind,ymaxd,zmind,    &
        zmaxd,dd,du,dl,dr,df,db,d,eta,nu,psi,xob(dmn),N(npel),c,vec12(dmn),     &
        vec13(dmn),vec14(dmn),vec23(dmn),vec24(dmn),vec34(dmn),vec1o(dmn),      &
@@ -1597,9 +1597,9 @@ contains
     end if
 
     do ob=1,neval ! Observation loop
-       if (strng=='ob') then
+       if (strng=="ob") then
           xob=ocoord(ob,:)*km2m
-       elseif (strng=='fd') then
+       elseif (strng=="fd") then
           xob=xgp(ob,:)
        end if
        p_in_dom=(xob(1)>=xmind .and. xob(1)<=xmaxd .and. xob(2)>=ymind .and.   &
@@ -1730,7 +1730,7 @@ contains
           end do ! Element loop
        end if ! Point probably in domain
     end do ! Observation loop
-    if (strng=='ob') then
+    if (strng=="ob") then
        nobs_loc=size(pack(pick,pick/=0))
        allocate(ol2g(nobs_loc),ocoord_loc(nobs_loc,dmn))
        select case(eltype) 
@@ -1743,7 +1743,7 @@ contains
        ocoord_loc=ocoord(ol2g,:)
        onlst=nd_full(ol2g,:)
        oshape=N_full(ol2g,:)
-    elseif (strng=='fd') then
+    elseif (strng=="fd") then
        ngp_loc=size(pack(pick,pick/=0))
        allocate(gpl2g(ngp_loc),idgp_loc(ngp_loc,dmn))
        select case(eltype) 

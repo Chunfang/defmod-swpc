@@ -489,7 +489,8 @@ program main
      call FDInit
      call GetFDFnd 
      call GetObsNd("fd")
-     deallocate(xgp,idgp)  
+     !deallocate(xgp,idgp)  
+     deallocate(xgp)
      if (ngp_loc>0) allocate(uu_fd(ngp_loc,dmn))
      call NndFE2FD
      call MatFE2FD
@@ -1704,6 +1705,7 @@ program main
                  call WriteOutput_log_wave
                  if (nceqs>0) call WriteOutput_log_slip
               end if
+              if (fdout==1) call GetFDAct
               ! Latest fault stress (Vec_lambda_sta0)
               call GetVec_lambda_hyb
               ! Cleanup dynamics

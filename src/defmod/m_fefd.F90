@@ -112,6 +112,86 @@ contains
     xgp=xgp_full(pack(uniq,uniq/=0),:)
   end subroutine GetFDFnd
 
+  ! Flag active FD grid points fdact_loc(ngp_loc)
+  subroutine GetFDAct
+    implicit none
+    character(256) :: name,name0,name1
+    integer :: nact,j,j2,j3,xid,yid,zid,rowfd(2**dmn),fdact(ngp),              &
+       fdact_loc(ngp_loc),xid0,yid0,zid0
+    integer,allocatable :: idact(:,:),idact_full(:,:),uniq(:)
+    integer,save :: k=0
+    nact=size(pack(slip_sum,slip_sum>0))
+    allocate(idact_full(nact*(2**dmn),dmn),uniq(nact*(2**dmn)))
+    j=0
+    do j3=1,nfnd
+       if (slip_sum(j3)>0) then
+          j=j+1
+          rowfd=(/((j-1)*(2**dmn)+j2,j2=1,2**dmn)/)
+          uniq(rowfd)=rowfd
+          select case(dmn)
+          case(2)
+             xid=int( (xfnd(j3,1)*km2m-xref)/dx)+1
+             yid=int(-(xfnd(j3,2)*km2m-yref)/dy)+1
+             idact_full(rowfd(1),:)=(/xid  ,yid  /)
+             idact_full(rowfd(2),:)=(/xid+1,yid  /)
+             idact_full(rowfd(3),:)=(/xid  ,yid+1/)
+             idact_full(rowfd(4),:)=(/xid+1,yid+1/)
+          case(3)
+             xid=int( (xfnd(j3,1)*km2m-xref)/dx)+1
+             yid=int( (xfnd(j3,2)*km2m-yref)/dy)+1
+             zid=int(-(xfnd(j3,3)*km2m-zref)/dz)+1 ! deep positive in swpc
+             ! FD node index of the containing block
+             idact_full(rowfd(1),:)=(/xid  ,yid  ,zid  /)
+             idact_full(rowfd(2),:)=(/xid+1,yid  ,zid  /)
+             idact_full(rowfd(3),:)=(/xid  ,yid+1,zid  /)
+             idact_full(rowfd(4),:)=(/xid  ,yid  ,zid+1/)
+             idact_full(rowfd(5),:)=(/xid+1,yid+1,zid  /)
+             idact_full(rowfd(6),:)=(/xid+1,yid  ,zid+1/)
+             idact_full(rowfd(7),:)=(/xid  ,yid+1,zid+1/)
+             idact_full(rowfd(8),:)=(/xid+1,yid+1,zid+1/)
+          end select
+          ! Create a unique index set
+          call GetUniq(idact_full(:rowfd(2**dmn),:),rowfd(2**dmn),             &
+             uniq(rowfd(2**dmn)-2**dmn+1:rowfd(2**dmn)))
+       end if
+    end do ! Fault nodes
+    nact=size(pack(uniq,uniq/=0))
+    allocate(idact(nact,dmn))
+    idact=idact_full(pack(uniq,uniq/=0),:)
+    xid=maxval(idact(:,1));yid=maxval(idact(:,2));zid=maxval(idact(:,3))
+    xid0=minval(idact(:,1));yid0=minval(idact(:,2));zid0=minval(idact(:,3))
+    ! Active indicator of full grid point set
+    fdact=0; j2=1
+    do j=1,ngp
+       if (idgp(j,1)<=xid .and. idgp(j,1)>=xid0 .and. idgp(j,2)<=yid .and.     &
+          idgp(j,2)>=yid0 .and. idgp(j,3)<=zid .and. idgp(j,3)>=zid0) then 
+          do j3=1,nact 
+             if (all((idgp(j,:)-idact(j3,:))==0)) then
+                fdact(j)=1
+                exit
+             end if
+          end do
+       end if
+    end do 
+    fdact_loc=fdact(gpl2g)
+    if (ngp_loc>0) then
+       name0=output_file(:index(output_file,"/",BACK=.TRUE.))
+       name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
+       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_fdact.txt"
+       if (k==0) then
+          open(11,file=adjustl(name),status='replace')
+       else
+          open(11,file=adjustl(name),status='old',position='append',           &
+             action='write')
+       end if
+       do j=1,ngp_loc
+          write(11,'(I0)')fdact_loc(j)
+       end do
+       close(11) 
+    end if
+    k=k+1
+  end subroutine GetFDAct
+
   ! Find if the idset content is unique
   subroutine GetUniq(idset,nrow,uniq)
     implicit none

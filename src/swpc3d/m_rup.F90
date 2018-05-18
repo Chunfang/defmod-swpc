@@ -38,6 +38,7 @@ module m_rup
   integer, allocatable :: idx_src(:,:) ! Local source grid indices
   integer, allocatable :: idobsFE(:) ! global obs id alignment
   integer, allocatable :: idobsFD(:) ! obs id alignment
+  integer, allocatable :: fdact(:) ! source grid point activity
   real(MP) :: dt_rup ! rupture sample interval
   real(SP) :: xref,yref,zref ! FD corner at FE domain
   real(sp) :: km2m
@@ -92,14 +93,14 @@ contains
     !if (myid==0) print('(A,I0,A,I0)'), 'Event ', eid,', nframe ', nt_rup
   end subroutine rup__getTime
 
-  ! Read rupture source from FE outputs -> idx_src(:,:), u_src(:,:,:)
+  ! Read rupture source from FE outputs -> idx_src(:,:), u_src(:,:,:), fdact(:)
   subroutine rup__getFE2FD
     implicit none
     integer :: j,j2,nfile,nproc_fe2fd,ierr
     integer, allocatable :: idfile_pt(:),np_pt(:),idx_src_loc(:,:),rw(:),      &
-       fe2fd(:),idfile(:),mattmp(:,:)
+      fe2fd(:),idfile(:),mattmp(:,:),fdact_loc(:)
     real(MP), allocatable :: u_src_loc(:,:,:) 
-    character(256) :: name0,name1
+    character(256) :: name0,name1,name2
     write(name0,'(A,A)')trim(name_fe),"_fe2fd.txt"
     open(250,file=adjustl(name0),status='old')
     read(250,*)nproc_fe,nproc_fe2fd
@@ -125,25 +126,30 @@ contains
     np_tot=sum(fe2fd)
     !if (np_tot>0) print('(A,I0,A,I0,A)'), 'Rank ', myid,' has ',np_tot,' sources.'
     call MPI_AllReduce(np_tot,np_rup,1,MPI_INTEGER,MPI_Sum,MPI_Comm_World,ierr)
-    allocate(idfile_pt(nfile),np_pt(nfile),idx_src(np_tot,3),u_src(np_tot,nt_rup,3)) 
+    allocate(idfile_pt(nfile),np_pt(nfile),idx_src(np_tot,3),fdact(np_tot),    &
+      u_src(np_tot,nt_rup,3))
     idfile_pt=pack(idfile,idfile>-1)
     np_pt=pack(fe2fd,fe2fd/=0)
     do j=1,nfile
       write(name1,'(A,A,I0.6,A)')trim(name_fe),"_",idfile_pt(j),"_fd.txt"
-      allocate(rw(np_pt(j)),idx_src_loc(np_pt(j),3),u_src_loc(np_pt(j),nt_rup,3))
+      write(name2,'(A,A,I0.6,A)')trim(name_fe),"_",idfile_pt(j),"_fdact.txt"
+      allocate(rw(np_pt(j)),idx_src_loc(np_pt(j),3),u_src_loc(np_pt(j),        &
+        nt_rup,3),fdact_loc(np_pt(j)))
       rw=(/(sum(np_pt(:j))-np_pt(j)+j2,j2=1,np_pt(j))/)
-      call RupSrc(name1,idx_src_loc,u_src_loc,size(rw),nt_rup)
+      call RupSrc(name1,name2,idx_src_loc,u_src_loc,fdact_loc,size(rw),nt_rup)
       idx_src(rw,:)=idx_src_loc
       u_src(rw,:,:)=u_src_loc 
-      deallocate(rw,idx_src_loc,u_src_loc)
+      fdact(rw)=fdact_loc
+      deallocate(rw,idx_src_loc,u_src_loc,fdact_loc)
     end do
   end subroutine rup__getFE2FD
 
   ! Read rupture source from FE patch
-  subroutine RupSrc(name1,idx_src,u_src,nrw,nt_rup)
+  subroutine RupSrc(name1,name2,idx_src,u_src,fdact_loc,nrw,nt_rup)
     implicit none
-    character(256) :: name1
-    integer :: rankxy,isrc,hit,i,j,k,n_glb,idt,nrw,nt_rup,idx_src(nrw,3)
+    character(256) :: name1,name2
+    integer :: rankxy,isrc,hit,i,j,k,n_glb,idt,nrw,nt_rup,idx_src(nrw,3),      &
+      fdact_loc(nrw),act
     integer,allocatable :: on_rank(:) 
     real(MP) :: vx,vy,vz,u_src(nrw,nt_rup,3)
     open(251,file=adjustl(name1),status='old')
@@ -176,6 +182,21 @@ contains
       end do
     end do
     close(251)
+    ! Read grid point activity
+    open(253,file=adjustl(name2),status='old')
+    ! Skip unwanted
+    do idt=1,n_glb*(max(1,eid)-1)
+      read(253,*) 
+    end do
+    hit=0
+    do isrc=1,n_glb ! Point sources
+      read(253,*) act
+      if (on_rank(isrc)==1) then
+        hit=hit+1 
+        fdact_loc(hit)=act
+      end if
+    end do
+    close(253)
   end subroutine RupSrc
 
   ! Add rupture source
@@ -188,23 +209,27 @@ contains
     if (i_rup>0 .and. i_rup<nt_rup) then 
       t_rup=i_rup*dt_rup
       do i=1,np_tot
-        ii=idx_src(i,1)
-        jj=idx_src(i,2)
-        kk=idx_src(i,3)
-        ! Linearly interpolate the source velocity
-        vx(kk,ii,jj)=(u_src(i,i_rup+1,1)-u_src(i,i_rup,1))/dt_rup
-        vy(kk,ii,jj)=(u_src(i,i_rup+1,2)-u_src(i,i_rup,2))/dt_rup
-        vz(kk,ii,jj)=(u_src(i,i_rup+1,3)-u_src(i,i_rup,3))/dt_rup
+        if (fdact(i)>0) then  
+          ii=idx_src(i,1)
+          jj=idx_src(i,2)
+          kk=idx_src(i,3)
+          ! Linearly interpolate the source velocity
+          vx(kk,ii,jj)=(u_src(i,i_rup+1,1)-u_src(i,i_rup,1))/dt_rup
+          vy(kk,ii,jj)=(u_src(i,i_rup+1,2)-u_src(i,i_rup,2))/dt_rup
+          vz(kk,ii,jj)=(u_src(i,i_rup+1,3)-u_src(i,i_rup,3))/dt_rup
+        end if
       end do
     elseif (i_rup>=nt_rup) then
       do i=1,np_tot
-        ii=idx_src(i,1)
-        jj=idx_src(i,2)
-        kk=idx_src(i,3)
-        ! Zero velocity (hard source) to prevent back slip
-        vx(kk,ii,jj)=0.d0
-        vy(kk,ii,jj)=0.d0
-        vz(kk,ii,jj)=0.d0
+        if (fdact(i)>0) then
+          ii=idx_src(i,1)
+          jj=idx_src(i,2)
+          kk=idx_src(i,3)
+          ! Zero velocity (hard source) to prevent back slip
+          vx(kk,ii,jj)=0.d0
+          vy(kk,ii,jj)=0.d0
+          vz(kk,ii,jj)=0.d0
+        end if
       end do
     endif
   end subroutine rup__setSrc
