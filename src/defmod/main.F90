@@ -1279,11 +1279,6 @@ program main
               if (fvin==1) call FVReformKPerm(f0,ef_eldof) 
               if (fvin==3) call FVReformKPermUsg(f0,ef_eldof)
            end if
-!           if (nceqs-nceqs_ncf>0) then
-!              allocate(flt_ss(nfnd,dmn),flt_p(nfnd))
-!              call GetVec_flt_qs 
-!              if (rank==0) call WriteOutput_flt_qs
-!           end if
         else ! Not poro
            call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
            if (nceqs>0) then 
@@ -1358,11 +1353,6 @@ program main
               call VecDestroy(Seq_nrm,ierr)
               call VecDestroy(Seq_f2s,ierr)
               deallocate(f2s,dip,nrm)
-!              if (nceqs-nceqs_ncf>0) then
-!                 allocate(flt_ss(nfnd,dmn))
-!                 call GetVec_flt_qs
-!                 if (rank==0) call WriteOutput_flt_qs
-!              end if
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
@@ -1489,8 +1479,6 @@ program main
               end do
               call GetVec_Stress
               call GetVec_S
-              !call GetVec_flt_qs
-              !if (rank==0) call WriteOutput_flt_qs
            end if
            ! Extract nodal force by p
            if (poro) then

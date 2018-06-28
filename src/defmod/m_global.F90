@@ -52,7 +52,7 @@ module global
   integer,allocatable :: indx(:),indxp(:),enodes(:),indx_dyn(:)
   real(8),allocatable :: k(:,:),m(:,:),f(:),ecoords(:,:),kc(:,:),Hs(:),        &
      k_dyn(:,:),uu_obs(:,:),tot_uu_obs(:,:),uu_dyn_obs(:,:),                   &
-     tot_uu_dyn_obs(:,:),uu_fd(:,:) !,flt_ss(:,:),flt_p(:)
+     tot_uu_dyn_obs(:,:),uu_fd(:,:)
   ! Variables for parallel code
   integer :: nprcs,rank,ierr
   integer,allocatable :: epart(:),npart(:) ! Partitioning
