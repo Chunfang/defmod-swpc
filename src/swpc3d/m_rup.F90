@@ -39,7 +39,6 @@ module m_rup
   integer, allocatable :: idx_src(:,:) ! Local source grid indices
   integer, allocatable :: idobsFE(:) ! global obs id alignment
   integer, allocatable :: idobsFD(:) ! obs id alignment
-  !integer, allocatable :: fdact(:) ! source grid point activity
   real(MP) :: dt_rup ! rupture sample interval
   real(SP) :: xref,yref,zref ! FD corner at FE domain
   real(sp) :: km2m
@@ -100,7 +99,7 @@ contains
     integer, allocatable :: idfile_pt(:),np_pt(:),idx_src_loc(:,:),rw(:),      &
       fe2fd(:),idfile(:),mattmp(:,:),fdact_loc(:),fdact(:),idx_tmp(:,:)
     real(MP), allocatable :: u_src_loc(:,:,:),u_tmp(:,:,:) 
-    character(256) :: name0,name1!,name2
+    character(256) :: name0,name1
     write(name0,'(A,A)')trim(name_fe),"_fe2fd.txt"
     open(250,file=adjustl(name0),status='old')
     read(250,*)nproc_fe,nproc_fe2fd
@@ -130,14 +129,11 @@ contains
     idfile_pt=pack(idfile,idfile>-1)
     np_pt=pack(fe2fd,fe2fd/=0)
     do j=1,nfile
-      !write(name1,'(A,A,I0.6,A)')trim(name_fe),"_",idfile_pt(j),"_fd.txt"
-      !write(name2,'(A,A,I0.6,A)')trim(name_fe),"_",idfile_pt(j),"_fdact.txt"
       allocate(rw(np_pt(j)),idx_src_loc(np_pt(j),3),u_src_loc(np_pt(j),        &
         nt_rup,3),fdact_loc(np_pt(j)))
       rw=(/(sum(np_pt(:j))-np_pt(j)+j2,j2=1,np_pt(j))/)
-      !call RupSrc(name1,name2,idx_src_loc,u_src_loc,fdact_loc,size(rw),nt_rup)
       write(name1,'(A,A,I0.6,A)')trim(name_fe),"_fe2fd_",idfile_pt(j),".h5"
-      call RupSrc1(name1,idx_src_loc,u_src_loc,fdact_loc,size(rw),nt_rup)
+      call RupSrc(name1,idx_src_loc,u_src_loc,fdact_loc,size(rw),nt_rup)
       idx_tmp(rw,:)=idx_src_loc
       u_tmp(rw,:,:)=u_src_loc 
       fdact(rw)=fdact_loc
@@ -156,7 +152,7 @@ contains
   end subroutine rup__getFE2FD
 
   ! Read rupture source from FE patch
-  subroutine RupSrc1(nameh5,idx_src,u_src,fdact_loc,nrw,nt_rup)  
+  subroutine RupSrc(nameh5,idx_src,u_src,fdact_loc,nrw,nt_rup)  
     implicit none
     integer(hid_t) :: idfile,iddat,spc_dat,spc_src
     integer(hsize_t) :: dim_dat(3),dim_tmp(3),offset(3)
@@ -197,60 +193,6 @@ contains
         u_src(hit,:,:)=src_glb(:,:,isrc)
       end if
     end do
-  end subroutine RupSrc1
-
-  subroutine RupSrc(name1,name2,idx_src,u_src,fdact_loc,nrw,nt_rup)
-    implicit none
-    character(256) :: name1,name2
-    integer :: rankxy,isrc,hit,i,j,k,n_glb,idt,nrw,nt_rup,idx_src(nrw,3),      &
-      fdact_loc(nrw),act
-    integer,allocatable :: on_rank(:) 
-    real(MP) :: vx,vy,vz,u_src(nrw,nt_rup,3)
-    open(251,file=adjustl(name1),status='old')
-    read(251,*)n_glb
-    allocate(on_rank(n_glb))
-    ! Read source grid indices
-    hit=0; on_rank=0
-    do isrc=1,n_glb 
-      read(251,*)i,j,k
-      rankxy=((j-1)/nyp)*nproc_x+(i-1)/nxp
-      if (myid==rankxy .and. hit<nrw) then 
-        hit=hit+1
-        on_rank(isrc)=1
-        idx_src(hit,:)=(/i,j,k/)
-      end if
-    end do
-    ! skip unwanted events
-    do idt=1,n_glb*i0_rup
-      read(251,*)
-    end do
-    ! on-rank point source velocities
-    do idt=1,nt_rup ! Time sample
-      hit=0
-      do isrc=1,n_glb ! Point sources
-        read(251,*)vx,vy,vz
-        if (on_rank(isrc)==1) then
-          hit=hit+1 
-          u_src(hit,idt,:)=(/vx,vy,vz/)
-        end if
-      end do
-    end do
-    close(251)
-    ! Read grid point activity
-    open(253,file=adjustl(name2),status='old')
-    ! Skip unwanted
-    do idt=1,n_glb*(max(1,eid)-1)
-      read(253,*) 
-    end do
-    hit=0
-    do isrc=1,n_glb ! Point sources
-      read(253,*) act
-      if (on_rank(isrc)==1) then
-        hit=hit+1 
-        fdact_loc(hit)=act
-      end if
-    end do
-    close(253)
   end subroutine RupSrc
 
   ! Add rupture source
@@ -263,7 +205,6 @@ contains
     if (i_rup>0 .and. i_rup<nt_rup) then 
       t_rup=i_rup*dt_rup
       do i=1,np_tot
-        !if (fdact(i)>0) then  
         ii=idx_src(i,1)
         jj=idx_src(i,2)
         kk=idx_src(i,3)
@@ -271,11 +212,9 @@ contains
         vx(kk,ii,jj)=(u_src(i,i_rup+1,1)-u_src(i,i_rup,1))/dt_rup
         vy(kk,ii,jj)=(u_src(i,i_rup+1,2)-u_src(i,i_rup,2))/dt_rup
         vz(kk,ii,jj)=(u_src(i,i_rup+1,3)-u_src(i,i_rup,3))/dt_rup
-        !end if
       end do
     elseif (i_rup>=nt_rup) then
       do i=1,np_tot
-        !if (fdact(i)>0) then
         ii=idx_src(i,1)
         jj=idx_src(i,2)
         kk=idx_src(i,3)
@@ -283,7 +222,6 @@ contains
         vx(kk,ii,jj)=0.d0
         vy(kk,ii,jj)=0.d0
         vz(kk,ii,jj)=0.d0
-        !end if
       end do
     endif
   end subroutine rup__setSrc

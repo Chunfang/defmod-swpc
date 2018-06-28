@@ -1664,7 +1664,6 @@ program main
                  if (ngp_loc>0 .and. mod(n_log_dyn,frq_wave)==0 .and.          &
                     fdout==1) then  
                     call GetVec_fd
-                    !call WriteOutput_fd
                     call Write_fd("dyn")
                  end if
                  ! Extract and output temporal fault slip

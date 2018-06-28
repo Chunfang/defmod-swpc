@@ -115,7 +115,6 @@ contains
   ! Flag active FD grid points fdact_loc(ngp_loc)
   subroutine GetFDAct
     implicit none
-    !character(256) :: name,name0,name1
     integer :: nact,j,j2,j3,xid,yid,zid,rowfd(2**dmn),fdact(ngp),xid0,yid0,zid0
     integer,allocatable :: idact(:,:),idact_full(:,:),uniq(:)
     integer,save :: k=0
@@ -174,21 +173,6 @@ contains
        end if
     end do 
     fdact_loc=fdact(gpl2g)
-    !if (ngp_loc>0) then
-    !   name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    !   name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    !   write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_fdact.txt"
-    !   if (k==0) then
-    !      open(11,file=adjustl(name),status='replace')
-    !   else
-    !      open(11,file=adjustl(name),status='old',position='append',           &
-    !         action='write')
-    !   end if
-    !   do j=1,ngp_loc
-    !      write(11,'(I0)')fdact_loc(j)
-    !   end do
-    !   close(11) 
-    !end if
     k=k+1
   end subroutine GetFDAct
 
@@ -270,7 +254,7 @@ contains
         ixmax,iymax,izmax,rankx,rankx0,rankx1,ranky,ranky0,ranky1,rankxy,      &
         buf(nprcs*nprc_fd),vfe2fd(nprcs,nprc_fd)
      real(8) :: xmin,ymin,zmin,xmax,ymax,zmax
-     character(256) :: name,name0,name1!,namev
+     character(256) :: name,name0,name1
      select case(dmn)
      case(2)
         xmin=minval(coords(:,1)); xmax=maxval(coords(:,1))
@@ -333,50 +317,7 @@ contains
            izmin=int((-zmax+zref)/dz)+1; izmax=int((-zmin+zref)/dz)+1
            matFD(el,:)=(/ixmin,ixmax,iymin,iymax,izmin,izmax,id(el)/)
         end do
-        !write(namev,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,         &
-        !   "_ife2fd.txt"
-        !open(152,file=adjustl(namev),status='replace')
-        !write(152,'(I0)')nels
-        !do el=1,nels
-        !   write(152,'(7(I0,X))')matFD(el,:) 
-        !end do
-        !close(152)
      end select
   end subroutine MatFE2FD
-
-  subroutine WriteOutput_fd
-    implicit none
-    integer :: i
-    real(8) :: vec(dmn)
-    character(64) :: fmt
-    character(256) :: name,name0,name1
-    integer,save :: k=0
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_fd.txt"
-    if (k==0) then
-       open(10,file=adjustl(name),status='replace')
-       select case(dmn)
-       case(2); fmt="(2(I0,1X))"
-       case(3); fmt="(3(I0,1X))"
-       end select
-       write(10,"(I0)")ngp_loc
-       do i=1,ngp_loc
-          write(10,fmt)idgp_loc(i,:)
-       end do
-    else
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    select case(dmn)
-       case(2); fmt="(2(ES11.2E3,1X))"
-       case(3); fmt="(3(ES11.2E3,1X))"
-    end select
-    do i=1,ngp_loc
-       vec=(/uu_fd(i,1),uu_fd(i,2),-uu_fd(i,3)/) ! deep positive in swpc
-       write(10,fmt)vec
-    end do
-    close(10) 
-    k=k+1
-  end subroutine WriteOutput_fd
 
 end module fefd 
