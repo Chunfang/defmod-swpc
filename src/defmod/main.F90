@@ -975,7 +975,7 @@ program main
         if (mod(tstep,frq_wave)==0) n_log_wave=n_log_wave+1
         ! Output fault slip
         if (mod(tstep,frq_slip)==0 .and. nfnd>0) then
-           call WriteOutput_slip
+           if (nfnd_loc>0) call Write_fe("dyn") ! H5 file
            n_log_slip=n_log_slip+1
         end if
         ! Output snapshots
@@ -1673,7 +1673,6 @@ program main
                  tot_flt_slip=tot_flt_slip+flt_slip
                  call VecRestoreArrayF90(Vec_Wlm(1),pntr,ierr)
                  if (mod(n_log_dyn,frq_slip)==0) then 
-                    !call WriteOutput_slip
                     if (nfnd_loc>0) call Write_fe("dyn") ! H5 file
                     n_log_slip=n_log_slip+1
                  end if
