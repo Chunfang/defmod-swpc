@@ -9,6 +9,7 @@ program main
   use galpha
   use fefd 
   use fvfe
+  use h5io
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petsc.h"
@@ -353,9 +354,9 @@ program main
            Vec_lm_pn,ierr)
         call VecGetLocalSize(Vec_lm_pn,n_lmnd,ierr)
         call VecGetOwnershipRange(Vec_lm_pn,lmnd0,j,ierr)
+        call VecDuplicate(Vec_lm_pn,Vec_lm_f2s,ierr)
         if (poro) then
            call VecDuplicate(Vec_lm_pn,Vec_lm_pp,ierr)
-           call VecDuplicate(Vec_lm_pn,Vec_lm_f2s,ierr)
         else
            call VecDestroy(Vec_lm_pn,ierr)
         end if
@@ -373,8 +374,8 @@ program main
            ierr)
         call MatZeroEntries(Mat_Gt,ierr)
         allocate(flt_slip(n_lmnd*dmn),tot_flt_slip(n_lmnd*dmn),                &
-           qs_flt_slip(n_lmnd*dmn))
-        qs_flt_slip=f0; tot_flt_slip=f0; flt_slip=f0
+           res_flt_slip(n_lmnd*dmn),qs_flt_slip(n_lmnd*dmn))
+        qs_flt_slip=f0; tot_flt_slip=f0; res_flt_slip=f0; flt_slip=f0
      end if
      if (rank==0) open(15,file=trim(output_file(:index(output_file,"/",        &
         BACK=.TRUE.)))//"cnstrns.tmp",status="replace")
@@ -493,7 +494,10 @@ program main
      deallocate(xgp)
      if (ngp_loc>0) allocate(uu_fd(ngp_loc,dmn))
      call NndFE2FD
+     allocate(matFD(nels,dmn*2+1))
      call MatFE2FD
+     call Write_fd("mat")
+     deallocate(matFD)
   end if
 
   ! Account for absorbing boundaries (FormLocalAbsC1 for arbitrary boundary)
@@ -905,7 +909,7 @@ program main
 
      ! Prepare implicit dynamic run 
      dyn=.true.
-     dsp_dyn=.true.
+     write_dyn=.true.
      call VecDuplicate(Vec_U_dyn,Vec_F_dyn,ierr)
      call VecDuplicate(Vec_U_dyn,Vec_Fm_dyn,ierr)
      call VecZeroEntries(Vec_F_dyn,ierr)
@@ -995,6 +999,144 @@ program main
         call PrintMsg("Applying gravity ...")
         call ApplyGravity
      end if
+     ! Create cumulative static solution space Vec_Um 
+     call VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
+     call VecZeroEntries(Vec_Um,ierr)
+     call VecGetLocalSize(Vec_U,j,ierr)
+     call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
+     if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ", nprcs," processors."
+     ! Create pressure, force and traction IDs (RI RIu RIl) 
+     if (poro) then
+        j2=0; j3=0; j4=0; j5=0; j6=0
+        do i=1,j
+           if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
+              j2=j2+1
+           end if
+           if (nceqs>0) then
+              if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
+                 j3=j3+1
+              end if
+           end if
+           if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+              j4=j4+1
+           end if
+           if (j1+i-1<(dmn+1)*nnds) then
+              j5=j5+1
+           end if
+        end do
+        allocate(work(j2),workl(j3),worku(j4))
+        j2=0; j3=0; j4=0; j5=0
+        do i=1,j
+           if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
+              j2=j2+1
+              work(j2)=j1+i-1
+           end if
+           if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+              j4=j4+1
+              worku(j4)=j1+i-1
+           end if
+           if (nceqs>0) then
+              if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
+                 j3=j3+1
+                 workl(j3)=j1+i-1
+              end if
+           end if
+        end do
+        j=size(work)
+        allocate(uup(j))
+        call ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,RI,ierr)
+        j=size(worku)
+        call ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,RIu,   &
+           ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+        call MatGetSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
+#else
+        call MatCreateSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
+#endif
+        if (nceqs > 0) then
+           j=size(workl)
+           call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values,    &
+              RIl,ierr)
+        end if
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
+        call MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
+#else
+        call MatCreateSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
+#endif
+        call MatZeroEntries(Mat_Kc,ierr)
+        allocate(kc(eldofp,eldofp),indxp(eldofp),Hs(eldofp))
+        do i=1,nels
+           call FormLocalK(i,k,indx,"Kc")
+           kc=k(eldof+1:,eldof+1:)
+           indxp=indx(eldof+1:); indxp=indxmap(indxp,2)
+           indxp=((indxp+1)/(dmn+1))-1
+           call MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,Add_Values,   &
+              ierr)
+        end do
+        call MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
+        call MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
+        ! Initialize space for lambda, p related nodal force
+        call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+        call VecDuplicate(Vec_Uu,Vec_fp,ierr) ! fp->Hp (required by FV)
+        call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
+        call VecCopy(Vec_Uu,Vec_fl,ierr) ! Hold Uu
+        call VecDuplicate(Vec_Uu,Vec_flc,ierr)
+        if (lm_str==1) then
+           call VecDuplicate(Vec_Uu,Vec_SS,ierr)
+           call VecDuplicate(Vec_Uu,Vec_SH,ierr)
+           call VecZeroEntries(Vec_SS,ierr)
+           call VecZeroEntries(Vec_SH,ierr)
+           if (nceqs>0) then
+              call VecDuplicate(Vec_Uu,Vec_f2s,ierr)
+              call VecZeroEntries(Vec_f2s,ierr)
+           end if
+           call VecDuplicate(Vec_Uu,Vec_dip,ierr)
+           call VecZeroEntries(Vec_dip,ierr)
+           call VecDuplicate(Vec_Uu,Vec_nrm,ierr)
+           call VecZeroEntries(Vec_nrm,ierr)
+        end if
+        call VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+        ! Initialize pore pressure from FV model
+        if (fvin>0) then
+           call PrintMsg("Initializing FV pressure ...")
+           call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
+           kfv=.true. ! FV bc 
+           if (fvin<3) then
+              call FVInit
+              call FVReformKF(ef_eldof)
+           else
+              call FVInitUsg
+              call FVReformKFUsg(ef_eldof)
+           end if
+        end if
+     else ! Not poroelastic
+        j3=0; j4=0
+        do i=1,j
+           if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+              j3=j3+1
+           elseif (j1+i-1<dmn*nnds) then
+              j4=j4+1
+           end if
+        end do
+        allocate(workl(j3)); allocate(worku(j4))
+        j3=0; j4=0
+        do i=1,j
+           if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+              j3=j3+1
+              workl(j3)=j1+i-1
+           elseif (j1+i-1<dmn*nnds) then
+              j4=j4+1
+              worku(j4)=j1+i-1
+           end if
+        end do
+        j=size(worku)
+        call ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,       &
+           RIu,ierr)
+        j=size(workl)
+        call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values,       &
+           RIl,ierr)
+     end if ! Is poro? 
+
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
      call KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
@@ -1002,12 +1144,10 @@ program main
      call KSPSetOperators(Krylov,Mat_K,Mat_K,ierr)
 #endif
      call SetupKSPSolver
-     call PrintMsg("Static solving ...")
-     call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     !print'(A,I0,A,I0,A,I0)',"  Rank ",rank," has dofs ",j1+1," to ",j2
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ", nprcs," processors."
+     call PrintMsg("Static solving (step 0) ...")
      call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
      call GetVec_U; tot_uu=tot_uu+uu
+     call VecAXPY(Vec_Um,f1,Vec_U,ierr)
      ! Get observation
      if (nobs_loc>0) then
         call GetVec_obs
@@ -1020,109 +1160,23 @@ program main
            call RecoverStress(i,stress)
         end do
      end if
+     
+     ! Have more then one static step
      if (t>f0 .and. dt>f0 .and. t>=dt) then
-        call VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
-        call VecCopy(Vec_U,Vec_Um,ierr)
-        call VecGetLocalSize(Vec_U,j,ierr)
         if (poro) then
-           j2=0; j3=0; j4=0; j5=0; j6=0
-           do i=1,j
-              if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
-                 j2=j2+1
-              end if
-              if (nceqs>0) then
-                 if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
-                    j3=j3+1
-                 end if
-              end if
-              if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
-                 j4=j4+1
-              end if
-              if (j1+i-1<(dmn+1)*nnds) then
-                 j5=j5+1
-              end if
-           end do
-           allocate(work(j2),workl(j3),worku(j4))
-           j2=0; j3=0; j4=0; j5=0
-           do i=1,j
-              if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
-                 j2=j2+1
-                 work(j2)=j1+i-1
-              end if
-              if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
-                 j4=j4+1
-                 worku(j4)=j1+i-1
-              end if
-              if (nceqs>0) then
-                 if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
-                    j3=j3+1
-                    workl(j3)=j1+i-1
-                 end if
-              end if
-           end do
-           j=size(work)
-           call ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,RI,  &
-              ierr)
-           j=size(worku)
-           call ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
-              RIu,ierr)
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
-           call MatGetSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
-#else
-           call MatCreateSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
-#endif
-           if (nceqs > 0) then
-              j=size(workl)
-              call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values, &
-                 RIl,ierr)
-           end if
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7)
-           call MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
-#else
-           call MatCreateSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
-#endif
-           call MatZeroEntries(Mat_Kc,ierr)
-           allocate(kc(eldofp,eldofp),indxp(eldofp),Hs(eldofp))
-           do i=1,nels
-              call FormLocalK(i,k,indx,"Kc")
-              kc=k(eldof+1:,eldof+1:)
-              indxp=indx(eldof+1:); indxp=indxmap(indxp,2)
-              indxp=((indxp+1)/(dmn+1))-1
-              call MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,           &
-                 Add_Values,ierr)
-           end do
-           call MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
-           call MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
+           ! Initialize space for u, lambda related nodal flux 
            call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
            call VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
            call VecCopy(Vec_Up,Vec_I,ierr) ! Hold Up
            call VecDuplicate(Vec_Up,Vec_qu,ierr) ! qu->Htu
            call VecDuplicate(Vec_Up,Vec_ql,ierr)
            call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-           allocate(uup(size(work)))
-           ! Initialize space for lambda, p related nodal force
-           call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-           call VecDuplicate(Vec_Uu,Vec_fp,ierr) ! fp->Hp
-           call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
-           call VecCopy(Vec_Uu,Vec_fl,ierr) ! Hold Uu
-           call VecDuplicate(Vec_Uu,Vec_flc,ierr)
-           if (lm_str==1) then
-              call VecDuplicate(Vec_Uu,Vec_SS,ierr)
-              call VecDuplicate(Vec_Uu,Vec_SH,ierr)
-              call VecZeroEntries(Vec_SS,ierr)
-              call VecZeroEntries(Vec_SH,ierr)
-              if (nceqs>0) then
-                 call VecDuplicate(Vec_Uu,Vec_f2s,ierr)
-                 call VecZeroEntries(Vec_f2s,ierr)
-              end if
-              call VecDuplicate(Vec_Uu,Vec_dip,ierr)
-              call VecZeroEntries(Vec_dip,ierr)
-              call VecDuplicate(Vec_Uu,Vec_nrm,ierr)
-              call VecZeroEntries(Vec_nrm,ierr)
-           end if
-           call VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+           ! Sequential vectors for output 
            j=size(indxmap_u,1)
            if (nceqs>0) then
+              allocate(fl(size(indxmap_u,1)))
+              allocate(ql(size(nl2g,1)))
+              allocate(flc(size(indxmap_u,1)))
               call VecCreateSeq(Petsc_Comm_Self,j,Seq_fl,ierr)
               call VecCreateSeq(Petsc_Comm_Self,j,Seq_flc,ierr)
            end if
@@ -1142,12 +1196,8 @@ program main
            call VecScatterCreate(Vec_qu,From_p,Seq_qu,To_p,Scatter_q,ierr)
            allocate(fp(size(indxmap_u,1)))
            allocate(qu(size(nl2g,1)))
-           if (nceqs>0) then
-              allocate(fl(size(indxmap_u,1)))
-              allocate(ql(size(nl2g,1)))
-              allocate(flc(size(indxmap_u,1)))
-           end if
-           if (vout==1) then ! Extract nodal force by p, and fluid source by u
+           ! Extract nodal force by p, and fluid source by u
+           if (vout==1) then
               call MatMult(Mat_H,Vec_I,Vec_fp,ierr)
               call VecScale(Vec_fp,-f1,ierr)
               call GetVec_fp
@@ -1198,7 +1248,7 @@ program main
            if (vout==1) call WriteOutput_x
            if (nobs_loc>0) call WriteOutput_obs 
            if (init==1) then
-              call PrintMsg("Pore fluid initialization ...")
+              call PrintMsg("Applying one step (24 hr) fluid source ...")
               ! Zero initial pressure 
               call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
               call VecZeroEntries(Vec_Up,ierr)
@@ -1222,71 +1272,24 @@ program main
               end if
            end if 
            if (fvin/=0) then
-              call PrintMsg("Initializing FV pressure ...")
-              call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
-              kfv=.true. ! FV bc 
-              if (fvin<3) then
-                 call FVInit
-                 call FVReformKF(ef_eldof)
-              else
-                 call FVInitUsg
-                 call FVReformKFUsg(ef_eldof)
-              end if
-              call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-              call GetVec_U; tot_uu=uu
-              call VecAXPY(Vec_Um,f1,Vec_U,ierr)
               if (vout==1) then
-                 if (nceqs>0) then
-                    call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                    call VecZeroEntries(Vec_flc,ierr)
-                    call GetVec_fcoulomb
-                    call GetVec_flc
-                    call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                 end if
-                 ! Should be analyzed to see if any initial slip 
                  call WriteOutput_init
               end if
-              call FVReset ! Remove hydrostatic pressure gradient from Vec_Um 
               ! Single phase FV model 
               if (fvin==1) call FVReformKPerm(f0,ef_eldof) 
               if (fvin==3) call FVReformKPermUsg(f0,ef_eldof)
            end if
-           if (nceqs-nceqs_ncf>0) then
-              allocate(flt_ss(nfnd,dmn),flt_p(nfnd))
-              call GetVec_flt_qs 
-              if (rank==0) call WriteOutput_flt_qs
-           end if
+!           if (nceqs-nceqs_ncf>0) then
+!              allocate(flt_ss(nfnd,dmn),flt_p(nfnd))
+!              call GetVec_flt_qs 
+!              if (rank==0) call WriteOutput_flt_qs
+!           end if
         else ! Not poro
-           call VecGetLocalSize(Vec_U,j,ierr)
-           call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-           j3=0; j4=0
-           do i=1,j
-              if (j1+i-1>=dmn*nnds+nceqs_ncf) then
-                 j3=j3+1
-              elseif (j1+i-1<dmn*nnds) then
-                 j4=j4+1
-              end if
-           end do
-           allocate(workl(j3)); allocate(worku(j4))
-           j3=0; j4=0
-           do i=1,j
-              if (j1+i-1>=dmn*nnds+nceqs_ncf) then
-                 j3=j3+1
-                 workl(j3)=j1+i-1
-              elseif (j1+i-1<dmn*nnds) then
-                 j4=j4+1
-                 worku(j4)=j1+i-1
-              end if
-           end do
-           j=size(worku)
-           call ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
-              RIu,ierr)
-           j=size(workl)
-           call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values,    &
-              RIl,ierr)
            call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-           call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
-           if (nceqs>0) call VecDuplicate(Vec_Uu,Vec_flc,ierr)
+           if (nceqs>0) then 
+              call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
+              call VecDuplicate(Vec_Uu,Vec_flc,ierr)
+           end if
            if (lm_str==1) then
               call VecDuplicate(Vec_Uu,Vec_SS,ierr)
               call VecDuplicate(Vec_Uu,Vec_SH,ierr)
@@ -1302,8 +1305,11 @@ program main
               call VecZeroEntries(Vec_nrm,ierr)
            end if
            call VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+           ! Sequential vectors for output
            j=size(indxmap_u,1)
            if (nceqs>0) then
+              allocate(fl(size(indxmap_u,1)))
+              allocate(flc(size(indxmap_u,1)))
               call VecCreateSeq(Petsc_Comm_Self,j,Seq_fl,ierr)
               call VecCreateSeq(Petsc_Comm_Self,j,Seq_flc,ierr)
               call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),           &
@@ -1311,19 +1317,8 @@ program main
               call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),           &
                  Petsc_Copy_Values,To_u,ierr)
               call VecScatterCreate(Vec_fl,From_u,Seq_fl,To_u,Scatter_u,ierr)
-           elseif (lm_str==1) then
-              call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),           &
-                 Petsc_Copy_Values,From_u,ierr)
-              call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),           &
-                 Petsc_Copy_Values,To_u,ierr)
-              call VecScatterCreate(Vec_U,From_u,Seq_U,To_u,Scatter_u,ierr)
-           end if
-           if (nceqs>0) then
-              allocate(fl(size(indxmap_u,1)))
-              allocate(flc(size(indxmap_u,1)))
               ! Vector to communicate with dynamic LM
               call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-              !call LM_s2d
               ! Extract lambda induced nodal force
               if (vout==1) then
                  call VecZeroEntries(Vec_fl,ierr)
@@ -1339,6 +1334,13 @@ program main
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
            end if
            if (lm_str==1) then ! Scatter stress to nodes
+              if (nceqs==0) then ! Sequential vectors for stress
+                 call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),        &
+                     Petsc_Copy_Values,From_u,ierr)
+                 call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),        &
+                    Petsc_Copy_Values,To_u,ierr)
+                 call VecScatterCreate(Vec_U,From_u,Seq_U,To_u,Scatter_u,ierr)
+              end if
               call GetVec_Stress
               call GetVec_S
               if (nceqs>0) then
@@ -1356,17 +1358,17 @@ program main
               call VecDestroy(Seq_nrm,ierr)
               call VecDestroy(Seq_f2s,ierr)
               deallocate(f2s,dip,nrm)
-              if (nceqs-nceqs_ncf>0) then
-                 allocate(flt_ss(nfnd,dmn))
-                 call GetVec_flt_qs
-                 if (rank==0) call WriteOutput_flt_qs
-              end if
+!              if (nceqs-nceqs_ncf>0) then
+!                 allocate(flt_ss(nfnd,dmn))
+!                 call GetVec_flt_qs
+!                 if (rank==0) call WriteOutput_flt_qs
+!              end if
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
-           !if (rank==0 .and. nobs>0) call WriteOutput_obs
            if (nobs_loc>0) call WriteOutput_obs
         end if ! Poro or not
+
         ! Solution space is allocated differently for static and dynamic runs, 
         ! so we keep mat_K and Mat_K_dyn separate instead of
         !call MatGet(Create)SubMatrix(Mat_K,RIu,RIu,Mat_Initial_Matrix,         &
@@ -1424,8 +1426,17 @@ program main
               call VecRestoreArrayF90(Vec_I,pntr,ierr)
               j=size(uup)
               call VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
-              call Up_s2d
+              !call Up_s2d
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+              if (fvin>0) then! Remove hydrostatic pressure gradient from RHS
+                 call MatMult(Mat_Kc,Vec_Up_hst,Vec_I,ierr)
+                 call VecScale(Vec_I,dt,ierr)
+                 call VecGetArrayF90(Vec_I,pntr,ierr)
+                 uup=pntr
+                 call VecRestoreArrayF90(Vec_I,pntr,ierr)
+                 j=size(uup)
+                 call VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
+              end if
               ! Stabilize RHS
               do i=1,nels
                  call FormLocalHs(i,Hs,indxp)
@@ -1446,6 +1457,7 @@ program main
               ! Backup QS slip 
               qs_flt_slip=qs_flt_slip+tot_flt_slip
               fail=.false.
+              if (.not. crp) res_flt_slip=f0
            end if
            call VecAssemblyBegin(Vec_F,ierr)
            call VecAssemblyEnd(Vec_F,ierr)
@@ -1469,7 +1481,7 @@ program main
            end if
            ! Record absolute solution
            if (poro .or. nceqs>0) call VecAXPY(Vec_Um,f1,Vec_U,ierr)
-           if (visco .or. lm_str==1) then
+           if (visco .or. (lm_str==1 .and. vout==1)) then
               ! Recover stress
               call PrintMsg(" Recovering stress ...")
               do i=1,nels
@@ -1477,8 +1489,8 @@ program main
               end do
               call GetVec_Stress
               call GetVec_S
-              call GetVec_flt_qs
-              if (rank==0) call WriteOutput_flt_qs
+              !call GetVec_flt_qs
+              !if (rank==0) call WriteOutput_flt_qs
            end if
            ! Extract nodal force by p
            if (poro) then
@@ -1540,6 +1552,13 @@ program main
               call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               call LM_s2d  
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+              if (poro) then 
+                 call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+                 call Up_s2d
+                 call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+              end if  
+              ! Record static slip and traction  
+              if (mod(tstep,frq)==0 .and. nfnd_loc>0) call Write_fe("sta")
               ! Determine if the fault shall fail
               call GetSlip_sta
               rslip=real(sum(slip))/real(size(slip))
@@ -1657,7 +1676,8 @@ program main
                  if (ngp_loc>0 .and. mod(n_log_dyn,frq_wave)==0 .and.          &
                     fdout==1) then  
                     call GetVec_fd
-                    call WriteOutput_fd
+                    !call WriteOutput_fd
+                    call Write_fd("dyn")
                  end if
                  ! Extract and output temporal fault slip
                  call MatMult(Mat_G,Vec_U_dyn,Vec_Wlm(1),ierr)
@@ -1666,16 +1686,17 @@ program main
                  tot_flt_slip=tot_flt_slip+flt_slip
                  call VecRestoreArrayF90(Vec_Wlm(1),pntr,ierr)
                  if (mod(n_log_dyn,frq_slip)==0) then 
-                    call WriteOutput_slip
+                    !call WriteOutput_slip
+                    if (nfnd_loc>0) call Write_fe("dyn") ! H5 file
                     n_log_slip=n_log_slip+1
                  end if
                  ! Export dynamic snapshot
-                 dsp_dyn=.true.
+                 write_dyn=.true.
                  if (vout==1 .and. mod(n_log_dyn,frq_dyn)==0) then
                     uu_dyn=uu_dyn/dt_dyn
                     call WriteOutput
                  end if
-                 dsp_dyn=.false.
+                 write_dyn=.false.
                  n_log_dyn=n_log_dyn+1
               end do ! Explicit loop 
               ! Assess the fault status 
@@ -1705,7 +1726,10 @@ program main
                  call WriteOutput_log_wave
                  if (nceqs>0) call WriteOutput_log_slip
               end if
-              if (fdout==1) call GetFDAct
+              if (fdout==1 .and. ngp_loc>0) then 
+                 call GetFDAct
+                 call Write_fd("act")
+              end if
               ! Latest fault stress (Vec_lambda_sta0)
               call GetVec_lambda_hyb
               ! Cleanup dynamics
@@ -1768,6 +1792,7 @@ program main
      call VecDestroy(Vec_U_dyn,ierr)
      call VecDestroy(Vec_SS,ierr)
      call VecDestroy(Vec_SH,ierr)
+     call VecDestroy(Vec_Cst,ierr)
      call VecDestroy(Seq_fp,ierr)
      call VecDestroy(Seq_qu,ierr)
      call VecDestroy(Seq_fl,ierr)

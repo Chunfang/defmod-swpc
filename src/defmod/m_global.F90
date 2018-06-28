@@ -24,7 +24,7 @@ module global
   integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
      worku(:),workl(:),node_pos(:),node_neg(:),slip(:),perm(:),onlst(:,:),     &
      frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),gpl2g(:), &
-     nnd_fe2fd(:)
+     nnd_fe2fd(:),fdact_loc(:),matFD(:,:)
   real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:),xfnd(:,:),     &
      ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:),           &
@@ -32,15 +32,15 @@ module global
      mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
      fl(:),ql(:),flc(:),fp(:),qu(:),ss(:),sh(:),f2s(:),dip(:),nrm(:),          &
-     flt_slip(:),tot_flt_slip(:),qs_flt_slip(:)
+     flt_slip(:),tot_flt_slip(:),res_flt_slip(:),qs_flt_slip(:)
   character(12) :: stype
   character(256) :: output_file
-  logical :: poro,visco,fault,dyn,fail,dsp_dyn,crp,gf,kfv
+  logical :: poro,visco,fault,dyn,fail,write_dyn,crp,gf,kfv
   Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,Vec_U_dyn,  &
      Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up_dyn,Vec_I_dyn,Vec_fp,Vec_qu,Vec_Uu,Vec_Ul,&
      Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip,Vec_nrm,Vec_Cp,       &
      Vec_lambda_sta,Vec_lambda_sta0,Vec_lambda_bk,Vec_lm_pn,Vec_lm_pp,         &
-     Vec_lm_f2s,Vec_Fm_dyn,Vec_F_dyn,Vec_Cp0,Vec_Up_fv,Vec_Up_hst 
+     Vec_lm_f2s,Vec_Fm_dyn,Vec_F_dyn,Vec_Cp0,Vec_Up_fv,Vec_Up_hst,Vec_Cst 
   Vec,pointer :: Vec_W(:),Vec_Wlm(:)
   Mat :: Mat_K,Mat_M,Mat_Minv,Mat_Gt,Mat_G,Mat_GMinvGt,Mat_Kc,Mat_K_dyn,Mat_H, &
      Mat_Ht
@@ -52,7 +52,7 @@ module global
   integer,allocatable :: indx(:),indxp(:),enodes(:),indx_dyn(:)
   real(8),allocatable :: k(:,:),m(:,:),f(:),ecoords(:,:),kc(:,:),Hs(:),        &
      k_dyn(:,:),uu_obs(:,:),tot_uu_obs(:,:),uu_dyn_obs(:,:),                   &
-     tot_uu_dyn_obs(:,:),flt_ss(:,:),flt_p(:),uu_fd(:,:)
+     tot_uu_dyn_obs(:,:),uu_fd(:,:) !,flt_ss(:,:),flt_p(:)
   ! Variables for parallel code
   integer :: nprcs,rank,ierr
   integer,allocatable :: epart(:),npart(:) ! Partitioning
@@ -516,18 +516,16 @@ contains
              if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r
           end if
           call VecSetValues(Vec_f2s,dmn,workneg,-(/r,r,r/),Insert_Values,ierr)
-          if (poro) call VecSetValue(Vec_lm_f2s,nceqs_ncf/(dmn+1)+j-1,r,       &
-             Insert_Values,ierr)
+          call VecSetValue(Vec_lm_f2s,nceqs_ncf/(dmn+1)+j-1,r,Insert_Values,   &
+             ierr)
           call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
        end if
     end do
     call VecAssemblyBegin(Vec_f2s,ierr)
     call VecAssemblyEnd(Vec_f2s,ierr)
-    if (poro) then
-       call VecAssemblyBegin(Vec_lm_f2s,ierr)
-       call VecAssemblyEnd(Vec_lm_f2s,ierr)
-    end if
+    call VecAssemblyBegin(Vec_lm_f2s,ierr)
+    call VecAssemblyEnd(Vec_lm_f2s,ierr)
     call VecAssemblyBegin(Vec_dip,ierr)
     call VecAssemblyEnd(Vec_dip,ierr)
     call VecAssemblyBegin(Vec_nrm,ierr)
@@ -700,6 +698,44 @@ contains
     close(10); k=k+1
   end subroutine WriteOutput_log_rsf
 
+  subroutine GetTracDat(dat_trac) 
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h"
+#endif
+    integer :: j,j1,j2,j3,rw_loc(dmn)
+    real(8) :: dat_trac(:,:,:),flt_qs(dmn),flt_p
+    real(8),target :: flt_ndf(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
+    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
+    flt_ndf=pntr
+    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    lm_pn=f0; lm_pp=f0; lm_f2s=f0 
+    if (poro) then
+       call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
+       lm_pn=pntr
+       call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
+       call VecGetArrayF90(Vec_lm_pp,pntr,ierr)
+       lm_pp=pntr
+       call VecRestoreArrayF90(Vec_lm_pp,pntr,ierr)
+       call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
+       lm_f2s=pntr
+       call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
+    end if
+    do j1=1,nfnd_loc
+       j=FltMap(j1,1); j3=FltMap(j1,2)
+       rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
+       flt_qs=(flt_ndf(rw_loc)+st_init(j3,:dmn))*lm_f2s(j)
+       if (poro) then
+          flt_p=(lm_pp(j)+lm_pn(j))/f2
+          ! Positive pressure affects normal stress
+          flt_qs(dmn)=flt_qs(dmn)+max(f0,biot(j3)*flt_p)
+          dat_trac(1,:,j1)=(/flt_qs,flt_p/)
+       else
+          dat_trac(1,:,j1)=flt_qs
+       end if
+    end do
+  end subroutine GetTracDat 
+
   ! Update slip from the static model (from Vec_lambda_sta)
   subroutine GetSlip_sta 
     implicit none
@@ -762,7 +798,12 @@ contains
              mu=mu_hyb(j3)
           end if
        else ! Slip weakening
-          mu=fc(j3)
+          d=sqrt(sum(res_flt_slip(rw_loc(:dmn-1))*res_flt_slip(rw_loc(:dmn-1))))
+          if (d<dc(j3)) then
+             mu=(f1-d/dc(j3))*(fc(j3)-fcd(j3))+fcd(j3)
+          else
+             mu=fcd(j3) 
+          end if
        end if
        flt_qs(1)=flt_qs(1)+rsftau
        select case(dmn)
@@ -901,7 +942,7 @@ contains
 #endif
     integer ::j,j1,j2,j3,rw_loc(dmn)
     real(8) :: d,dd,fr,frs,frd,fsh,mu,fcoh,fnrm,rsftau,vec_init(dmn),vec(dmn), &
-       lm_sta(dmn),lm_dyn(dmn),lm_dyn0(dmn)
+       vec_slip(dmn-1),lm_sta(dmn),lm_dyn(dmn),lm_dyn0(dmn)
     real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn),                 &
        flt_dyn0(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -933,7 +974,8 @@ contains
        lm_sta=flt_sta(rw_loc)
        lm_dyn0=flt_dyn0(rw_loc)
        lm_dyn=flt_dyn(rw_loc)
-       d=sqrt(sum(tot_flt_slip(rw_loc(:dmn-1))*tot_flt_slip(rw_loc(:dmn-1))))
+       vec_slip=tot_flt_slip(rw_loc(:dmn-1))+res_flt_slip(rw_loc(:dmn-1))
+       d=sqrt(sum(vec_slip*vec_slip))
        vec=vec_init+lm_sta+lm_dyn0+lm_dyn 
        ! Positive pressure affects friction
        vec(dmn)=vec(dmn)+max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
@@ -1146,8 +1188,14 @@ contains
     ! Identify aseismic slip, nc=10 for SCEC10/14 (slow weakening)
     nc=5; nr=15
     if (ih>nc+rsf*nr .and. sum((slip0-slip_sum)*(slip0-slip_sum))==0) then 
-       slip=0
        crp=.true.
+       slip=0
+       do j1=1,nfnd_loc 
+          j=FltMap(j1,1); j3=FltMap(j1,2)
+          rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
+          if (slip_loc(j3)>0) res_flt_slip(rw_loc)=res_flt_slip(rw_loc)+       &
+             tot_flt_slip(rw_loc)
+       end do
     elseif (ih>nc+rsf*nr) then
        i=0
        do j=1,nfnd
@@ -1160,64 +1208,64 @@ contains
   end subroutine GetSlip_dyn 
 
   ! Get fault QS state 
-  subroutine GetVec_flt_qs
-    implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
-#include "petsc.h"
-#endif
-    integer :: l1,l2,j,j1,r1,r2,row_l(1),row_f2s(1),row_p(1) 
-    real(8) :: lm(dmn),vec(dmn),rvec(dmn),rf2s(dmn),mattmp(dmn,dmn),           &
-       vectmp(dmn,1),pn(1),pp(1),fltpn,fltpp
-    call VecGetOwnershipRange(Vec_Um,l1,l2,ierr)
-    call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
-    do j=1,nfnd
-       lm=f0; vec=f0; rf2s=0; rvec=f0; pn=f0; pp=f0; fltpn=f0; fltpp=f0
-       do j1=1,dmn 
-          if (poro) then
-             row_l=(dmn+1)*nnds+nceqs_ncf+(j-1)*dmn+sum(perm(1:j-1))+j1-1
-          else
-             row_l=dmn*nnds+nceqs_ncf+(j-1)*dmn+j1-1
-          end if
-          if (row_l(1)>=l1 .and. row_l(1)<l2) then
-             call VecGetValues(Vec_Um,1,row_l,lm(j1),ierr)
-          end if
-          row_f2s=dmn*node_pos(j)-dmn+j1-1
-          if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
-             call VecGetValues(Vec_f2s,1,row_f2s,rf2s(j1),ierr)
-          end if
-       end do
-       if (poro) then
-          row_p=(dmn+1)*node_neg(j)-1
-          if (row_p(1)>=l1 .and. row_p(1)<l2) then
-             call VecGetValues(Vec_Um,1,row_p,pn,ierr)
-          end if
-          row_p=(dmn+1)*node_pos(j)-1
-          if (row_p(1)>=l1 .and. row_p(1)<l2) then
-             call VecGetValues(Vec_Um,1,row_p,pp,ierr)
-          end if
-       end if
-       call MPI_Reduce(lm,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
-       call MPI_Reduce(rf2s,rvec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
-          ierr)
-       call MPI_Reduce(pn,fltpn,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
-       call MPI_Reduce(pp,fltpp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
-       ! Rotate vec to fault coordinate
-       if (rank==nprcs-1) then
-          vectmp=reshape(vec,(/dmn,1/))
-          mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
-          vectmp=matmul(mattmp,vectmp)
-          vec(:)=vectmp(:,1)
-          ! Nodal force to stress
-          flt_ss(j,:)=(vec*wt+st_init(j,:))*rvec(dmn)
-          if (poro) then 
-             flt_p(j)=0.5*(fltpn+fltpp)*scale 
-             flt_ss(j,dmn)=flt_ss(j,dmn)+max(f0,biot(j)*flt_p(j))
-          end if 
-       end if
-    end do
-    call MPI_Bcast(flt_ss,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-    if (poro) call MPI_Bcast(flt_p,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-  end subroutine GetVec_flt_qs
+!  subroutine GetVec_flt_qs
+!    implicit none
+!#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+!#include "petsc.h"
+!#endif
+!    integer :: l1,l2,j,j1,r1,r2,row_l(1),row_f2s(1),row_p(1) 
+!    real(8) :: lm(dmn),vec(dmn),rvec(dmn),rf2s(dmn),mattmp(dmn,dmn),           &
+!       vectmp(dmn,1),pn(1),pp(1),fltpn,fltpp
+!    call VecGetOwnershipRange(Vec_Um,l1,l2,ierr)
+!    call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
+!    do j=1,nfnd
+!       lm=f0; vec=f0; rf2s=0; rvec=f0; pn=f0; pp=f0; fltpn=f0; fltpp=f0
+!       do j1=1,dmn 
+!          if (poro) then
+!             row_l=(dmn+1)*nnds+nceqs_ncf+(j-1)*dmn+sum(perm(1:j-1))+j1-1
+!          else
+!             row_l=dmn*nnds+nceqs_ncf+(j-1)*dmn+j1-1
+!          end if
+!          if (row_l(1)>=l1 .and. row_l(1)<l2) then
+!             call VecGetValues(Vec_Um,1,row_l,lm(j1),ierr)
+!          end if
+!          row_f2s=dmn*node_pos(j)-dmn+j1-1
+!          if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
+!             call VecGetValues(Vec_f2s,1,row_f2s,rf2s(j1),ierr)
+!          end if
+!       end do
+!       if (poro) then
+!          row_p=(dmn+1)*node_neg(j)-1
+!          if (row_p(1)>=l1 .and. row_p(1)<l2) then
+!             call VecGetValues(Vec_Um,1,row_p,pn,ierr)
+!          end if
+!          row_p=(dmn+1)*node_pos(j)-1
+!          if (row_p(1)>=l1 .and. row_p(1)<l2) then
+!             call VecGetValues(Vec_Um,1,row_p,pp,ierr)
+!          end if
+!       end if
+!       call MPI_Reduce(lm,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
+!       call MPI_Reduce(rf2s,rvec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+!          ierr)
+!       call MPI_Reduce(pn,fltpn,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
+!       call MPI_Reduce(pp,fltpp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
+!       ! Rotate vec to fault coordinate
+!       if (rank==nprcs-1) then
+!          vectmp=reshape(vec,(/dmn,1/))
+!          mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
+!          vectmp=matmul(mattmp,vectmp)
+!          vec(:)=vectmp(:,1)
+!          ! Nodal force to stress
+!          flt_ss(j,:)=(vec*wt+st_init(j,:))*rvec(dmn)
+!          if (poro) then 
+!             flt_p(j)=0.5*(fltpn+fltpp)*scale 
+!             flt_ss(j,dmn)=flt_ss(j,dmn)+max(f0,biot(j)*flt_p(j))
+!          end if 
+!       end if
+!    end do
+!    call MPI_Bcast(flt_ss,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
+!    if (poro) call MPI_Bcast(flt_p,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
+!  end subroutine GetVec_flt_qs
 
   ! Add fault slip from dynamic model to static model as constraint functions
   subroutine FaultSlip
@@ -1484,14 +1532,15 @@ contains
   subroutine GetVec_Stress
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
-#include "petscdef.h"
 #include "petsc.h"
 #endif
     integer:: i,j,indx(eldof),row(dmn)
     real(8):: sigma(cdmn),stvec(cdmn),cst(dmn),ecoords(npel,dmn),detj
-    Vec :: Vec_Cst
-    call VecDuplicate(Vec_SS,Vec_Cst,ierr)
-    call VecZeroEntries(Vec_Cst,ierr)
+    integer,save :: k=0
+    if (k==0) then
+       call VecDuplicate(Vec_SS,Vec_Cst,ierr)
+       call VecZeroEntries(Vec_Cst,ierr)
+    end if
     do i=1,nels
        enodes=nodes(i,:)
        call FormElIndx(enodes,indx)
@@ -1516,18 +1565,20 @@ contains
              call VecSetValues(Vec_SS,dmn,row,stvec(1:dmn),Add_Values,ierr)
              call VecSetValues(Vec_SH,dmn,row,stvec(dmn+1:cdmn),Add_Values,ierr)
           end select
-          call VecSetValues(Vec_Cst,dmn,row,cst,Add_Values,ierr)
+          if (k==0) call VecSetValues(Vec_Cst,dmn,row,cst,Add_Values,ierr)
        end do
     end do
     call VecAssemblyBegin(Vec_SS,ierr)
     call VecAssemblyEnd(Vec_SS,ierr)
     call VecAssemblyBegin(Vec_SH,ierr)
     call VecAssemblyEnd(Vec_SH,ierr)
-    call VecAssemblyBegin(Vec_Cst,ierr)
-    call VecAssemblyEnd(Vec_Cst,ierr)
+    if (k==0) then
+       call VecAssemblyBegin(Vec_Cst,ierr)
+       call VecAssemblyEnd(Vec_Cst,ierr)
+    end if
     call VecPointwiseDivide(Vec_SS,Vec_SS,Vec_Cst,ierr)
     call VecPointwiseDivide(Vec_SH,Vec_SH,Vec_Cst,ierr)
-    call VecDestroy(Vec_Cst,ierr)
+    k=k+1
   end subroutine GetVec_Stress
 
   ! Form local Hs
@@ -1964,7 +2015,7 @@ contains
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,I0,3A,I0.6,A)')trim(name0),rank,"_",trim(name1),"_",k,".vtk"
-    if (dsp_dyn) then
+    if (write_dyn) then
        if (dsp_hyb==1) then
           field_val=>tot_uu_dyn
        else
@@ -2007,8 +2058,8 @@ contains
     end do
     write(10,'(A,I0)')"POINT_DATA ",lnnds
     j=dmn+p
-    if (dsp_dyn) j=dmn
-    if (poro .and. .not. dsp_dyn) then
+    if (write_dyn) j=dmn
+    if (poro .and. .not. write_dyn) then
        write(10,'(A)')"SCALARS pressure double"
        write(10,'(A)')"LOOKUP_TABLE default"
        fmt="(1(F0.3,1X))"
@@ -2023,13 +2074,13 @@ contains
     case(2)
        do i=1,lnnds
           j1=i*j-p
-          if (dsp_dyn) j1=i*j
+          if (write_dyn) j1=i*j
           write(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
        end do
     case(3)
        do i=1,lnnds
           j1=i*j-p
-          if (dsp_dyn) j1=i*j
+          if (write_dyn) j1=i*j
           write(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
        end do
     end select
@@ -2500,7 +2551,7 @@ contains
     end if
   end subroutine WriteOutput_obs
 
-  ! Write event log file for quasi-static data
+  ! Write event log file for event info 
   subroutine WriteOutput_log
     implicit none
     character(256) :: name,name0,name1
@@ -2631,44 +2682,44 @@ contains
   end subroutine WriteOutput_slip
 
   ! Write qs fault data 
-  subroutine WriteOutput_flt_qs
-    implicit none
-    character(256) :: name,name0,name1
-    character(64) :: fmt
-    integer :: i
-    integer,save :: k=0
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A)')trim(name0),trim(name1),"_fqs.txt"
-    select case(dmn+p)
-       case(2); fmt="(2(F0.6,1X))"
-       case(3); fmt="(3(F0.6,1X))"
-       case(4); fmt="(4(F0.6,1X))"
-    end select
-    if (k==0) then
-       open(10,file=adjustl(name),status='replace')
-       write(10,'(I0)')sum(frc)
-       do i=1,nfnd
-          if (frc(i)>0) then
-             select case(dmn)
-                case(2); write(10,'(2(F0.6,1X))')xfnd(i,:)
-                case(3); write(10,'(3(F0.6,1X))')xfnd(i,:)
-             end select
-          end if
-       end do
-    else
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    do i=1,nfnd
-       if (frc(i)>0) then
-          if (poro) then
-             write(10,fmt)flt_ss(i,:),flt_p(i)
-          else
-             write(10,fmt)flt_ss(i,:)
-          end if
-       end if
-    end do
-    close(10); k=k+1
-  end subroutine WriteOutput_flt_qs
+!  subroutine WriteOutput_flt_qs
+!    implicit none
+!    character(256) :: name,name0,name1
+!    character(64) :: fmt
+!    integer :: i
+!    integer,save :: k=0
+!    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
+!    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
+!    write(name,'(A,A,A)')trim(name0),trim(name1),"_fqs.txt"
+!    select case(dmn+p)
+!       case(2); fmt="(2(F0.6,1X))"
+!       case(3); fmt="(3(F0.6,1X))"
+!       case(4); fmt="(4(F0.6,1X))"
+!    end select
+!    if (k==0) then
+!       open(10,file=adjustl(name),status='replace')
+!       write(10,'(I0)')sum(frc)
+!       do i=1,nfnd
+!          if (frc(i)>0) then
+!             select case(dmn)
+!                case(2); write(10,'(2(F0.6,1X))')xfnd(i,:)
+!                case(3); write(10,'(3(F0.6,1X))')xfnd(i,:)
+!             end select
+!          end if
+!       end do
+!    else
+!       open(10,file=adjustl(name),status='old',position='append',action='write')
+!    end if
+!    do i=1,nfnd
+!       if (frc(i)>0) then
+!          if (poro) then
+!             write(10,fmt)flt_ss(i,:),flt_p(i)
+!          else
+!             write(10,fmt)flt_ss(i,:)
+!          end if
+!       end if
+!    end do
+!    close(10); k=k+1
+!  end subroutine WriteOutput_flt_qs
 
 end module global

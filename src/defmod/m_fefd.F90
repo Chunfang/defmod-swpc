@@ -115,11 +115,11 @@ contains
   ! Flag active FD grid points fdact_loc(ngp_loc)
   subroutine GetFDAct
     implicit none
-    character(256) :: name,name0,name1
-    integer :: nact,j,j2,j3,xid,yid,zid,rowfd(2**dmn),fdact(ngp),              &
-       fdact_loc(ngp_loc),xid0,yid0,zid0
+    !character(256) :: name,name0,name1
+    integer :: nact,j,j2,j3,xid,yid,zid,rowfd(2**dmn),fdact(ngp),xid0,yid0,zid0
     integer,allocatable :: idact(:,:),idact_full(:,:),uniq(:)
     integer,save :: k=0
+    if (k==0) allocate(fdact_loc(ngp_loc))
     nact=size(pack(slip_sum,slip_sum>0))
     allocate(idact_full(nact*(2**dmn),dmn),uniq(nact*(2**dmn)))
     j=0
@@ -174,21 +174,21 @@ contains
        end if
     end do 
     fdact_loc=fdact(gpl2g)
-    if (ngp_loc>0) then
-       name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-       name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_fdact.txt"
-       if (k==0) then
-          open(11,file=adjustl(name),status='replace')
-       else
-          open(11,file=adjustl(name),status='old',position='append',           &
-             action='write')
-       end if
-       do j=1,ngp_loc
-          write(11,'(I0)')fdact_loc(j)
-       end do
-       close(11) 
-    end if
+    !if (ngp_loc>0) then
+    !   name0=output_file(:index(output_file,"/",BACK=.TRUE.))
+    !   name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
+    !   write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_fdact.txt"
+    !   if (k==0) then
+    !      open(11,file=adjustl(name),status='replace')
+    !   else
+    !      open(11,file=adjustl(name),status='old',position='append',           &
+    !         action='write')
+    !   end if
+    !   do j=1,ngp_loc
+    !      write(11,'(I0)')fdact_loc(j)
+    !   end do
+    !   close(11) 
+    !end if
     k=k+1
   end subroutine GetFDAct
 
@@ -266,11 +266,11 @@ contains
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
-     integer :: k,el,matFD(nels,dmn*2+1),hasFD(nprc_fd),ixmin,iymin,izmin,     &
+     integer :: k,el,hasFD(nprc_fd),ixmin,iymin,izmin,     &
         ixmax,iymax,izmax,rankx,rankx0,rankx1,ranky,ranky0,ranky1,rankxy,      &
         buf(nprcs*nprc_fd),vfe2fd(nprcs,nprc_fd)
      real(8) :: xmin,ymin,zmin,xmax,ymax,zmax
-     character(256) :: name,name0,name1,namev
+     character(256) :: name,name0,name1!,namev
      select case(dmn)
      case(2)
         xmin=minval(coords(:,1)); xmax=maxval(coords(:,1))
@@ -333,14 +333,14 @@ contains
            izmin=int((-zmax+zref)/dz)+1; izmax=int((-zmin+zref)/dz)+1
            matFD(el,:)=(/ixmin,ixmax,iymin,iymax,izmin,izmax,id(el)/)
         end do
-        write(namev,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,         &
-           "_ife2fd.txt"
-        open(152,file=adjustl(namev),status='replace')
-        write(152,'(I0)')nels
-        do el=1,nels
-           write(152,'(7(I0,X))')matFD(el,:) 
-        end do
-        close(152)
+        !write(namev,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,         &
+        !   "_ife2fd.txt"
+        !open(152,file=adjustl(namev),status='replace')
+        !write(152,'(I0)')nels
+        !do el=1,nels
+        !   write(152,'(7(I0,X))')matFD(el,:) 
+        !end do
+        !close(152)
      end select
   end subroutine MatFE2FD
 

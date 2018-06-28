@@ -20,7 +20,6 @@ module fvfe
 
   !! Public routines
   public :: MakeEl2g
-  public :: FVReset
   public :: FVInit
   public :: FVInitUsg
   public :: FVReformKF
@@ -34,7 +33,7 @@ module fvfe
   character(256) :: nameh5
   integer :: stp0
   integer(hsize_t) :: off_dom(3),dim_dom(3) ! H5 offset and dim
-  real(8) :: xmin,ymin,zmin,dx,dy,dz,r_perm(3),p_top,dt_fv ! Local FV/FE vars 
+  real(8) :: xmin,ymin,zmin,dx,dy,dz,r_perm(3),dt_fv ! Local FV/FE vars 
   integer, allocatable :: el2g(:),bdnd(:) ! Boundary nodes
   !! Pressure and time
   real(8), allocatable :: p_fv0(:),p_fv_bd(:,:),t_fv(:),t_fe(:) 
@@ -56,15 +55,15 @@ contains
 #include "petsc.h" 
 #endif
     character(256) :: name,name0,name1,namegrp,namedat
-    integer :: i,row,iv,nbd,it,nt_fv,nx,ny,nz,idfile,err,idgrp,iddat,spc_dat,  &
-       spc_dom,lnnds,ix,iy,iz
+    integer(hid_t) :: idfile,idgrp,iddat,spc_dat,spc_dom
+    integer :: i,row,iv,nbd,it,nt_fv,nx,ny,nz,err,lnnds,ix,iy,iz
     real(8) :: xref,yref,zref,xmax,ymax,zmax,p_hst
     real(8),allocatable :: p_dom(:,:,:)
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,A,A)')trim(name0),trim(name1),"_fvfe.cfg"
     open(153,file=adjustl(name),status='old')
-    read(153,*)nt_fv,stp0,dt_fv,p_top
+    read(153,*)nt_fv,stp0,dt_fv
     read(153,*)nx,ny,nz
     read(153,*)dx,dy,dz
     dx=km2m*dx; dy=km2m*dy; dz=km2m*dz
@@ -117,8 +116,8 @@ contains
        iy=int((coords(iv,2)-ymin)/dy)+1
        iz=int((coords(iv,3)-zmin)/dz)+1
        p_hst=p_dom(iz,iy,ix)
-       row=nl2g(i,2)-1
-       call VecSetValue(Vec_Up_hst,row,-(p_hst-p_top)/scale,Insert_Values,ierr)
+       row=nl2g(iv,2)-1
+       call VecSetValue(Vec_Up_hst,row,p_hst/scale,Insert_Values,ierr)
     end do
     call VecAssemblyBegin(Vec_Up_hst,ierr)
     call VecAssemblyEnd(Vec_Up_hst,ierr) 
@@ -162,14 +161,15 @@ contains
 #include "petsc.h" 
 #endif
     character(256) :: name,name0,name1,namegrp,namedat
-    integer :: i,j,row,nt_fv,idfile,idgrp,iddat,err,spc_dat,spc_cell,nbd
+    integer(hid_t) :: idfile,idgrp,iddat,spc_dat,spc_cell
+    integer :: i,j,row,nt_fv,err,nbd
     integer(hsize_t) :: off(1),dim_cell(1)
     real(8) :: p_cell,cp,detj
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,A,A)')trim(name0),trim(name1),"_fvfe.cfg"
     open(153,file=adjustl(name),status='old')
-    read(153,*)nt_fv,stp0,dt_fv,p_top
+    read(153,*)nt_fv,stp0,dt_fv
     read(153,*)r_perm ! Inverse viscosity with scales
     close(153)
     write(nameh5,'(A,A,A)')trim(name0),trim(name1),"_usg.h5"
@@ -210,7 +210,7 @@ contains
        do j=1,npel
           row=nl2g(nodes(i,j),2)-1
           call VecSetValue(Vec_Cp0,row,cp,Add_Values,ierr)
-          call VecSetValue(Vec_Up_hst,row,-cp*(p_cell-p_top)/scale,Add_Values, &
+          call VecSetValue(Vec_Up_hst,row,cp*p_cell/scale,Add_Values, &
              ierr)
        end do
     end do
@@ -274,7 +274,7 @@ contains
     call VecAssemblyBegin(Vec_Up,ierr)
     call VecAssemblyEnd(Vec_Up,ierr)
     ! Rescale RHS by pressure coefficient
-    call VecPointwiseMult(Vec_up,Vec_Up,Vec_Cp,ierr)
+    call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
     ! Add FV pressure contribution to nodal force
     call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
@@ -290,7 +290,8 @@ contains
 #include "petsc.h" 
 #endif
     character(256) :: namegrp,namedat
-    integer :: i,j,j2,row,ef_eldof,idfile,idgrp,iddat,spc_dat,spc_cell,err
+    integer(hid_t) :: idfile,idgrp,iddat,spc_dat,spc_cell
+    integer :: i,j,j2,row,ef_eldof,err
     integer(hsize_t) :: off(1),dim_cell(1)
     real(8) :: p_cell,cp,detj
     call MatZeroEntries(Mat_K,ierr)
@@ -349,13 +350,15 @@ contains
     call VecPointwiseDivide(Vec_Up,Vec_Up,Vec_Cp0,ierr)
     call VecPointwiseDivide(Vec_Up_fv,Vec_Up_fv,Vec_Cp0,ierr)
     ! Rescale RHS by pressure coefficient
-    call VecPointwiseMult(Vec_up,Vec_Up,Vec_Cp,ierr)
+    call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
     ! Add FV pressure contribution to nodal force
     call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
     call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
     call VecAXPY(Vec_Uu,-f1,Vec_fp,ierr)
     call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)
+    ! Remove hydrostatic RHS
+    !call ResetRHS
   end subroutine FVReformKFUsg 
 
   subroutine FVReformKPerm(t_sync,ef_eldof)
@@ -364,8 +367,8 @@ contains
 #include "petsc.h" 
 #endif
     character(256) :: namegrp,namedat
-    integer :: it,i,j,j2,ix,iy,iz,row,ef_eldof,idfile,err,idgrp,iddat,spc_dat, &
-       spc_dom
+    integer(hid_t) :: idfile,idgrp,iddat,spc_dat,spc_dom
+    integer :: it,i,j,j2,ix,iy,iz,row,ef_eldof,err
     real(8) :: t_sync,perm1(dim_dom(1),dim_dom(2),dim_dom(3)),m_perm(dmn,dmn), &
        perm2(dim_dom(1),dim_dom(2),dim_dom(3)),wfv
     it=size(pack(t_fe,t_fe<=t_sync))
@@ -409,8 +412,8 @@ contains
        iz=int((sum(ecoords(:,3))/dble(size(ecoords,1))-zmin)/dz)+1
        m_perm=f0
        do j=1,dmn ! Tensor valued permeability
-          !m_perm(j,j)=mat(id(i),6) ! Original permeability
-          m_perm(j,j)=perm1(iz,iy,ix)*r_perm(j) ! FV perm, reverse order
+          m_perm(j,j)=mat(id(i),6) ! Original permeability
+          !m_perm(j,j)=perm1(iz,iy,ix)*r_perm(j) ! FV perm, reverse order
        end do
        call FormLocalKPerm(i,k,indx,m_perm,"Kp") 
        indx=indxmap(indx,2)
@@ -450,8 +453,9 @@ contains
 #include "petsc.h" 
 #endif
     character(256) :: namegrp,namedat
-    integer :: it,i,j,j2,row,ef_eldof,idfile,err,idgrp1,idgrp2,iddat1,iddat2,  &
-        spc_dat1,spc_dat2,spc_cell
+    integer(hid_t) :: idfile,idgrp1,idgrp2,iddat1,iddat2,spc_dat1,spc_dat2,    &
+       spc_cell
+    integer :: it,i,j,j2,row,ef_eldof,err
     integer(hsize_t) :: off(1),dim_cell(1)
     real(8) :: t_sync,perm1,perm2,m_perm(dmn,dmn),wfv
     it=size(pack(t_fe,t_fe<=t_sync))
@@ -530,18 +534,6 @@ contains
     call VecAssemblyEnd(Vec_Cp,ierr)
   end subroutine FVReformKPermUsg
 
-  ! Remove hydrostatic pressure gradient
-  subroutine FVReset
-    implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
-#include "petsc.h" 
-#endif
-    call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-    call VecAXPY(Vec_Up,f1,Vec_Up_hst,ierr)
-    call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-    call VecDestroy(Vec_Up_hst,ierr)
-  end subroutine FVReset
-
   ! Impose boundary pore pressure via RHS
   subroutine FVSyncBD(t_sync)  
     implicit none
@@ -583,8 +575,9 @@ contains
 #include "petsc.h" 
 #endif
     character(256) :: namegrp,namedat
-    integer :: i,j,it,row,idfile,idgrp1,iddat1,idgrp2,iddat2,err,spc_dat1,     &
-       spc_dat2,spc_cell
+    integer(hid_t) :: idfile,idgrp1,iddat1,idgrp2,iddat2,spc_dat1,spc_dat2,    &
+       spc_cell
+    integer :: i,j,it,row,err
     integer(hsize_t) :: off(1),dim_cell(1)
     real(8) :: t_sync,pfv1,pfv2,cp,detj
     it=size(pack(t_fe,t_fe<t_sync))

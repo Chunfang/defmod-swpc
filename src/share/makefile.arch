@@ -88,12 +88,12 @@ endif
 ## MIT enaging
 ##
 ifeq ($(arch),engaging)
-  FC      = /cm/shared/engaging/intel/intel-2013.1.046/impi/4.1.3.048/intel64/bin/mpiifort 
+  FC      = ${PETSC_DIR}/${PETSC_ARCH}/bin/h5pfc 
   FFLAGS  = -xAVX -O3 -lmpi -I../include -D_INFO -D_ASSERT -openmp
   NCFLAG  = -D_NETCDF
-  NCLIB   = -L${HOME}/NetCDF/lib -L/cm/shared/engaging/netcdf/4.4.1/lib
-  NCINC   = -I${HOME}/NetCDF/include
-  NETCDF  = -lnetcdff -lnetcdf
+  NCLIB   = -L${HOME}/NetCDF/lib -L/cm/shared/engaging/netcdf/4.4.1/lib -L${PETSC_DIR}/${PETSC_ARCH}/lib
+  NCINC   = -I${HOME}/NetCDF/include -I${PETSC_DIR}/${PETSC_ARCH}/include
+  NETCDF  = -lnetcdff -lnetcdf -lhdf5 -lhdf5_fortran
 
   ifeq ($(publish),true)
     FFLAGS = -xAVX -O3 -openmp -lmpi_mt -static-intel -I../include -D_INFO -D_ASSERT -mcmodel=small
@@ -109,12 +109,12 @@ endif
 ## PSC bridges 
 ##
 ifeq ($(arch),bridges)
-  FC      = /opt/intel/compilers_and_libraries_2017.4.196/linux/mpi/intel64/bin/mpiifort 
+  FC      = ${PETSC_DIR}/${PETSC_ARCH}/bin/h5pfc  
   FFLAGS  = -xAVX -O3 -lmpi -I../include -D_INFO -D_ASSERT -qopenmp
   NCFLAG  = -D_NETCDF
-  NCLIB   = -L/opt/packages/netcdf/4.1.3-icc/lib -Wl,-rpath=/opt/packages/hdf5/intel/1.8.16/hdf5/lib
-  NCINC   = -I/opt/packages/netcdf/4.1.3-icc/include
-  NETCDF  = -lnetcdff -lnetcdf
+  NCLIB   = -L/opt/packages/netcdf/4.1.3-icc/lib -Wl,-rpath=/opt/packages/hdf5/intel/1.8.16/hdf5/lib -L${PETSC_DIR}/${PETSC_ARCH}/lib
+  NCINC   = -I/opt/packages/netcdf/4.1.3-icc/include -I${PETSC_DIR}/${PETSC_ARCH}/include
+  NETCDF  = -lnetcdff -lnetcdf -lhdf5 -lhdf5_fortran
 
   ifeq ($(publish),true)
     FFLAGS = -xHOST -O3 -qopenmp -mt_mpi -static-intel -I../include -D_INFO -D_ASSERT -mcmodel=small
@@ -161,12 +161,12 @@ endif
 ##
 ifeq ($(arch),ubuntu-gfortran)
 
-  FC      = mpif90
+  FC      =  mpif90 
   FFLAGS  = -O2 -ffast-math -D_INFO -D_ASSERT -I../include -fopenmp
   NCFLAG  = -D_NETCDF
-  NCLIB   = -L/usr/lib/x86_64-linux-gnu
-  NCINC   = -I/usr/include
-  NETCDF  = -lnetcdff -lnetcdf
+  NCLIB   = -L/usr/lib/x86_64-linux-gnu -L/usr/lib/x86_64-linux-gnu/hdf5/openmpi
+  NCINC   = -I/usr/include -I/usr/include/hdf5/openmpi
+  NETCDF  = -lnetcdff -lnetcdf -lhdf5 -lhdf5_fortran
 
   ifeq ($(debug),true)
     FFLAGS  = -Wall -pedantic -fbounds-check -O -Wuninitialized -fconvert=big-endian\
