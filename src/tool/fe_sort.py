@@ -3,6 +3,44 @@ import numpy as np
 import os,sys
 from itertools import islice
 import glob as glb
+import h5py 
+def save_dict_to_hdf5(dic, filename):
+    """
+    ....
+    """
+    with h5py.File(filename, 'w') as h5file:
+        recursively_save_dict_contents_to_group(h5file, '/', dic)
+
+def recursively_save_dict_contents_to_group(h5file, path, dic):
+    """
+    ....
+    """
+    for key, item in dic.items():
+        if isinstance(item, (np.ndarray, np.int64, np.float64, str, bytes)):
+            h5file[path + key] = item
+        elif isinstance(item, dict):
+            recursively_save_dict_contents_to_group(h5file, path + key + '/', item)
+        else:
+            raise ValueError('Cannot save %s type'%type(item))
+
+def load_dict_from_hdf5(filename):
+    """
+    ....
+    """
+    with h5py.File(filename, 'r') as h5file:
+        return recursively_load_dict_contents_from_group(h5file, '/')
+
+def recursively_load_dict_contents_from_group(h5file, path):
+    """
+    ....
+    """
+    ans = {}
+    for key, item in h5file[path].items():
+        if isinstance(item, h5py._hl.dataset.Dataset):
+            ans[key] = item.value
+        elif isinstance(item, h5py._hl.group.Group):
+            ans[key] = recursively_load_dict_contents_from_group(h5file, path + key + '/')
+    return ans
 
 # Model poroelastics, dimension and rate-state-friction 
 name_sol = sys.argv[1]
@@ -76,13 +114,13 @@ try:
     nframe=dat_log_dyn[-1]
 except:
     nframe=dat_log_dyn.item()
-dat_seis_tmp=np.empty(shape=[0,dmn],dtype=np.float)
+dat_seis_tmp=np.empty(shape=[nframe*len(ocoord),dmn],dtype=np.float)
 for i in range(nframe):
     dat_tmp=np.empty(shape=[0,dmn],dtype=np.float)
     for f,j in zip(fopen,range(len(fopen))):
         dat_tmp=np.vstack((dat_tmp,np.loadtxt(islice(f,nobs_loc[j]),unpack=False,dtype=np.float)))
     dat_tmp=dat_tmp[opick,:]
-    dat_seis_tmp=np.vstack((dat_seis_tmp,dat_tmp[osort,:]))
+    dat_seis_tmp[i*len(osort):(i+1)*len(osort),:]=dat_tmp[osort,:]
     if np.remainder(i+1,100)*np.remainder(i+1,nframe)==0:print "frame " + str(i+1) +"/"+str(nframe)+ " merged"
 dt = np.loadtxt(log_file, delimiter=" ", usecols=[0], unpack=False, dtype=np.float)[0]
 dt_dyn = np.loadtxt(log_dyn_file, dtype=np.float)[0]
@@ -91,70 +129,72 @@ dt_dyn = np.loadtxt(log_dyn_file, dtype=np.float)[0]
 if alpha:
     log_dyn_file_alpha = name_sol+"-alpha_dyn.log"
     dt_alpha=np.loadtxt(log_dyn_file_alpha, dtype=np.float)[0]
-    dat_log_alpha = np.loadtxt(log_dyn_file_alpha, delimiter=" ",skiprows=1, unpack=False, dtype=np.uint32)
-    nframe=dat_log_alpha.item()
+    dat_log_dyn_alpha = np.loadtxt(log_dyn_file_alpha, delimiter=" ",skiprows=1, unpack=False, dtype=np.uint32)
+    try: 
+        nframe=dat_log_dyn_alpha[-1]
+    except:
+        nframe=dat_log_dyn_alpha.item()
     files_alpha=sorted(glb.glob(name_sol+"-alpha_dyn_obs_*.txt"))
     fopen=[]
     for file_alpha in files_alpha: fopen.append(open(file_alpha))
     for f,j in zip(fopen, range(len(fopen))): # Remove headers
         n = np.genfromtxt(islice(f,1),delimiter=" ",unpack=False,dtype=np.uint32)
         _ = np.genfromtxt(islice(f,n),delimiter=" ",unpack=False,dtype=np.float)
-    dat_alpha_tmp = np.empty(shape=[0,dmn],dtype=np.float)
+    dat_seis_alpha_tmp = np.empty(shape=[nframe*len(ocoord),dmn],dtype=np.float)
     for i in range(nframe):
-        dat_tmp=np.empty(shape=[0,dmn],dtype=np.float)
+        dat_tmp=np.empty(shape=[nframe*len(ocoord),dmn],dtype=np.float)
         for f,j in zip(fopen,range(len(fopen))):
             dat_tmp=np.vstack((dat_tmp,np.loadtxt(islice(f,nobs_loc[j]),unpack=False,dtype=np.float)))
         dat_tmp=dat_tmp[opick,:]
-        dat_alpha_tmp=np.vstack((dat_alpha_tmp,dat_tmp[osort,:]))
+        dat_seis_alpha_tmp[i*len(osort):(i+1)*len(osort),:]=dat_tmp[osort,:]
         if np.remainder(i+1,100)*np.remainder(i+1,nframe)==0:print "alpha frame " + str(i+1) +"/"+str(nframe)+ " merged"
     
 if slip:
     # File sets 
-    fqs_file      = name_sol+"_fqs.txt"
     log_slip_file = name_sol+"_slip.log"
-    files_slip    = sorted(glb.glob(name_sol+"_slip_*.txt"))
+    files_slip = sorted(glb.glob(name_sol+"_fe_*.h5")) 
     dt_slip = np.loadtxt(log_slip_file, dtype=np.float)[0]
     dat_log_slip = np.loadtxt(log_slip_file, dtype=np.uint32)[1:]
-    nfnd_all = np.loadtxt(fqs_file, delimiter=" ", usecols=[0], unpack=False, dtype=np.uint32)[0]
-    dat_fqs_tmp = np.loadtxt(fqs_file, skiprows=1+nfnd_all, delimiter=" ", unpack=False, dtype=np.float)
+    h5 = h5py.File(files_slip[0], 'r')
+    nframe_qs = np.shape(h5['slip_sta'])[-1]
     print 'Merge seismic fault slip grid/data...'
-    fcoord=np.empty(shape=[0,dmn+1],dtype=np.float)
-    dat_slip_tmp=np.empty(shape=[0,dmn+rsf],dtype=np.float)
-    fopen=[];n_lmnd=[]
-    for file_slip in files_slip: fopen.append(open(file_slip))
-    for f in fopen:
-        n=int(np.genfromtxt(islice(f,1),delimiter=" ",unpack=False,dtype=np.uint32))
-        fcoord=np.vstack((fcoord,np.genfromtxt(islice(f,n),delimiter=" ",unpack=False,dtype=np.float)))
-        n_lmnd.append(n)
-    nfnd=sum(n_lmnd)
-    fsort=np.argsort(fcoord[:,-1])
-    fcoord=fcoord[fsort,:dmn]
     nframe=dat_log_slip[-1]
-    for i in range(nframe): 
-        dat_tmp=np.empty(shape=[0,dmn+rsf],dtype=np.float)
-        for f,j in zip(fopen,range(len(fopen))):
-            dat_tmp=np.vstack((dat_tmp,np.loadtxt(islice(f,n_lmnd[j]),unpack=False,dtype=np.float)[:,:dmn+rsf]))
-        dat_slip_tmp=np.vstack((dat_slip_tmp,dat_tmp[fsort,:]))
-        if np.remainder(i+1,100)*np.remainder(i+1,nframe)==0:print "frame " + str(i+1) +"/"+str(nframe)+ " merged"
+    nfnd_all=0
+    for f in files_slip:
+        h5 = h5py.File(f, 'r')
+        nfnd_all+=np.shape(h5['slip_sta'])[0]
+    fcoord=np.empty(shape=[nfnd_all,dmn],dtype=np.float)
+    dat_slip_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
+    h5 = h5py.File(files_slip[0], 'r')
+    dat_slip_sta=np.empty(shape=[nfnd_all,dmn,nframe_qs],dtype=np.float)
+    dat_trac_sta=np.empty(shape=[nfnd_all,dmn+p,nframe_qs],dtype=np.float)
+    fopen=[];n_lmnd=[]
+    j0=0
+    for f in files_slip:
+        h5 = h5py.File(f, 'r')
+        j1=j0+len(h5['fault_x'])
+        fcoord[j0:j1,:]=h5['fault_x']    
+        dat_slip_tmp[j0:j1,:,:]=h5['slip_dyn']
+        dat_slip_sta[j0:j1,:,:]=h5['slip_sta']
+        dat_trac_sta[j0:j1,:,:]=h5['trac_sta']
+        j0=j1
+        print 'fault patch ' + str(j0) +"/"+str(nfnd_all)+ " merged"
+    nfnd=len(fcoord)
+
     # Equivalent g-alpha solver
     if alpha:
         log_slip_file_alpha = name_sol+"-alpha_slip.log"
-        files_slip_alpha    = sorted(glb.glob(name_sol+"-alpha_slip_*.txt"))
-        dt_slip_alpha = np.loadtxt(log_slip_file_alpha, dtype=np.float)[0]
         dat_log_slip_alpha = np.loadtxt(log_slip_file_alpha, dtype=np.uint32)[1:]
+        dt_slip_alpha = np.loadtxt(log_slip_file_alpha, dtype=np.float)[0]
         nframe=dat_log_slip_alpha[-1]
-        dat_slip_tmp_alpha=np.empty(shape=[0,dmn+rsf],dtype=np.float)
-        fopen=[]
-        for file_slip in files_slip_alpha: fopen.append(open(file_slip))
-        for f in fopen: # Remove headers
-            n = int(np.genfromtxt(islice(f,1),delimiter=" ",unpack=False,dtype=np.uint32))
-            _ = np.genfromtxt(islice(f,n),delimiter=" ",unpack=False,dtype=np.float)
-        for i in range(nframe):
-            dat_tmp=np.empty(shape=[0,dmn+rsf],dtype=np.float)
-            for f,j in zip(fopen,range(len(fopen))):
-                dat_tmp=np.vstack((dat_tmp,np.loadtxt(islice(f,n_lmnd[j]),unpack=False,dtype=np.float)[:,:dmn+rsf]))
-            dat_slip_tmp_alpha=np.vstack((dat_slip_tmp_alpha,dat_tmp[fsort,:]))
-            if np.remainder(i+1,100)*np.remainder(i+1,nframe)==0:print "alpha frame " + str(i+1) +"/"+str(nframe)+ " merged"
+        dat_slip_alpha_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
+        files_slip_alpha = sorted(glb.glob(name_sol+"-alpha_fe_*.h5"))
+        j0=0
+        for f in files_slip_alpha:
+            h5 = h5py.File(f, 'r')
+            j1=j0+len(h5['fault_x'])
+            dat_slip_alpha_tmp[j0:j1,:,:]=h5['slip_dyn']
+            j0=j1
 
     if rsf==1:
         log_rsf_file=name_sol+"_rsf.log"
@@ -189,52 +229,57 @@ if slip:
 # Sort quasi-static and waveform by obs 
 dmn = dat_seis_tmp.shape[1]
 nobs=len(ocoord)
-dat_seis = np.empty(shape=[nobs,dat_seis_tmp.shape[0]/nobs,dmn],dtype=np.float)
-if alpha: dat_alpha_sort = np.empty([nobs,dat_alpha_tmp.shape[0]/nobs,dmn],dtype=np.float)
-dat_qs_sort = np.empty(shape=[nobs,dat_qs_tmp.shape[0]/nobs,dmn],dtype=np.float) 
+dat_seis = np.empty(shape=[nobs,dmn,dat_seis_tmp.shape[0]/nobs],dtype=np.float)
+if alpha: dat_seis_alpha = np.empty([nobs,dmn,dat_seis_alpha_tmp.shape[0]/nobs],dtype=np.float)
+dat_qs_sort = np.empty(shape=[nobs,dmn,dat_qs_tmp.shape[0]/nobs],dtype=np.float) 
 for i in range(nobs): 
-    dat_seis[i,:,:] = dat_seis_tmp[i::nobs,:]
-    dat_qs_sort[i,:,:] = dat_qs_tmp[i::nobs,:dmn]
-    if alpha: dat_alpha_sort[i,:,:] = dat_alpha_tmp[i::nobs,:]
+    dat_seis[i,:,:] = np.transpose(dat_seis_tmp[i::nobs,:])
+    dat_qs_sort[i,:,:] = np.transpose(dat_qs_tmp[i::nobs,:dmn])
+    if alpha: dat_seis_alpha[i,:,:] = np.transpose(dat_seis_alpha_tmp[i::nobs,:])
 # Sort fault slip by frame
-if slip:
-    nf = dat_slip_tmp.shape[0]/nfnd
-    dat_slip = np.empty(shape=[nf,nfnd,dmn+rsf], dtype=np.float)
-    for i in range(nf):
-        dat_slip[i,:,:] = dat_slip_tmp[i*nfnd:(i+1)*nfnd,:]
-    if alpha: 
-        nf = dat_slip_tmp_alpha.shape[0]/nfnd
-        dat_slip_alpha_sort = np.empty(shape=[nf,nfnd,dmn+rsf], dtype=np.float)
-        for i in range(nf): 
-            dat_slip_alpha_sort[i,:,:] = dat_slip_tmp_alpha[i*nfnd:(i+1)*nfnd,:]
-
-    # quasi-static fault stress (pressure) 
-    dat_fqs = np.empty(shape=[len(dat_fqs_tmp)/nfnd_all,nfnd_all,dmn+p], dtype=np.float)
-    for i in range(len(dat_fqs_tmp)/nfnd_all):
-        dat_fqs[i,:,:] = dat_fqs_tmp[i*nfnd_all:(i+1)*nfnd_all,:]
-    if rsf==1 and pseudo: # RSF pseudo time
-        dat_rsf=np.empty(shape=[len(dat_rsf_tmp)/nfnd,nfnd,2], dtype=np.float)
-        for i in range(len(dat_rsf_tmp)/nfnd):
-            dat_rsf[i,:,:]=dat_rsf_tmp[i*nfnd:(i+1)*nfnd,:]
+if slip and rsf==1 and pseudo: # RSF pseudo time
+    dat_rsf=np.empty(shape=[nfnd,2,len(dat_rsf_tmp)/nfnd], dtype=np.float)
+    for i in range(len(dat_rsf_tmp)/nfnd):
+        dat_rsf[:,:,i]=dat_rsf_tmp[i*nfnd:(i+1)*nfnd,:]
 # Sort seismic/slip data by event 
-dat_seis_sort = []
-if slip: dat_slip_sort = []
+dat_seis_sort={}
+if alpha: dat_seis_alpha_sort={}
+if slip: 
+    dat_slip_sort = {} 
+    if alpha:
+        dat_slip_alpha_sort={}
 if len(dat_log_dyn.shape)==0:dat_log_dyn=[dat_log_dyn.item()]
+if alpha:
+    if len(dat_log_dyn_alpha.shape)==0: dat_log_dyn_alpha=[dat_log_dyn_alpha.item()]
 for i in range(len(dat_log_dyn)):
     if i==0:
         start=0
     else:
         start=dat_log_dyn[i-1]
-    dat_seis_sort.append(dat_seis[:,start:dat_log_dyn[i],:]) 
+    end=dat_log_dyn[i]
+    dat_seis_sort['step '+str(dat_log[i,0])] = dat_seis[:,:,start:end]
+    if alpha:
+        if i==0:
+            start=0
+        else:
+            start=dat_log_dyn_alpha[i-1]
+        end=dat_log_dyn_alpha[i]
+        dat_seis_alpha_sort['step '+str(dat_log[i,0])] = dat_seis_alpha[:,:,start:end]
     if slip:
         if i==0:
             start=0
         else:
             start=dat_log_slip[i-1]
-        if dmn==3:
-            dat_slip_sort.append(dat_slip[start:dat_log_slip[i],:,:])
-        else:
-            dat_slip_sort.append(dat_slip[start:dat_log_slip[i],:])
+        end=dat_log_slip[i]
+        dat_slip_sort['step '+str(dat_log[i,0])] = dat_slip_tmp[:,:,start:end]
+        if alpha:
+            if i==0:
+                start=0
+            else:
+                start=dat_log_slip_alpha[i-1]
+            end=dat_log_slip_alpha[i]
+            dat_slip_alpha_sort['step '+str(dat_log[i,0])] = dat_slip_alpha_tmp[:,:,start:end]
+
 # Sort rate state data by quasi-static time step.
 if slip and rsf==1 and pseudo: 
     dat_rsf_sort=[]
@@ -246,33 +291,23 @@ if slip and rsf==1 and pseudo:
         dat_rsf_sort.append(dat_rsf[start:dat_log_rsf[i],:])
 
 # Store sorted data to .mat files
-import scipy.io as io_mat 
-matfile = name_sol+'.mat' 
+h5file = name_sol+'_fe.h5'
 
-# convert lists to array
-tmp_arr = np.zeros((len(dat_seis_sort),), dtype=np.object)
-for i in range(len(tmp_arr)):
-    tmp_arr[i] = dat_seis_sort[i]
-dat_seis_sort = tmp_arr
-
-# Save to .mat file
-mdict={'dat_qs': dat_qs_sort,
-       'dat_seis': dat_seis_sort,
+# Save to .h5 file
+mdict={'dat_obs_sta': dat_qs_sort,
+       'dat_obs_dyn': dat_seis_sort,
        'crd_obs': ocoord,
        'dt': dt,
        'dt_dyn': dt_dyn,
        'dat_log': dat_log,
-       'dat_log_dyn': dat_log_dyn}
+       'dat_log_dyn': np.array(dat_log_dyn)}
 if slip:
-    tmp_arr = np.zeros((len(dat_slip_sort),), dtype=np.object)
-    for i in range(len(tmp_arr)):
-        tmp_arr[i] = dat_slip_sort[i]
-    dat_slip_sort = tmp_arr
     mdict['crd_flt'] = fcoord
     mdict['dt_slip'] =  dt_slip
     mdict['dat_log_slip'] = dat_log_slip
-    mdict['dat_fqs'] = dat_fqs
+    mdict['dat_fqs'] = dat_trac_sta
     mdict['dat_slip'] = dat_slip_sort
+    mdict['dat_slip_sta']=dat_slip_sta
     if alpha:
         mdict['dt_slip_alpha'] = dt_slip_alpha
         mdict['dat_slip_alpha'] = dat_slip_alpha_sort
@@ -285,10 +320,11 @@ if slip:
         mdict['dat_log_rsf'] = dat_log_rsf
         mdict['dat_rsf'] = dat_rsf_sort
 if alpha:
-    mdict['dt_alpha'] = dt_alpha
-    mdict['dat_alpha'] = dat_alpha_sort
-io_mat.savemat(matfile, mdict=mdict,oned_as='row')
-print matfile + ' created'
+    mdict['dt_dyn_alpha'] = dt_alpha
+    mdict['dat_obs_alpha'] = dat_seis_alpha_sort
+print 'writing to '+ h5file +'...'    
+save_dict_to_hdf5(mdict, h5file)
+print h5file + ' created'
 
 if clean:
     print 'Cleanup...'

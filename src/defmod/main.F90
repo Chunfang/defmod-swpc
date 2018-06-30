@@ -782,6 +782,7 @@ program main
      if (nobs_loc>0) then
         call GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
+        dyn=.false.; call WriteOutput_obs 
      end if
      if (lm_str==1) then
         ! Recover stress
@@ -942,6 +943,8 @@ program main
         call VecZeroEntries(Vec_I_dyn,ierr)
         call VecDuplicate(Vec_lambda,Vec_lambda_tot,ierr)
         call VecZeroEntries(Vec_lambda_tot,ierr)
+        ! Record static slip and traction  
+        if (nfnd_loc>0) call Write_fe("sta")
      end if
 
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
@@ -954,6 +957,9 @@ program main
      call PrintMsg("Alpha-solving ...")
      call VecGetOwnershipRange(Vec_U_dyn,j1,j2,ierr)
      if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
+     ! Dummy static event log
+     n_log=1; crp=.false.
+     if (rank==0) call WriteOutput_log 
      ! Start time stepping
      steps=int(ceiling(t/dt)); t_hyb=f0
      do tstep=1,steps
@@ -987,6 +993,8 @@ program main
      if (rank==0) then
         call WriteOutput_log_wave
         if (nfnd>0) call WriteOutput_log_slip
+        ! Dummy static event log
+        crp=.true.; call WriteOutput_log
      end if
      call KSPDestroy(Krylov,ierr)
   end if

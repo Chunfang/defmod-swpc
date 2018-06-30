@@ -717,10 +717,10 @@ contains
        call VecGetArrayF90(Vec_lm_pp,pntr,ierr)
        lm_pp=pntr
        call VecRestoreArrayF90(Vec_lm_pp,pntr,ierr)
-       call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
-       lm_f2s=pntr
-       call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
     end if
+    call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
+    lm_f2s=pntr
+    call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
@@ -1206,66 +1206,6 @@ contains
        crp=.true. ! Zero slip within time nc+rsf*nr 
     end if
   end subroutine GetSlip_dyn 
-
-  ! Get fault QS state 
-!  subroutine GetVec_flt_qs
-!    implicit none
-!#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
-!#include "petsc.h"
-!#endif
-!    integer :: l1,l2,j,j1,r1,r2,row_l(1),row_f2s(1),row_p(1) 
-!    real(8) :: lm(dmn),vec(dmn),rvec(dmn),rf2s(dmn),mattmp(dmn,dmn),           &
-!       vectmp(dmn,1),pn(1),pp(1),fltpn,fltpp
-!    call VecGetOwnershipRange(Vec_Um,l1,l2,ierr)
-!    call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
-!    do j=1,nfnd
-!       lm=f0; vec=f0; rf2s=0; rvec=f0; pn=f0; pp=f0; fltpn=f0; fltpp=f0
-!       do j1=1,dmn 
-!          if (poro) then
-!             row_l=(dmn+1)*nnds+nceqs_ncf+(j-1)*dmn+sum(perm(1:j-1))+j1-1
-!          else
-!             row_l=dmn*nnds+nceqs_ncf+(j-1)*dmn+j1-1
-!          end if
-!          if (row_l(1)>=l1 .and. row_l(1)<l2) then
-!             call VecGetValues(Vec_Um,1,row_l,lm(j1),ierr)
-!          end if
-!          row_f2s=dmn*node_pos(j)-dmn+j1-1
-!          if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
-!             call VecGetValues(Vec_f2s,1,row_f2s,rf2s(j1),ierr)
-!          end if
-!       end do
-!       if (poro) then
-!          row_p=(dmn+1)*node_neg(j)-1
-!          if (row_p(1)>=l1 .and. row_p(1)<l2) then
-!             call VecGetValues(Vec_Um,1,row_p,pn,ierr)
-!          end if
-!          row_p=(dmn+1)*node_pos(j)-1
-!          if (row_p(1)>=l1 .and. row_p(1)<l2) then
-!             call VecGetValues(Vec_Um,1,row_p,pp,ierr)
-!          end if
-!       end if
-!       call MPI_Reduce(lm,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
-!       call MPI_Reduce(rf2s,rvec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
-!          ierr)
-!       call MPI_Reduce(pn,fltpn,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
-!       call MPI_Reduce(pp,fltpp,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
-!       ! Rotate vec to fault coordinate
-!       if (rank==nprcs-1) then
-!          vectmp=reshape(vec,(/dmn,1/))
-!          mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
-!          vectmp=matmul(mattmp,vectmp)
-!          vec(:)=vectmp(:,1)
-!          ! Nodal force to stress
-!          flt_ss(j,:)=(vec*wt+st_init(j,:))*rvec(dmn)
-!          if (poro) then 
-!             flt_p(j)=0.5*(fltpn+fltpp)*scale 
-!             flt_ss(j,dmn)=flt_ss(j,dmn)+max(f0,biot(j)*flt_p(j))
-!          end if 
-!       end if
-!    end do
-!    call MPI_Bcast(flt_ss,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-!    if (poro) call MPI_Bcast(flt_p,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-!  end subroutine GetVec_flt_qs
 
   ! Add fault slip from dynamic model to static model as constraint functions
   subroutine FaultSlip
