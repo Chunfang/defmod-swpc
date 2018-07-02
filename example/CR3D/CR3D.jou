@@ -1,0 +1,75 @@
+${Units('si')}
+undo off
+reset
+Set Duplicate Block Elements on
+brick x 2. y 2. z 2.
+volume 1 move x 0 y 0 z -1.5
+create planar surface with plane xplane offset 0. spin y 10. move x -.23550952893730232
+Webcut volume all with plane surface 7 
+
+webcut volume 3 with plane zplane offset -1.3
+webcut volume 1 with plane zplane offset -1.175
+webcut volume 4 with plane zplane offset -1.45
+webcut volume 5 with plane zplane offset -1.325 
+webcut volume 6 with plane zplane offset -1.55 
+webcut volume 7 with plane zplane offset -1.425
+webcut volume 8 with plane zplane offset -1.7 
+webcut volume 9 with plane zplane offset -1.575
+delete body 2  
+imprint all
+merge all
+
+# mesh domain
+volume all scheme tetmesh
+volume 4 5 6 7 8 9 size .02
+volume 1 3 10 11 size .04
+surface 31 59 69 84 99 100 102 105 106 size .01
+mesh volume all 
+refine volume 4 5 6 7 8 9
+refine surface 31 59 69 84 99 100 102 105 106
+
+#{beta=3.0}
+#{loop(5)}
+volume all smooth scheme condition number beta {beta} cpu 10
+smooth volume all
+#{beta=beta-0.2}
+#{endloop}
+
+# fault face
+unmerge surface 31  59  69  84  99 100 102 105 106
+merge curve 163 164 167 171 172 102 180 183 141 56 175 178 117 185 188 190 193 196
+merge curve 162 165 168 169 173 101 181 182 142 55 176 177 118 187 189 191 194 195 
+merge curve 27 19 25 17
+nodeset 1 surface 98  99 100 101 102  59 105 106  84
+nodeset 2 surface 31 103 104  69 107 108 109 110 111 
+sideset 1 surface 98  99 100 101 102  59 105 106  84
+sideset 2 surface 31 103 104  69 107 108 109 110 111
+
+# Domain boundaries
+nodeset 3 surface 19 42 61 80 86 # west 
+nodeset 4 surface 20 39 62 81 85 32 51 70 89 97 # south 
+nodeset 5 surface 11 15 # bottom 
+sideset 3 surface 19 42 61 80 86
+sideset 4 surface 20 39 62 81 85 32 51 70 89 97
+sideset 5 surface 11 15 
+nodeset 6 surface 29 52 71 90 96 # east 
+nodeset 7 surface 30 22 49 41 60 72 79 91 87 95 # north 
+nodeset 8 surface 9 16 # top 
+sideset 6 surface 29 52 71 90 96
+sideset 7 surface 30 22 49 41 60 72 79 91 87 95
+sideset 8 surface 9 16 
+
+group "under"   add tet in volume 10 11 
+group "cap_bot" add tet in volume 8 9 
+group "mid"     add tet in volume 6 7 
+group "cap_top" add tet in volume 4 5 
+group "over"    add tet in volume 1 3
+
+block 1 group under  
+block 2 group cap_bot
+block 3 group mid    
+block 4 group cap_top
+block 5 group over   
+
+export mesh "./CR3D.exo" dimension 3 overwrite
+quit
