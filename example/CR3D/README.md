@@ -11,7 +11,7 @@ mpirun ~/pflotran/src/pflotran/pflotran -pflotranin CR3D.in\
 mpirun ~/defmod-swpc/bin/defmod -f CR3D.inp -pc_asm_overlap 2 -fv 1 fd 1\
 mpirun ~/defmod-swpc/bin/swpc_3d.x -i CR3D.inf -r CR3D -e 10
 
-Or, submit CR3D_rup.sh and CR3D_sw.sh to a SLURM system. 
+Or, submit CR3D_rup.sh and CR3D_sw.sh to a SLURM cluster computer. Change the SLURM variables for specific hardware/software. 
 
 To sort the FE and FD output files, CR3D_fe.h5 and CR3D_fd.h5, run:
 
