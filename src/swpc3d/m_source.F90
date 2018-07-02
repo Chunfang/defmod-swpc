@@ -36,7 +36,7 @@ module m_source
   integer               :: stf_file_type                                  !< type of stf file format: used in u_source
   integer               :: nsrc                                           !< source grid number inside the node
   integer               :: n_stfprm                                       !< number of parameters for moment-rate function
-  real(SP), allocatable :: srcprm(:,:)                                    !< control paramater for moment-rate function at grids
+  real(SP), allocatable :: srcprm(:,:)                                    !< control parameter for moment-rate function at grids
   real(SP), allocatable :: sx(:), sy(:), sz(:)                            !< source location in distance scale
   integer,  allocatable :: isrc(:), jsrc(:), ksrc(:)                      !< source grid location voxel
   real(MP), allocatable :: mxx(:), myy(:), mzz(:), myz(:), mxz(:), mxy(:) !< moment rate
