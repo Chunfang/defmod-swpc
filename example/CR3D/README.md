@@ -5,7 +5,7 @@ To generate FE mesh file and FE input file, CR3D.exo and CR3D.inp, run:
 trelis -nojournal -nographics CR3D.jou\
 ./CR3D_tet.py CR3D.exo
 
-To run the FV->FE-FV coupled model run:
+To run the coupled model run:
 
 mpirun ~/pflotran/src/pflotran/pflotran -pflotranin CR3D.in\
 mpirun ~/defmod-swpc/bin/defmod -f CR3D.inp -pc_asm_overlap 2 -fv 1 fd 1\
