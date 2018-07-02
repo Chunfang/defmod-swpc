@@ -40,7 +40,7 @@ wave = "wave" in sys.argv
 #plt.contourf(x,y,-vz[it,:,:],20, cmap=plt.cm.rainbow, vmax=1E-2, vmin=-1E-2)
 #ax=plt.subplot(gs[1])
 #plt.contourf(x,y,-uz[it,:,:],20, cmap=plt.cm.rainbow, vmax=1E-3, vmin=-1E-3)
-path='snp_fd'
+path='out'
 fin=path+'/swpc.xy.v.nc'
 nc=netCDF4.Dataset(fin)
 x=nc.variables['x'][:]

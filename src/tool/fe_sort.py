@@ -48,6 +48,10 @@ if 'slip' in sys.argv:
     slip=True 
 else:
     slip=False
+if 'dyn' in sys.argv:
+    dyn=True
+else:
+    dyn=False
 if 'clean' in sys.argv: 
     clean=True 
 else:
@@ -164,7 +168,7 @@ if slip:
         h5 = h5py.File(f, 'r')
         nfnd_all+=np.shape(h5['slip_sta'])[0]
     fcoord=np.empty(shape=[nfnd_all,dmn],dtype=np.float)
-    dat_slip_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
+    if dyn: dat_slip_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
     h5 = h5py.File(files_slip[0], 'r')
     dat_slip_sta=np.empty(shape=[nfnd_all,dmn,nframe_qs],dtype=np.float)
     dat_trac_sta=np.empty(shape=[nfnd_all,dmn+p,nframe_qs],dtype=np.float)
@@ -174,9 +178,9 @@ if slip:
         h5 = h5py.File(f, 'r')
         j1=j0+len(h5['fault_x'])
         fcoord[j0:j1,:]=h5['fault_x']    
-        dat_slip_tmp[j0:j1,:,:]=h5['slip_dyn']
         dat_slip_sta[j0:j1,:,:]=h5['slip_sta']
         dat_trac_sta[j0:j1,:,:]=h5['trac_sta']
+        if (dyn): dat_slip_tmp[j0:j1,:,:]=h5['slip_dyn']
         j0=j1
         print 'fault patch ' + str(j0) +"/"+str(nfnd_all)+ " merged"
     nfnd=len(fcoord)
@@ -265,7 +269,7 @@ for i in range(len(dat_log_dyn)):
             start=dat_log_dyn_alpha[i-1]
         end=dat_log_dyn_alpha[i]
         dat_seis_alpha_sort['step '+str(dat_log[i,0])] = dat_seis_alpha[:,:,start:end]
-    if slip:
+    if slip and dyn:
         if i==0:
             start=0
         else:
@@ -303,11 +307,12 @@ mdict={'dat_obs_sta': dat_qs_sort,
        'dat_log_dyn': np.array(dat_log_dyn)}
 if slip:
     mdict['crd_flt'] = fcoord
-    mdict['dt_slip'] =  dt_slip
     mdict['dat_log_slip'] = dat_log_slip
     mdict['dat_fqs'] = dat_trac_sta
-    mdict['dat_slip'] = dat_slip_sort
     mdict['dat_slip_sta']=dat_slip_sta
+    if dyn:
+        mdict['dt_slip'] =  dt_slip
+        mdict['dat_slip'] = dat_slip_sort
     if alpha:
         mdict['dt_slip_alpha'] = dt_slip_alpha
         mdict['dat_slip_alpha'] = dat_slip_alpha_sort
