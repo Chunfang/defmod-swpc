@@ -7,7 +7,7 @@ trelis -nojournal -nographics CR3D.jou\
 
 To run the FV->FE-FV coupled model run:
 
-mpirun ~/pflotran/src/pflotran/pflotran -pflotranin CR3D.in\ 
+mpirun ~/pflotran/src/pflotran/pflotran -pflotranin CR3D.in\
 mpirun ~/defmod-swpc/bin/defmod -f CR3D.inp -pc_asm_overlap 2 -fv 1 fd 1\
 mpirun ~/defmod-swpc/bin/swpc_3d.x -i CR3D.inf -r CR3D -e 10
 
