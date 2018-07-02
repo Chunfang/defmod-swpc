@@ -25,7 +25,7 @@ To install and run this "mixed" code, see doc/INSTALL
 * F3D, slip on curved fault induced by increasing differential loading, 3D domain.
 * F2Dp, production fluctuation and rate-and-state friction scenarios, 2D domain.
 * F3Dp, production induced rupture on curved fault, 3D domain.
-* F3Db (F3Db\_usg for unstructured and shared FV/FE mesh), minimalistic example of injection induced fault slip to demonstrate FV(pflotran)-FE(defmod)-FD(swpc) binding, 3D domain, transient and tensor valued permeability. To activate FV-FE binding, launch defmod with -fv [argv]:
+* F3Db (F3Db\_usg for unstructured and shared FV/FE mesh), minimalistic example of injection induced fault slip to demonstrate FV(pflotran)->FE(defmod)->FD(swpc) binding, 3D domain, transient and tensor valued permeability. To activate FV-FE binding, launch defmod with -fv [argv]:
     * -fv 1: structured FV single phase;
     * -fv 2: structured FV multiphase;
     * -fv 3: unstructured FV single phase;
@@ -35,7 +35,7 @@ To install and run this "mixed" code, see doc/INSTALL
 * SCEC, SCEC problems number 10, 102 and 205, waveforms produced by both the FE and FD modules.
 * F3DX, Modified SCEC problems number 14 and 15 to have intersecting faults.
 * SCEC2D, SCEC 2D problems number 10, 11 and 102 to compare hybrid (implicit-explicit) models against generalized-alpha (implicit dynamic) models. 
-
+* CR3D, a 3D equivalent to [Cappa and Rutqvist 2011](https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/2011GL048487) model, demonstrating the FV->FE->FD workflow, see [README](https://github.com/Chunfang/defmod-swpc/blob/master/example/CR3D/README.md) to execute.
 Examples F3D, F3Db, F2Dp, SCEC2D and FE can run on a desktop computer, while others shall run on a cluster. The execution commands are equivalent for both the desktop and cluster, see <model>.sh files for details.
 
 * * *
