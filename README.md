@@ -1,4 +1,7 @@
 # defmod-swpc -- A finite element and finite difference mixed code for multiphysics and multiscale crustal motions. 
+<p align="center">
+<img src="https://github.com/Chunfang/defmod-swpc/blob/master/F3DX15_fd.gif" height="70%" width="70%">
+</p>
 
 Corresponding Author: Chunfang Meng ( cmeng (at) mit.edu )   
 Contributors: Tabrez Ali ( tabrez.ali (at) gmail.com ) and Takuto Maeda ( maeda (at) eri.u-tokyo.ac.jp )
