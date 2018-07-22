@@ -318,7 +318,7 @@ FLOW_CONDITION source1
     TIME_UNITS day
     DATA_UNITS m^3/day
     0.     0.
-    1.     6.425 
+    1.     12.5 
     30.    0.
   /
   IPHASE 1
