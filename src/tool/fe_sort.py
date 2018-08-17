@@ -228,17 +228,18 @@ if slip:
                 for f,j in zip(fopen,range(len(fopen))):
                     dat_tmp=np.vstack((dat_tmp,np.loadtxt(islice(f,n_lmnd[j]),unpack=False,dtype=np.float)))
                 dat_rsf_tmp=np.vstack((dat_rsf_tmp,dat_tmp[fsort,:]))
-                if np.remainder(i+1,24)*np.remainder(i+1,nframe)==0:print "frame " + str(i+1) +"/"+str(nframe)+ " merged"
+                if np.remainder(i+1,24)*np.remainder(i+1,nframe)==0:
+                    print "frame " + str(i+1) +"/"+str(nframe)+ " merged"
 
 # Sort quasi-static and waveform by obs 
 dmn = dat_seis_tmp.shape[1]
 nobs=len(ocoord)
 dat_seis = np.empty(shape=[nobs,dmn,dat_seis_tmp.shape[0]/nobs],dtype=np.float)
 if alpha: dat_seis_alpha = np.empty([nobs,dmn,dat_seis_alpha_tmp.shape[0]/nobs],dtype=np.float)
-dat_qs_sort = np.empty(shape=[nobs,dmn,dat_qs_tmp.shape[0]/nobs],dtype=np.float) 
+dat_qs_sort = np.empty(shape=[nobs,dmn+p,dat_qs_tmp.shape[0]/nobs],dtype=np.float) 
 for i in range(nobs): 
     dat_seis[i,:,:] = np.transpose(dat_seis_tmp[i::nobs,:])
-    dat_qs_sort[i,:,:] = np.transpose(dat_qs_tmp[i::nobs,:dmn])
+    dat_qs_sort[i,:,:] = np.transpose(dat_qs_tmp[i::nobs,:dmn+p])
     if alpha: dat_seis_alpha[i,:,:] = np.transpose(dat_seis_alpha_tmp[i::nobs,:])
 # Sort fault slip by frame
 if slip and rsf==1 and pseudo: # RSF pseudo time
