@@ -1361,7 +1361,7 @@ contains
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     dns=mat(id(el),5)
-    select case (eltype) 
+    select case(eltype) 
     case("tri")
        select case(side) 
        case(1); vec1=ecoords(2,:)-ecoords(1,:)

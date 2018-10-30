@@ -42,6 +42,7 @@ contains
 
   ! Local to original element map
   subroutine MakeEl2g
+    implicit none
     integer :: i 
     allocate(el2g(nels))
     do i=1,size(emap,1)  
