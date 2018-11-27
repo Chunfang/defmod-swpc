@@ -15,27 +15,29 @@ module global
   implicit none
 #endif
   ! Global variables
-  integer :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,lm_str,  &
+  integer :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,Xflt,    &
      bod_frc,steps,tstep,steps_dyn,tstep_dyn,nfnd,hyb,frq_dyn,nobs,n_log,      &
      n_log_dyn,n_log_wave,ih,igf,rsf,n_log_slip,nceqs_ncf,init,frq_wave,       &
-     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,fvin
+     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,fvin,rve,nincl,nxflt
   real(8) :: alpha,beta,t,dt,t_dyn,dt_dyn,t_lim,val,wt,scale,rslip,t_sta,t_abs,&
      t_hyb,v_bg,vtol,trunc
   integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
      worku(:),workl(:),node_pos(:),node_neg(:),slip(:),perm(:),onlst(:,:),     &
      frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),gpl2g(:), &
-     nnd_fe2fd(:),fdact_loc(:),matFD(:,:)
+     nnd_fe2fd(:),fdact_loc(:),matFD(:,:),xpair(:),XFltMap(:)
   real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:),xfnd(:,:),     &
      ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:),           &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
-     mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:)
+     mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:),incls(:,:),       &
+     matDstr(:,:,:,:),vecxf(:,:),stx_init(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
      fl(:),ql(:),flc(:),fp(:),qu(:),ss(:),sh(:),f2s(:),dip(:),nrm(:),          &
      flt_slip(:),tot_flt_slip(:),res_flt_slip(:),qs_flt_slip(:)
   character(12) :: stype
   character(256) :: output_file
-  logical :: poro,visco,fault,dyn,fail,write_dyn,crp,gf,kfv
+  logical :: poro,visco,fault,dyn,fail,write_dyn,crp,gf,kfv,lm_str,galf,explicit
+  logical,allocatable :: xlock(:)
   Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,Vec_U_dyn,  &
      Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up_dyn,Vec_I_dyn,Vec_fp,Vec_qu,Vec_Uu,Vec_Ul,&
      Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip,Vec_nrm,Vec_Cp,       &
@@ -68,10 +70,43 @@ module global
 contains
 
   ! Form local [K]
-  subroutine FormLocalK(el,k,indx,strng)
+!  subroutine FormLocalK(el,k,indx,strng)
+!    implicit none
+!    integer :: el,indx(:)
+!    real(8) :: k(:,:),estress(nip,cdmn)
+!    character(2) :: strng
+!    enodes=nodes(el,:)
+!    ecoords=coords(enodes,:)
+!    if (visco) estress=stress(el,:,:)
+!    if (dyn) then
+!       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+!    else
+!       E=mat(id(el),1); nu=mat(id(el),2)
+!    end if
+!    visc=mat(id(el),3); expn=mat(id(el),4)
+!    if ((.not. poro) .or. strng=="Ke") then
+!       call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
+!    else
+!       H=mat(id(el),6)
+!       B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
+!       call FormElKp(ecoords,estress,E,nu,visc,expn,H,B,phi,Kf,1.0d0,scale,dt, &
+!          k,strng)
+!    end if
+!    call AddWinklerFdn(el,k)
+!    if (.not. dyn) call FixBCinLocalK(el,k)
+!    if (poro .and. kfv) call FixFVLocalK(el,k)
+!    if (dyn) then
+!       call FormLocalIndx_dyn(enodes,indx)
+!    else
+!       call FormLocalIndx(enodes,indx)
+!    end if
+!  end subroutine FormLocalK
+
+  subroutine FormLocalK(el,k,indx,strng,matDstr)
     implicit none
     integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn)
+    real(8) :: k(:,:),estress(nip,cdmn),Dstr(nip,cdmn,cdmn)
+    real(8),optional :: matDstr(nmts,nip,cdmn,cdmn)
     character(2) :: strng
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
@@ -82,8 +117,13 @@ contains
        E=mat(id(el),1); nu=mat(id(el),2)
     end if
     visc=mat(id(el),3); expn=mat(id(el),4)
+    if (present(matDstr)) Dstr=matDstr(id(el),:,:,:)
     if ((.not. poro) .or. strng=="Ke") then
-       call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
+       if (present(matDstr)) then
+          call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng,Dstr)
+       else
+          call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
+       end if
     else
        H=mat(id(el),6)
        B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
@@ -100,7 +140,7 @@ contains
     end if
   end subroutine FormLocalK
 
-  ! Custom permeability from FV
+  ! Kp with tensor valued fluid mobility m_perm(dmn,dmn) from FV
   subroutine FormLocalKPerm(el,k,indx,m_perm,strng)
     implicit none
     integer :: el,indx(:)
@@ -201,6 +241,7 @@ contains
 #include "petsc.h"
 #endif
     integer :: i,j,n,j1,j2,j3,j4
+    logical,save :: tap=.false.
     open(15,file=trim(output_file(:index(output_file,"/",BACK=.TRUE.)))//      &
        "cnstrns.tmp",status='old')
     j4=0
@@ -209,15 +250,14 @@ contains
        read(15,*)n
        do j=1,n
           read(15,*)vvec,node
-          if (stype/="explicit") then
+          if (.not. explicit) then
              do j1=1,dmn+p
                 j2=(dmn+p)*node-(dmn+p)+j1-1; j3=(dmn+p)*nnds+i-1
                 call MatSetValue(Mat_K,j2,j3,wt*vvec(j1),Add_Values,ierr)
                 call MatSetValue(Mat_K,j3,j2,wt*vvec(j1),Add_Values,ierr)
              end do
           end if
-          if ((stype=="explicit" .and. .not. gf) .or. (fault .and.             &
-             i<=nceqs_ncf .and. .not. kfv)) then ! Consider non-conforming grid
+          if ((explicit .or. fault .or. galf) .and. .not. tap) then 
              do j1=1,dmn
                 j2=dmn*node-dmn+j1-1; j3=i-1
                 if (poro .and. mod(i,dmn+1)>0) then
@@ -228,44 +268,14 @@ contains
              end do
           end if
        end do
-       if (stype/="explicit") then ! Constraint block diagonals have to be
+       if (.not. explicit) then ! Constraint block diagonals have to be
           j1=(dmn+p)*nnds+i-1      ! explicitly set to zero (PETSc req)
           call MatSetValue(Mat_K,j1,j1,f0,Add_Values,ierr)
        end if
        read(15,*)cval(i,:)
     end do
-    close(15)
+    close(15); tap=.true.
   end subroutine ApplyConstraints
-
-  ! Create full Mat_Gt for dynamic constraints
-  subroutine GetMat_Gt
-    implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
-#include "petsc.h"
-#endif
-    integer :: j,j1,j2,j3,j4,j5
-    if (rank==0) then
-       do j=1,nfnd
-          do j1=1,dmn
-             j3=(j-1)*dmn+j1-1
-             do j2=1,2
-                if (j2==1) then 
-                   node=node_pos(j)
-                   vvec(:dmn)=vecf(j,(j1-1)*dmn+1:j1*dmn)
-                else
-                   node=node_neg(j)
-                   vvec(:dmn)=-vecf(j,(j1-1)*dmn+1:j1*dmn) 
-                end if
-                do j4=1,dmn
-                   j5=dmn*node-dmn+j4-1
-                   call MatSetValue(Mat_Gt,j5,j3+nceqs_ncf*dmn/(dmn+p),vvec(j4)&
-                      ,Add_Values,ierr)
-                end do
-             end do
-          end do
-       end do
-    end if 
-  end subroutine GetMat_Gt
 
   ! Scatter LMs to solution space
   subroutine GetVec_flambda
@@ -319,18 +329,30 @@ contains
     end if
   end subroutine GetVec_flambda
 
-  ! Extract the LM in fault's strike, dip and normal directions
+  ! Rotate traction between coordinates
+  ! dir==1: Cartesian to fault
+  ! dir==2: fault to Cartesian
+  subroutine Cart2Flt(vecrot,vec,dir)
+    implicit none  
+    integer :: dir
+    real(8) :: vecrot(dmn*dmn),vec(dmn),mattmp(dmn,dmn)
+    mattmp=reshape(vecrot,(/dmn,dmn/))
+    if (dir<2) mattmp=transpose(mattmp) 
+    vec=matmul(mattmp,vec)
+  end subroutine Cart2Flt 
+
+  ! Extract the LM in fault's strike, dip and normal directions; translate to 
+  ! stress when Vec_f2s is available.
   subroutine GetVec_fcoulomb
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,u1,u2,r1,r2,workpos(dmn),workneg(dmn),row(1),row_f2s(1)
-    real(8) :: lm(dmn),vecfl(dmn),mattmp(dmn,dmn),vectmp(dmn,1),rvec(dmn),     &
-       rf2s(dmn)
-    integer,save :: k=0
+    real(8) :: lm(dmn),vecfl(dmn),rvec(dmn),rf2s(dmn)
+    logical,save :: tap=.false.
     call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
-    if (k>0) call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
+    if (tap) call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
     do j=1,nfnd
        lm=f0; vecfl=f0; rvec=f0; rf2s=f0
        do j1=1,dmn
@@ -344,7 +366,7 @@ contains
           if (row(1)>=u1 .and. row(1)<u2) then
              call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
           end if
-          if (k>0) then
+          if (tap) then
              row_f2s=dmn*node_pos(j)-dmn+j1-1
              if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
                 call VecGetValues(Vec_f2s,1,row_f2s,rvec(j1),ierr)
@@ -353,21 +375,19 @@ contains
        end do
        call MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
           ierr)
-       if (k>0) call MPI_Reduce(rvec,rf2s,dmn,MPI_Real8,MPI_Sum,nprcs-1,       &
+       if (tap) call MPI_Reduce(rvec,rf2s,dmn,MPI_Real8,MPI_Sum,nprcs-1,       &
           MPI_Comm_World,ierr)
        if (rank==nprcs-1) then
-          vectmp=reshape(vecfl,(/dmn,1/))
-          mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
-          vectmp=matmul(mattmp,vectmp)
-          vecfl(:)=vectmp(:,1)
-          if (k>0) vecfl=vecfl*rf2s
+          ! Rotate to fault coordinate
+          call Cart2Flt(vecf(j,:),vecfl,1)
+          if (tap) vecfl=vecfl*rf2s
           call VecSetValues(Vec_flc,dmn,workpos,wt*vecfl,Insert_Values,ierr)
           call VecSetValues(Vec_flc,dmn,workneg,-wt*vecfl,Insert_Values,ierr)
        end if
     end do
     call VecAssemblyBegin(Vec_flc,ierr)
     call VecAssemblyEnd(Vec_flc,ierr)
-    k=k+1
+    tap=.true.
   end subroutine GetVec_fcoulomb
 
   ! Pass pseudo velocity to dynamic model
@@ -396,6 +416,8 @@ contains
           vec(3)=f0 ! Zero normal velocity
        end select
        rw_loc=lmnd0*dmn+rw_loc-1
+       ! Rotate to Cartesian coordinate
+       call Cart2Flt(vecf(j3,:),vec,2)
        call VecSetValues(Vec_I_dyn,dmn,rw_loc,vec*dt_dyn,Insert_Values,ierr)
     end do
     call VecAssemblyBegin(Vec_I_dyn,ierr) 
@@ -468,7 +490,12 @@ contains
           vecss=matst(:,dmn)
           vecss(dmn)=vecss(dmn)-biot(j)*pp(1)*scale
           r=sqrt(sum(vecss*vecss)/sum(vecfl*vecfl))
-          call VecSetValues(Vec_f2s,dmn,workpos,(/r,r,r/),Insert_Values,ierr)
+          select case(dmn)
+          case(2)
+             call VecSetValues(Vec_f2s,2,workpos,(/r,r/),Insert_Values,ierr)
+          case(3)    
+             call VecSetValues(Vec_f2s,3,workpos,(/r,r,r/),Insert_Values,ierr)
+          end select
           call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
        end if
@@ -515,8 +542,13 @@ contains
              coh(j)=coh(j)/r
              if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r
           end if
-          call VecSetValues(Vec_f2s,dmn,workneg,-(/r,r,r/),Insert_Values,ierr)
-          call VecSetValue(Vec_lm_f2s,nceqs_ncf/(dmn+1)+j-1,r,Insert_Values,   &
+          select case(dmn)
+          case(2)
+             call VecSetValues(Vec_f2s,2,workneg,-(/r,r/),Insert_Values,ierr)
+          case(3)    
+             call VecSetValues(Vec_f2s,3,workneg,-(/r,r,r/),Insert_Values,ierr)
+          end select
+          call VecSetValue(Vec_lm_f2s,nceqs_ncf/(dmn+p)+j-1,r,Insert_Values,   &
              ierr)
           call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
@@ -532,8 +564,8 @@ contains
     call VecAssemblyEnd(Vec_nrm,ierr)
     call MPI_Bcast(st_init,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
     call MPI_Bcast(coh,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-    if (rsf==1) call MPI_Bcast(rsfdtau0,nfnd,MPI_Real8,nprcs-1,                &
-       MPI_Comm_World,ierr)
+    if (rsf==1) call MPI_Bcast(rsfdtau0,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World, &
+       ierr)
   end subroutine GetVec_f2s
 
   ! Fault dip and normal vectors
@@ -602,7 +634,10 @@ contains
           flt_qs0=flt_ndf0(rw_loc)
           flt_qs1=flt_ndf1(rw_loc)
           ! Match shear with friction by updating v_qs
-          flt_qs=flt_qs0+(flt_qs1-flt_qs0)*dble(j4)/dble(nqs)+st_init(j3,:)
+          flt_qs=flt_qs0+(flt_qs1-flt_qs0)*dble(j4)/dble(nqs)
+          ! Rotate to fault coordinate
+          call Cart2Flt(vecf(j3,:),flt_qs,1)
+          flt_qs=flt_qs+st_init(j3,:)
           mu=sqrt(sum(flt_qs(:dmn-1)*flt_qs(:dmn-1)))/abs(flt_qs(dmn))
           ! Prevent pseudo velocity overflow
           v_qs=min(vmax,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*theta/L))/a))
@@ -649,7 +684,7 @@ contains
   subroutine WriteOutput_rsf(state)
     implicit none
     integer :: j,j3
-    integer,save :: k=0
+    logical,save :: tap=.false.
     real(8) :: state(nfnd_loc,2)
     character(256) :: name,name0,name1
     character(64) :: fmt
@@ -658,7 +693,7 @@ contains
     if (nfnd_loc>0) then 
        write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_rsf_",rank,".txt"
        fmt="(2(ES11.2E3,X))"
-       if (k==0) then
+       if (.not. tap) then
           open(10,file=adjustl(name),status='replace')
           write(10,'(I0)')nfnd_loc
           do j=1,nfnd_loc
@@ -675,27 +710,27 @@ contains
        do j=1,nfnd_loc
           write(10,fmt)state(j,:)
        end do
-       close(10); k=k+1
+       close(10); tap=.true.
     end if
   end subroutine WriteOutput_rsf
 
   subroutine WriteOutput_log_rsf(n,dt)
     implicit none
     integer :: n
-    integer,save :: k=0
+    logical,save :: tap=.false.
     real(8) :: dt
     character(256) :: name,name0,name1
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_rsf.log"
-    if (k==0) then
+    if (.not. tap) then
        open(10,file=adjustl(name),status='replace')
        write(10,'(F0.3)')dt
     else 
        open(10,file=adjustl(name),status='old',position='append',action='write')
     end if
     write(10,'(I0)')n
-    close(10); k=k+1
+    close(10); tap=.true. 
   end subroutine WriteOutput_log_rsf
 
   subroutine GetTracDat(dat_trac) 
@@ -705,7 +740,8 @@ contains
 #endif
     integer :: j,j1,j2,j3,rw_loc(dmn)
     real(8) :: dat_trac(:,:,:),flt_qs(dmn),flt_p
-    real(8),target :: flt_ndf(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
+    real(8),target :: flt_ndf(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),         &
+       lm_f2s(n_lmnd)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -724,7 +760,10 @@ contains
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-       flt_qs=(flt_ndf(rw_loc)+st_init(j3,:dmn))*lm_f2s(j)
+       ! Rotate to fault coordinate
+       flt_qs=flt_ndf(rw_loc)
+       call Cart2Flt(vecf(j3,:),flt_qs,1)
+       flt_qs=(flt_qs+st_init(j3,:dmn))*lm_f2s(j)
        if (poro) then
           flt_p=(lm_pp(j)+lm_pn(j))/f2
           ! Positive pressure affects normal stress
@@ -743,11 +782,10 @@ contains
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,slip_loc(nfnd),rw_loc(dmn)
-    real(8) :: mu,theta102,flt_qs(dmn),fsh,fnrm,rsftau,d,fcoh, &
-       a,b0,b,V0,L
+    real(8) :: mu,theta102,flt_qs(dmn),fsh,fnrm,rsftau,d,fcoh,a,b0,b,V0,L
     real(8),target :: flt_ndf(n_lmnd*dmn),flt_ndf0(n_lmnd*dmn),lm_pn(n_lmnd),  &
        lm_pp(n_lmnd),lm_f2s(n_lmnd)
-    integer,save :: k=0
+    logical,save :: tap=.false.
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -763,40 +801,39 @@ contains
        lm_f2s=pntr
        call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
     end if
-    if (rsf==1 .and. k>0) then
+    if (rsf==1 .and. tap) then
        call VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
        flt_ndf0=pntr
        call VecRestoreArrayF90(Vec_lambda_sta0,pntr,ierr)
        call RSF_QS_update(flt_ndf0,flt_ndf,slip_loc)
        go to 250
     end if
-    if (rsf==1 .and. k==0) rsfv=v_bg
+    !if (rsf==1 .and. .not. tap) rsfv=v_bg
+    if (rsf==1) rsfv=v_bg
     slip_loc=0
     rsftau=f0 
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-       flt_qs=flt_ndf(rw_loc)+st_init(j3,:dmn)
+       flt_qs=flt_ndf(rw_loc)
+       ! Rotate to fault coordinate
+       call Cart2Flt(vecf(j3,:),flt_qs,1)
+       flt_qs=flt_qs+st_init(j3,:dmn)
        ! Positive pressure affects normal stress
        flt_qs(dmn)=flt_qs(dmn)+max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
        if (rsf==1) then  
-          if (k==0) then
-             ! RSF parameters
-             a=rsfa(j3); b0=rsfb0(j3); b=rsfb(j3); V0=rsfV0(j3); L=rsfL(j3)
-             mu_cap(j3)=a*asinh(v_bg/V0/f2*exp((b0+b*log(V0*rsftheta(j3)/L))/a))
-             mu=min(mu_cap(j3),sqrt(sum(flt_qs(:dmn-1)*flt_qs(:dmn-1)))        &
-                /abs(flt_qs(dmn)))
-             mu_hyb(j3)=mu
-             theta102=rsftheta(j3)
-             rsftheta(j3)=L/V0*exp((a*log(f2*sinh(mu/a))-b0-a*log(v_bg         &
-                /V0))/b)
-             ! Only for SCEC102
-             mu=mu_cap(j3)
-             rsftheta(j3)=theta102
-             call GetExSt(xfnd(j3,:),t_abs,rsfdtau0(j3),rsftau)
-          else
-             mu=mu_hyb(j3)
-          end if
+          ! RSF parameters
+          a=rsfa(j3); b0=rsfb0(j3); b=rsfb(j3); V0=rsfV0(j3); L=rsfL(j3)
+          mu_cap(j3)=a*asinh(v_bg/V0/f2*exp((b0+b*log(V0*rsftheta(j3)/L))/a))
+          mu=min(mu_cap(j3),sqrt(sum(flt_qs(:dmn-1)*flt_qs(:dmn-1)))           &
+             /abs(flt_qs(dmn)))
+          mu_hyb(j3)=mu
+          theta102=rsftheta(j3)
+          rsftheta(j3)=L/V0*exp((a*log(f2*sinh(mu/a))-b0-a*log(v_bg/V0))/b)
+          ! Only for SCEC102
+          mu=mu_cap(j3)
+          rsftheta(j3)=theta102
+          call GetExSt(xfnd(j3,:),t_abs,rsfdtau0(j3),rsftau)
        else ! Slip weakening
           d=sqrt(sum(res_flt_slip(rw_loc(:dmn-1))*res_flt_slip(rw_loc(:dmn-1))))
           if (d<dc(j3)) then
@@ -835,7 +872,7 @@ contains
        ierr)
     slip0=slip
     slip_sum=slip
-    k=k+1
+    tap=.true.
   end subroutine GetSlip_sta 
 
   ! Scatter from Vec_Ul to Vec_lambda_sta 
@@ -846,10 +883,8 @@ contains
 #endif
     integer :: j,j1,j2,j3,rw_dyn(dmn),rw_loc(dmn),rw_sta(dmn),                 &
        idxmp(nfnd_loc*dmn,2)
-    integer,save :: k=0
-    real(8) :: vec(dmn),mattmp(dmn,dmn),vectmp(dmn,1)
-    real(8),target :: flt_sta(n_lmnd*dmn)
-    if (k==0) then
+    logical,save :: tap=.false.
+    if (.not. tap) then
        do j1=1,nfnd_loc
           j=FltMap(j1,1); j3=FltMap(j1,2)
           rw_loc=(/((j1-1)*dmn+j2,j2=1,dmn)/)
@@ -872,24 +907,9 @@ contains
        Scatter_Forward,ierr)
     call VecScatterEnd(Scatter_s2d,Vec_Ul,Vec_lambda_sta,Insert_Values,        &
        Scatter_Forward,ierr)
-    ! Rotate and scale
-    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
-    flt_sta=pntr
-    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    do j1=1,nfnd_loc
-       j=FltMap(j1,1); j3=FltMap(j1,2)
-       rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-       rw_dyn=lmnd0*dmn+rw_loc-1
-       vec=flt_sta(rw_loc)*wt
-       vectmp=reshape(vec,(/dmn,1/))
-       mattmp=transpose(reshape(vecf(j3,:),(/dmn,dmn/)))
-       vectmp=matmul(mattmp,vectmp)
-       vec=vectmp(:,1)
-       call VecSetValues(Vec_lambda_sta,dmn,rw_dyn,vec,Insert_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_lambda_sta,ierr)
-    call VecAssemblyEnd(Vec_lambda_sta,ierr)
-    k=k+1
+    ! Scale
+    call VecScale(Vec_lambda_sta,wt,ierr)
+    tap=.true.
   end subroutine LM_s2d 
 
   ! Scatter two side fault pressure to dynamic LM space 
@@ -899,8 +919,8 @@ contains
 #include "petsc.h"
 #endif
     integer :: j,j1,jn,jp,idxmp_n(nfnd_loc,2),idxmp_p(nfnd_loc,2)
-    integer,save :: k=0
-    if (k==0) then 
+    logical,save :: tap=.false.
+    if (.not. tap) then 
        do j1=1,nfnd_loc
           j=FltMap(j1,1)
           jn=node_neg(FltMap(j1,2))
@@ -931,7 +951,7 @@ contains
        Scatter_Forward,ierr)
     call VecScale(Vec_lm_pn,scale,ierr)
     call VecScale(Vec_lm_pp,scale,ierr)
-    k=k+1
+    tap=.true.
   end subroutine Up_s2d
   
   ! Cap dynamic LM by frictional laws 
@@ -940,9 +960,10 @@ contains
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
-    integer ::j,j1,j2,j3,rw_loc(dmn)
-    real(8) :: d,dd,fr,frs,frd,fsh,mu,fcoh,fnrm,rsftau,vec_init(dmn),vec(dmn), &
-       vec_slip(dmn-1),lm_sta(dmn),lm_dyn(dmn),lm_dyn0(dmn)
+    logical :: fail,failx
+    integer ::j,j1,j2,j3,j4,rw_loc(dmn)
+    real(8) :: d,dd,mu,fcoh,rsftau,vec(dmn),vec_slip(dmn-1),lm_sta(dmn),       &
+       lm_dyn(dmn),lm_dyn0(dmn),vecx(dmn),vectmp(dmn),vecxtmp(dmn),pavg
     real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn),                 &
        flt_dyn0(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -969,16 +990,12 @@ contains
     rsftau=f0
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
-       vec_init=st_init(j3,:)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        lm_sta=flt_sta(rw_loc)
        lm_dyn0=flt_dyn0(rw_loc)
        lm_dyn=flt_dyn(rw_loc)
        vec_slip=tot_flt_slip(rw_loc(:dmn-1))+res_flt_slip(rw_loc(:dmn-1))
        d=sqrt(sum(vec_slip*vec_slip))
-       vec=vec_init+lm_sta+lm_dyn0+lm_dyn 
-       ! Positive pressure affects friction
-       vec(dmn)=vec(dmn)+max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
        if (rsf==1) then ! Rate state friction
           ! RSF options
           !dd=max(v_bg*dt_dyn,sqrt(sum(flt_slip(rw_loc(:dmn-1))                 &
@@ -1010,15 +1027,6 @@ contains
           end if
        end if
        mu_hyb(j3)=mu
-       vec(1)=vec(1)+rsftau
-       select case(dmn)
-       case(2)
-          fsh=abs(vec(1))
-          fnrm=vec(2)
-       case(3)
-          fsh=sqrt(vec(1)**2+vec(2)**2)
-          fnrm=vec(3)
-       end select
        ! Slip weakening cohesion
        if (coh(j3)>f0) then
           ! Cumulative slip 
@@ -1031,25 +1039,34 @@ contains
        else
           fcoh=f0
        end if
-       ! If LM exceeds maximum friction (mu*fn)
-       if (fnrm<f0 .and. abs(fsh)>mu*abs(fnrm)+fcoh) then
-          fr=mu*abs(fnrm)+fcoh 
-          frs=fr*abs(vec(1)/fsh)
-          frs=sign(frs,vec(1))
-          vec(1)=frs
-          if (dmn==3) then
-             frd=fr*abs(vec(2)/fsh)
-             frd=sign(frd,vec(2))
-             vec(2)=frd
-          end if
-       ! When fault faces detach under cohesion
-       elseif (fnrm>=f0) then 
-          vec=vec/sqrt(sum(vec*vec))*min(sqrt(sum(vec*vec)),fcoh)
-       end if
-       ! Subtract the static LM 
-       vec(1)=vec(1)-rsftau
-       lm_dyn=vec-vec_init-lm_sta-lm_dyn0
-       lm_dyn(dmn)=lm_dyn(dmn)-max(f0,biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2)
+       vec=lm_sta+lm_dyn0+lm_dyn
+       vecx=vec 
+       pavg=biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
+       call TriFlt_dyn(vec,vecf(j3,:),st_init(j3,:),pavg,rsftau,fcoh,mu,fail)
+       if (Xflt>1) then ! Examine intersection
+          j4=XFltMap(j3)
+          if (j4>0 .and. .not. xlock(j4)) then ! j4-th intersection unlocked
+             vectmp=vec; vecxtmp=vec
+             call TriFlt_dyn(vecx,vecxf(j4,:),stx_init(j4,:),pavg,rsftau,fcoh, &
+                mu,failx)
+             if (fail .and. .not. failx) then ! Main offsets branch
+                xlock(j4)=.true. 
+             else if (.not. fail .and. failx) then ! Branch offsets main 
+                vec=vecx; vecf(j3,:)=vecxf(j4,:); st_init(j3,:)=stx_init(j4,:)
+                xlock(j4)=.true.
+             else if (fail .and. failx) then ! Both offset, examine shear 
+                call Cart2Flt(vecf(j3,:),vectmp,1)
+                call Cart2Flt(vecxf(j4,:),vecxtmp,1) 
+                if (sum(vecxtmp(:dmn-1)*vecxtmp(:dmn-1))>                      &
+                   sum(vectmp(:dmn-1)*vecxtmp(:dmn-1))) then
+                   vec=vecx; vecf(j3,:)=vecxf(j4,:)
+                   st_init(j3,:)=stx_init(j4,:) 
+                end if 
+                xlock(j4)=.true.
+             end if
+          end if ! Unlocked
+       end if ! Has intersections
+       lm_dyn=vec-lm_sta-lm_dyn0
        rw_loc=lmnd0*dmn+rw_loc-1
        ! From the new dynamic LM
        call VecSetValues(Vec_lambda,dmn,rw_loc,lm_dyn,Insert_Values,ierr)
@@ -1057,6 +1074,52 @@ contains
     call VecAssemblyBegin(Vec_lambda,ierr)
     call VecAssemblyEnd(Vec_lambda,ierr)
   end subroutine CapLM_dyn
+
+  ! Frictional failure law trial
+  subroutine TriFlt_dyn(vec,vec_rot,trac0,pavg,tau0,fcoh,mu,fail)
+    implicit none 
+    real(8) :: vec(dmn),vec_rot(dmn),trac0(dmn),pavg,tau0,fcoh,mu,fsh,fnrm,fr, &
+       frs,frd
+    logical :: fail
+    ! Rotate to faults coordinate
+    call Cart2Flt(vec_rot,vec,1)
+    vec=vec+trac0
+    ! Positive pressure affects friction
+    vec(dmn)=vec(dmn)+max(f0,pavg)
+    vec(1)=vec(1)+tau0
+    select case(dmn)
+    case(2)
+       fsh=abs(vec(1))
+       fnrm=vec(2)
+    case(3)
+       fsh=sqrt(vec(1)**2+vec(2)**2)
+       fnrm=vec(3)
+    end select
+    ! If LM exceeds maximum friction (mu*fn)
+    fail=.false.
+    if (fnrm<f0 .and. abs(fsh)>mu*abs(fnrm)+fcoh) then
+       fr=mu*abs(fnrm)+fcoh 
+       frs=fr*abs(vec(1)/fsh)
+       frs=sign(frs,vec(1))
+       vec(1)=frs
+       if (dmn==3) then
+          frd=fr*abs(vec(2)/fsh)
+          frd=sign(frd,vec(2))
+          vec(2)=frd
+       end if
+       fail=.true.
+    ! When fault faces detach under cohesion
+    elseif (fnrm>=f0) then 
+       vec=vec/sqrt(sum(vec*vec))*min(sqrt(sum(vec*vec)),fcoh)
+       fail=.true.
+    end if
+    ! Subtract the static LM 
+    vec(1)=vec(1)-tau0
+    vec(dmn)=vec(dmn)-max(f0,pavg)
+    vec=vec-trac0
+    ! Rotate to Cartesian coordinate
+    call Cart2Flt(vec_rot,vec,2)
+  end subroutine TriFlt_dyn
 
   ! Record latest moment fault stress from the hybrid run
   subroutine GetVec_lambda_hyb
@@ -1091,7 +1154,10 @@ contains
           ! RSF parameters
           a=rsfa(j3); b0=rsfb0(j3); b=rsfb(j3); V0=rsfV0(j3); L=rsfL(j3)
           do i=1,nqs 
-             vec=lm_sta+lm_dyn+(lm_bk-lm_sta)*dble(i)/dble(nqs)+st_init(j3,:)
+             vec=lm_sta+lm_dyn+(lm_bk-lm_sta)*dble(i)/dble(nqs)
+             ! Rotate to fault coordinate
+             call Cart2Flt(vecf(j3,:),vec,1) 
+             vec=vec+st_init(j3,:)
              mu=sqrt(sum(vec(:dmn-1)*vec(:dmn-1)))/abs(vec(dmn))
              rsfv(j3)=min(vtol,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*rsftheta(j3)/ &
                 L))/a))
@@ -1101,6 +1167,8 @@ contains
              rsftheta(j3)=dtpsd/(f1+0.5*dd)+rsftheta(j3)*(f1-0.5*dd)/(f1+0.5*dd)
           end do
           vec=vec-st_init(j3,:)
+          ! Rotate to Cartesian coordinate
+          call Cart2Flt(vecf(j3,:),vec,2)
        else
           vec=lm_sta+lm_dyn
        end if
@@ -1208,13 +1276,13 @@ contains
   end subroutine GetSlip_dyn 
 
   ! Add fault slip from dynamic model to static model as constraint functions
-  subroutine FaultSlip
+  subroutine FaultSlip_sta
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
     integer :: j,j1,j2,j3,rw_loc(dmn),rw_sta(dmn)
-    real(8) :: vec(dmn),vectmp(dmn,1),mattmp(dmn,dmn)
+    real(8) :: vec(dmn)
     do j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2) 
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
@@ -1227,13 +1295,32 @@ contains
        vec=tot_flt_slip(rw_loc)
        ! Zero non-slip components, and rotate to Cartesian 
        vec(dmn)=f0 
-       vectmp=reshape(vec,(/dmn,1/))
-       mattmp=reshape(vecf(j3,:),(/dmn,dmn/))
-       vectmp=matmul(mattmp,vectmp)
-       vec=vectmp(:,1)
+       call Cart2Flt(vecf(j3,:),vec,2)
        call VecSetValues(Vec_F,dmn,rw_sta,vec*wt,Add_Values,ierr)
      end do 
-  end subroutine FaultSlip
+  end subroutine FaultSlip_sta
+
+  ! Incremental dynamic fault slip
+  subroutine FaultSlip_dyn
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h"
+#endif
+    integer :: j,j1,j2,j3,rw_loc(dmn)
+    real(8) :: vec(dmn)
+    call MatMult(Mat_G,Vec_U_dyn,Vec_Wlm(1),ierr)
+    call VecGetArrayF90(Vec_Wlm(1),pntr,ierr)
+    flt_slip=pntr
+    do j1=1,nfnd_loc
+       j=FltMap(j1,1); j3=FltMap(j1,2) 
+       rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
+       vec=flt_slip(rw_loc)
+       ! Rotate to fault coordinate
+       call Cart2Flt(vecf(j3,:),vec,1)
+       flt_slip(rw_loc)=vec
+    end do
+    call VecRestoreArrayF90(Vec_Wlm(1),pntr,ierr)
+  end subroutine FaultSlip_dyn 
 
   ! Extract solution at observation locations
   subroutine GetVec_obs
@@ -1317,7 +1404,7 @@ contains
        t1=cval(i,2)/dt; t2=cval(i,3)/dt
        if (tstep>=nint(t1) .and. tstep<=nint(t2)) then
           j=(dmn+p)*nnds+i-1
-          if (stype/="explicit" .and. rank==0) then
+          if (.not. explicit .and. rank==0) then
              val=wt*cval(i,1)
              call VecSetValue(Vec_F,j,val,Add_Values,ierr)
           end if
@@ -1456,16 +1543,22 @@ contains
   end subroutine FormLocalIndx_dyn
 
   ! Recover stress
-  subroutine RecoverStress(el,stress)
+  subroutine RecoverStress(el,stress,matDstr)
     implicit none
     integer :: el,indxl(eldof)
-    real(8) :: stress(:,:,:)
+    real(8) :: stress(:,:,:),Dstr(nip,cdmn,cdmn)
+    real(8),optional :: matDstr(nmts,nip,cdmn,cdmn)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     call FormLocalIndx(enodes,indx)
     indxl=indx(1:eldof)
-    call CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:))
+    if (present(matDstr)) then
+       Dstr=matDstr(id(el),:,:,:)
+       call CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:),Dstr)
+    else
+       call CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:))
+    end if
   end subroutine RecoverStress
 
   ! Scatter stress to vertices (normal: SS, shear: SH)
@@ -1476,8 +1569,8 @@ contains
 #endif
     integer:: i,j,indx(eldof),row(dmn)
     real(8):: sigma(cdmn),stvec(cdmn),cst(dmn),ecoords(npel,dmn),detj
-    integer,save :: k=0
-    if (k==0) then
+    logical,save :: tap=.false.
+    if (.not. tap) then
        call VecDuplicate(Vec_SS,Vec_Cst,ierr)
        call VecZeroEntries(Vec_Cst,ierr)
     end if
@@ -1505,20 +1598,20 @@ contains
              call VecSetValues(Vec_SS,dmn,row,stvec(1:dmn),Add_Values,ierr)
              call VecSetValues(Vec_SH,dmn,row,stvec(dmn+1:cdmn),Add_Values,ierr)
           end select
-          if (k==0) call VecSetValues(Vec_Cst,dmn,row,cst,Add_Values,ierr)
+          if (.not. tap) call VecSetValues(Vec_Cst,dmn,row,cst,Add_Values,ierr)
        end do
     end do
     call VecAssemblyBegin(Vec_SS,ierr)
     call VecAssemblyEnd(Vec_SS,ierr)
     call VecAssemblyBegin(Vec_SH,ierr)
     call VecAssemblyEnd(Vec_SH,ierr)
-    if (k==0) then
+    if (.not. tap) then
        call VecAssemblyBegin(Vec_Cst,ierr)
        call VecAssemblyEnd(Vec_Cst,ierr)
     end if
     call VecPointwiseDivide(Vec_SS,Vec_SS,Vec_Cst,ierr)
     call VecPointwiseDivide(Vec_SH,Vec_SH,Vec_Cst,ierr)
-    k=k+1
+    tap=.true.
   end subroutine GetVec_Stress
 
   ! Form local Hs
@@ -1750,7 +1843,7 @@ contains
     end if
   end subroutine GetObsNd
 
-  ! Active fault node map loc->glb 
+  ! Active fault node map loc->glb: FltMap, nfnd_loc 
   subroutine GetFltMap
     implicit none
     integer :: j,j3,map(n_lmnd,2)
@@ -1769,6 +1862,17 @@ contains
     rw=pack(map(:,1),map(:,1)/=0)
     FltMap=map(rw,:)
   end subroutine GetFltMap
+
+  ! Map fault node to intersect node (glb->glb): XFltMap  
+  subroutine GetXfltMap
+    implicit none 
+    integer :: j,j3
+    XFltMap=0; xlock=.false.
+    do j=1,nxflt
+       j3=xpair(j)
+       if (frc(j3)>0) XFltMap(j3)=j
+    end do
+  end subroutine GetXfltMap    
 
   ! Apply body force
   subroutine ApplyGravity
@@ -2040,7 +2144,7 @@ contains
     if (dsp==1) field_val=>tot_uu
     if (nceqs>0) field_val_fl=>fl; field_val_ql=>ql; field_val_flc=>flc
     if (poro) field_val_fp=>fp; field_val_qu=>qu
-    if (fault .and. lm_str==1) field_val_ss=>ss; field_val_sh=>sh
+    if (fault .and. lm_str) field_val_ss=>ss; field_val_sh=>sh
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,I0,3A,I0.6,A)')trim(name0),rank,"_",trim(name1),"_",k,".vtk"
@@ -2116,7 +2220,7 @@ contains
           end do
        end if
     end if
-    if (fault .and. lm_str==1) then
+    if (fault .and. lm_str) then
        write(10,'(A)')"VECTORS ss double"
        fmt="(3(E10.4,1X))"
        select case(dmn)
@@ -2420,21 +2524,23 @@ contains
   ! Output observations
   subroutine WriteOutput_obs
     implicit none
-    integer :: i,j
+    integer :: i!,j
     character(64) :: fmt
     character(256) :: name,name0,name1
-    integer,save :: k=0,k_dyn=0
+    logical :: tap
+    logical,save :: tap_sta=.false.,tap_dyn=.false.
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
+    tap=.false.
     if (dyn) then
        write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_dyn_obs_",rank,   &
           ".txt"
-       j=k_dyn
+       tap=tap_dyn
     else
        write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_obs_",rank,".txt"
-       j=k
+       tap=tap
     end if
-    if (j==0) then
+    if (.not. tap) then
        open(10,file=adjustl(name),status='replace')
        select case(dmn)
        case(2); fmt="(2(F0.6,1X),I0)"
@@ -2485,9 +2591,9 @@ contains
     end do
     close(10) 
     if (dyn) then
-       k_dyn=k_dyn+1
+       tap_dyn=.true.
     else
-       k=k+1
+       tap_sta=.true.
     end if
   end subroutine WriteOutput_obs
 
@@ -2495,12 +2601,12 @@ contains
   subroutine WriteOutput_log
     implicit none
     character(256) :: name,name0,name1
-    integer,save :: k=0
+    logical,save :: tap=.false.
     integer :: seis
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,A,A)')trim(name0),trim(name1),".log"
-    if (k==0) then
+    if (.not. tap) then
        open(10,file=adjustl(name),status='replace')
        write(10,"(F0.6)")dt
     else
@@ -2512,18 +2618,18 @@ contains
        seis=1
     end if
     write(10,"(2(I0,X))")n_log,seis
-    close(10); k=k+1
+    close(10); tap=.true.
   end subroutine WriteOutput_log
 
   ! Write event log file for seismic data
   subroutine WriteOutput_log_wave
     implicit none
     character(256) :: name,name0,name1
-    integer,save :: k=0
+    logical,save :: tap=.false.
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,A,A)')trim(name0),trim(name1),"_dyn.log"
-    if (k==0) then
+    if (.not. tap) then
        open(10,file=adjustl(name),status='replace')
        if (gf) then
           write(10,"(F0.6)")dt*frq_wave
@@ -2534,25 +2640,25 @@ contains
        open(10,file=adjustl(name),status='old',position='append',action='write')
     end if
     write(10,"(I0)")n_log_wave
-    close(10); k=k+1
+    close(10); tap=.true.
   end subroutine WriteOutput_log_wave
 
   ! Write event log file for seismic data
   subroutine WriteOutput_log_slip
     implicit none
     character(256) :: name,name0,name1
-    integer,save :: k=0
+    logical,save :: tap=.false.
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
     name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
     write(name,'(A,A,A)')trim(name0),trim(name1),"_slip.log"
-    if (k==0) then
+    if (.not. tap) then
        open(10,file=adjustl(name),status='replace')
        write(10,"(F0.6)")dt_dyn*frq_slip
     else
        open(10,file=adjustl(name),status='old',position='append',action='write')
     end if
     write(10,"(I0)")n_log_slip
-    close(10); k=k+1
+    close(10); tap=.true.
   end subroutine WriteOutput_log_slip
 
 end module global

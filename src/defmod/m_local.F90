@@ -10,11 +10,12 @@ module local
 contains
 
   ! Form element [K]
-  subroutine FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
+  subroutine FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng,Dstr)
     implicit none
     real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,dt,          &
        k(eldof,eldof),alpha,D(cdmn,cdmn),S(cdmn,cdmn),dN(dmn,npel),detj,       &
        B(cdmn,eldof),betad(cdmn,cdmn)
+    real(8),optional :: Dstr(nip,cdmn,cdmn)
     integer :: i
     character(2) :: strng
     k=f0
@@ -30,9 +31,35 @@ contains
           call Matbetad(betad,estress(i,:),visc,expn)
           call MatInv(S+alpha*dt*betad,D)
        end if
+       if (present(Dstr)) D=matmul(D,Dstr(i,:,:)) 
        k=k+matmul(transpose(B),matmul(D,B))*weight(i)*detj
     end do
   end subroutine FormElK
+
+!  subroutine FormRVElK(ecoords,estress,E,nu,visc,expn,dt,k,strng,Dstr)
+!    implicit none
+!    real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,dt,          &
+!       k(eldof,eldof),alpha,D(cdmn,cdmn),S(cdmn,cdmn),dN(dmn,npel),detj,       &
+!       B(cdmn,eldof),betad(cdmn,cdmn),Dstr(8,6,6)
+!    integer :: i
+!    character(2) :: strng
+!    k=f0
+!    call DMat(D,E,nu)
+!    if (strng=="Kv") then
+!       alpha=f1
+!       call MatInv(D,S)
+!    end if
+!    do i=1,nip
+!       call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+!       call BMat(dN,B)
+!       if (strng=="Kv") then
+!          call Matbetad(betad,estress(i,:),visc,expn)
+!          call MatInv(S+alpha*dt*betad,D)
+!       end if
+!       D=matmul(D,Dstr(i,:,:))
+!       k=k+matmul(transpose(B),matmul(D,B))*weight(i)*detj
+!    end do
+!  end subroutine FormRVElK
 
   ! Rescale element [Kv] for new dt
   subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,ddt)
@@ -112,7 +139,8 @@ contains
        end do
     end if
   end subroutine FormElKp
-
+  
+  ! Kp with tensor valued fluid mobility Q(dmn,dmn)
   subroutine FormElKPerm(ecoords,estress,E,nu,visc,expn,Q,Bc,fi,Kf,theta,      &
     scale,dt,k,strng)
     implicit none
@@ -168,7 +196,7 @@ contains
   end subroutine FormElKPerm
 
   ! Rescale element [Kp] for new dt
-  subroutine RscElKp(ecoords,estress,E,nu,visc,expn,H,theta,scale,dt, k,ddt,   &
+  subroutine RscElKp(ecoords,estress,E,nu,visc,expn,H,theta,scale,dt,k,ddt,    &
     strng)
     implicit none
     real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,H,theta,     &
@@ -316,15 +344,17 @@ contains
   end subroutine FormElIndxp
 
   ! Calculate element stress
-  subroutine CalcElStress(ecoords,edisp,E,nu,estress)
+  subroutine CalcElStress(ecoords,edisp,E,nu,estress,Dstr)
     implicit none
     real(8) :: ecoords(npel,dmn),edisp(eldof),E,nu,estrain(nip,cdmn),          &
        estress(nip,cdmn),D(cdmn,cdmn),dN(dmn,npel),detj,B(cdmn,eldof)
+    real(8),optional :: Dstr(nip,cdmn,cdmn)
     integer :: i
     call DMat(D,E,nu)
     do i=1,nip
        call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
        call BMat(dN,B)
+       if (present(Dstr)) D=matmul(D,Dstr(i,:,:))
        estrain(i,:)=matmul(B,edisp); estress(i,:)=matmul(D,estrain(i,:))
     end do
   end subroutine CalcElStress

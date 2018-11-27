@@ -250,9 +250,9 @@ contains
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
-     integer :: k,el,hasFD(nprc_fd),ixmin,iymin,izmin,     &
-        ixmax,iymax,izmax,rankx,rankx0,rankx1,ranky,ranky0,ranky1,rankxy,      &
-        buf(nprcs*nprc_fd),vfe2fd(nprcs,nprc_fd)
+     integer :: k,el,hasFD(nprc_fd),ixmin,iymin,izmin,ixmax,iymax,izmax,rankx, &
+        rankx0,rankx1,ranky,ranky0,ranky1,rankxy,buf(nprcs*nprc_fd),           &
+        vfe2fd(nprcs,nprc_fd)
      real(8) :: xmin,ymin,zmin,xmax,ymax,zmax
      character(256) :: name,name0,name1
      select case(dmn)

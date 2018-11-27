@@ -10,6 +10,7 @@ program main
   use fefd 
   use fvfe
   use h5io
+  use esh3d
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petsc.h"
@@ -105,7 +106,7 @@ program main
   if (poro) then
      p=1; ef_eldof=eldof+eldofp
      if (eltype=="tri") nip=3; if (eltype=="tet") nip=4
-  elseif (fault .or. stype=="alpha") then
+  elseif (fault .or. galf) then
      if (eltype=="tri") nip=3; if (eltype=="tet") nip=4
   end if
 
@@ -199,7 +200,7 @@ program main
      end do
   end do
   n=sum(npart); allocate(nl2g(n,2),indxmap((dmn+p)*n,2))
-  if (fault .or. stype=="alpha") allocate(indxmap_u(dmn*n,2))
+  if (fault .or. galf) allocate(indxmap_u(dmn*n,2))
   j=1
   do i=1,nnds
      if (work(i)==j) then
@@ -211,7 +212,7 @@ program main
         indxmap((dmn+p)*i-j+1,:)=(dmn+p)*nl2g(i,:)-j ! 0 based index
      end do
   end do
-  if (fault .or. stype=="alpha") then
+  if (fault .or. galf) then
      do i=1,n
         do j=1,dmn
            indxmap_u(dmn*i-j+1,:)=dmn*nl2g(i,:)-j
@@ -220,29 +221,41 @@ program main
   end if
   deallocate(work)
   ! Read material data assuming nels >> nmts, i.e., all ranks store all data
-  if (fault .or. stype=="alpha") then
-     allocate(mat(nmts,5+4*p+init+2))
+  if (fault .or. galf) then
+     allocate(mat(nmts,5+4*p+init+2+2*rve))
   else
-     allocate(mat(nmts,5+4*p))
+     allocate(mat(nmts,5+4*p+2*rve))
   end if
   do i=1,nmts
      read(10,*)mat(i,:)
   end do
+  if (rve>0 .and. eltype=="hex") then ! Only for 8-node hex
+     allocate(incls(nincl,11)) 
+     do i=1,nincl
+        read(10,*)incls(i,:) 
+     end do
+     allocate(matDstr(nmts,8,6,6))
+     call RVEHex8Dstr(mat,incls,matDstr)
+     ! Inspect Dstr(l,k,:,:) for l-th material at k-th Gauss point
+     !do i=1,6
+     !   print'(6(F0.6X))',matDstr(1,5,i,:) 
+     !end do
+  end if
   deallocate(epart,npart)
 
   ! Initialize local element variables and global U
   allocate(ipoint(nip,dmn),weight(nip),k(ef_eldof,ef_eldof),m(eldof,eldof),    &
      f(ef_eldof),indx(ef_eldof),enodes(npel),ecoords(npel,dmn),vvec(dmn+p))
-  if (fault .or. stype=="alpha") allocate(k_dyn(eldof,eldof),indx_dyn(eldof))
+  if (fault .or. galf) allocate(k_dyn(eldof,eldof),indx_dyn(eldof))
   call SamPts(ipoint,weight)
-  n=(dmn+p)*nnds; if (stype/="explicit") n=n+nceqs
+  n=(dmn+p)*nnds; if (.not. explicit) n=n+nceqs
   call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,n,Vec_U,ierr)
   ! Global U for dynamic run
-  if (fault .or. stype=="alpha") then
+  if (fault .or. galf) then
      n_dyn=dmn*nnds
      call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,n_dyn,Vec_U_dyn,ierr)
   end if
-  if (visco .or. ((fault .or. stype=="alpha") .and. lm_str==1))                &
+  if (visco .or. ((fault .or. galf) .and. lm_str))                             &
      allocate(stress(nels,nip,cdmn))
 
   ! Set scaling constants
@@ -252,6 +265,8 @@ program main
      scale=sqrt(exp((log(maxval(mat(:,1)))+log(minval(mat(:,1))))/f2)/         &
                 exp((log(maxval(mat(:,6)))+log(minval(mat(:,6))))/f2)/         &
                 dt/km2m)
+  else
+     scale=f1 
   end if
 
   ! Form stiffness matrix
@@ -260,7 +275,7 @@ program main
   call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,nodal_bw,   &
      Petsc_Null_Integer,nodal_bw,Petsc_Null_Integer,Mat_K,ierr)
   call MatSetOption(Mat_K,Mat_New_Nonzero_Allocation_Err,Petsc_False,ierr)
-  if (fault .or. stype=="alpha") then ! Dynamic K
+  if (fault .or. galf) then ! Dynamic K
      nodal_bw=nodal_bw/(dmn+p)*dmn
      call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n_dyn,n_dyn, &
         nodal_bw,Petsc_Null_Integer,nodal_bw,Petsc_Null_Integer,Mat_K_dyn,ierr)
@@ -270,16 +285,24 @@ program main
 
   kfv=.false. ! Full matrix without FV Bc
   do i=1,nels
-     if (poro) then
-        call FormLocalK(i,k,indx,"Kp")
-     else
-        call FormLocalK(i,k,indx,"Ke")
+     if (rve>0 .and. eltype=="hex") then  
+        call FormLocalK(i,k,indx,"Ke",matDstr)
+     else 
+        if (poro) then
+           call FormLocalK(i,k,indx,"Kp")
+        else
+           call FormLocalK(i,k,indx,"Ke")
+        end if
      end if
      indx=indxmap(indx,2)
      call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
-     if (fault .or. stype=="alpha") then
+     if (fault .or. galf) then
         dyn=.true.
-        call FormLocalK(i,k_dyn,indx_dyn,"Ke")
+        if (rve>0 .and. eltype=="hex") then
+           call FormLocalK(i,k_dyn,indx_dyn,"Ke",matDstr)
+        else
+           call FormLocalK(i,k_dyn,indx_dyn,"Ke")
+        end if
         indx_dyn=indxmap_u(indx_dyn,2)
         call MatSetValues(Mat_K_dyn,eldof,indx_dyn,eldof,indx_dyn,k_dyn,       &
            Add_Values,ierr)
@@ -288,9 +311,9 @@ program main
   end do
 
   ! Initialize and form mass matrix and its inverse
-  if (stype=="explicit" .or. stype=="alpha" .or. fault) then
+  if (explicit .or. galf .or. fault) then
      call PrintMsg("Forming [M] & [M]^-1 ...")
-     if (fault .or. stype=="alpha") then
+     if (fault .or. galf) then
         call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n_dyn,    &
            n_dyn,3,Petsc_Null_Integer,3,Petsc_Null_Integer,Mat_M,ierr)
      elseif (gf) then
@@ -302,7 +325,7 @@ program main
      end if
      call MatSetOption(Mat_M,Mat_New_Nonzero_Allocation_Err,Petsc_False,ierr)
      do i=1,nels
-        if (fault .or. stype=="alpha") then
+        if (fault .or. galf) then
            call FormLocalM(i,m,indx_dyn)
            indx_dyn=indxmap_u(indx_dyn,2)
            do j=1,eldof
@@ -322,7 +345,7 @@ program main
      call MatAssemblyBegin(Mat_M,Mat_Final_Assembly,ierr)
      call MatAssemblyEnd(Mat_M,Mat_Final_Assembly,ierr)
      call MatDuplicate(Mat_M,Mat_Do_Not_Copy_Values,Mat_Minv,ierr)
-     if (fault .or. stype=="alpha") then
+     if (fault .or. galf) then
         call MatGetDiagonal(Mat_M,Vec_U_dyn,ierr) ! Vec_U_dyn -> work vector
         call VecReciprocal(Vec_U_dyn,ierr)
         call MatDiagonalSet(Mat_Minv,Vec_U_dyn,Insert_Values,ierr)
@@ -333,7 +356,7 @@ program main
         call MatDiagonalSet(Mat_Minv,Vec_U,Insert_Values,ierr)
         call VecZeroEntries(Vec_U,ierr)
      end if
-     if (stype/="alpha") call MatScale(Mat_M,alpha,ierr) ! M -> alpha x M
+     if (.not. galf) call MatScale(Mat_M,alpha,ierr) ! M -> alpha x M
   end if
 
   ! Allocate arrays to store loading history
@@ -343,13 +366,12 @@ program main
   ! Account for constraint eqn's
   if (nceqs>0) then
      call PrintMsg("Applying constraints ...")
-     if (stype=="explicit") then
+     if (explicit) then
         call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,        &
            nceqs,3,Petsc_Null_Integer,3,Petsc_Null_Integer,Mat_Gt,ierr)
         call MatSetOption(Mat_Gt,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
            ierr)
-     elseif ((fault .or. stype=="alpha") .and. nceqs-nceqs_ncf>0 .and. hyb>0)  &
-        then
+     elseif ((fault .or. galf) .and. nceqs-nceqs_ncf>0 .and. hyb>0) then
         call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs_ncf/(dmn+p)+nfnd,&
            Vec_lm_pn,ierr)
         call VecGetLocalSize(Vec_lm_pn,n_lmnd,ierr)
@@ -395,10 +417,16 @@ program main
      if (rank==0) close(15)
 
      ! Read fault orientation vectors and friction parameters
-     if (fault .or. gf .or. stype=="alpha") then
+     if (fault .or. gf .or. galf) then
         allocate(node_pos(nfnd),node_neg(nfnd),vecf(nfnd,dmn*dmn),fc(nfnd),    &
            fcd(nfnd),dc(nfnd),perm(nfnd),st_init(nfnd,dmn),xfnd(nfnd,dmn),     &
            frc(nfnd),coh(nfnd),dcoh(nfnd),biot(nfnd))    
+        ! Have frictional fault intersection 
+        ! xpair global fault node id paired with intersection
+        ! vecxf alternative fault (strike,dip,normal) vectors at intersection 
+        ! XFltMap map global fault id to intersection id, 0 off-intersection
+        if (Xflt>1) allocate(XFltMap(nfnd),xpair(nxflt),vecxf(nxflt,dmn*dmn),  &
+           stx_init(nxflt,dmn),xlock(nxflt))
         biot=f1
         if (rsf==1) allocate(rsfb0(nfnd),rsfV0(nfnd),rsfdtau0(nfnd),rsfa(nfnd),&
             rsfb(nfnd),rsfL(nfnd),rsftheta(nfnd))
@@ -407,23 +435,20 @@ program main
               if (rsf==1) then
                  read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
                     rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
-                    perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),              &
-                    dcoh(i)
+                    perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i)
               else
                  read(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),    &
-                    dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),               &
-                    coh(i),dcoh(i)
+                    dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i)
               end if
            else if (poro) then
               if (rsf==1) then
                  read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
                     rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
-                    perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),              &
-                    dcoh(i),biot(i)
+                    perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i),biot(i)
               else
                  read(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),    &
-                    dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),               &
-                    coh(i),dcoh(i),biot(i)
+                    dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i),&
+                    biot(i)
               end if
            else
               if (rsf==1) then
@@ -437,10 +462,14 @@ program main
            end if
            node_pos(i)=nmap(node_pos(i)); node_neg(i)=nmap(node_neg(i))
         end do
+        if (Xflt>1) then
+           do i=1,nxflt
+              read(10,*) xpair(i),vecxf(i,:),stx_init(i,:)
+           end do
+        end if
      end if ! Has frictional fault
      if (rank==0) call ApplyConstraints
-     ! Full Mat_Gt for fault assembled by GatMat_Gt
-     if (stype=="explicit" .and. .not. gf) then
+     if ((explicit .or. fault .or. galf) .and. nceqs>0) then
         call MatAssemblyBegin(Mat_Gt,Mat_Final_Assembly,ierr)
         call MatAssemblyEnd(Mat_Gt,Mat_Final_Assembly,ierr)
      end if
@@ -448,7 +477,7 @@ program main
 
   call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
   call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
-  if ((fault .or. stype=="alpha") .and. nceqs>0) then
+  if ((fault .and. lm_str) .or. galf) then
      call MatAssemblyBegin(Mat_K_dyn,Mat_Final_Assembly,ierr)
      call MatAssemblyEnd(Mat_K_dyn,Mat_Final_Assembly,ierr)
   end if
@@ -501,9 +530,9 @@ program main
   end if
 
   ! Account for absorbing boundaries (FormLocalAbsC1 for arbitrary boundary)
-  if (stype=="explicit" .or. ((fault .or. stype=="alpha") .and. nceqs>0)) then
+  if (explicit .or. ((fault .and. lm_str) .or. galf)) then
      call PrintMsg("Absorbing boundary ...")
-     if (stype=="alpha") then 
+     if (galf) then 
         call MatDuplicate(Mat_M,Mat_Do_Not_Copy_Values,Mat_D,ierr)
         call MatZeroEntries(Mat_D,ierr)
      end if
@@ -522,8 +551,10 @@ program main
               !   call MatSetValue(Mat_M,indx_dyn(j),indx_dyn(j),val,           &
               !      Add_Values,ierr)
               !end do
+              ! [C] being sparse, bw=3, instead of 
               !call MatSetValues(Mat_M,eldof,indx_dyn,eldof,indx_dyn,m,         &
               !   Add_Values,ierr)
+              ! , follow 
               do j1=1,eldof
                  do j2=1,eldof
                     val=m(j1,j2)
@@ -531,9 +562,12 @@ program main
                        indx_dyn(j2),val,Add_Values,ierr)
                  end do
               end do
-           elseif (stype=="alpha") then
+           elseif (galf) then
               call FormLocalAbsC1(el,side,m,indx_dyn)
               indx_dyn=indxmap_u(indx_dyn,2)
+              ! [D] being sparse ...
+              !call MatSetValues(Mat_D,eldof,indx_dyn,eldof,indx_dyn,m,         &
+              !   Add_Values,ierr)
               do j1=1,eldof
                  do j2=1,eldof
                     val=m(j1,j2)
@@ -549,6 +583,7 @@ program main
               !   val=m(j,j)
               !   call MatSetValue(Mat_M,indx(j),indx(j),val,Add_Values,ierr)
               !end do
+              ! [C] being sparse ...
               !call MatSetValues(Mat_M,eldof,indx,eldof,indx,m,Add_Values,ierr)
               do j1=1,eldof
                  do j2=1,eldof
@@ -560,7 +595,7 @@ program main
            end if
         end if
      end do
-     if (stype=="alpha") then
+     if (galf) then
         call MatAssemblyBegin(Mat_D,Mat_Final_Assembly,ierr)
         call MatAssemblyEnd(Mat_D,Mat_Final_Assembly,ierr)
      else
@@ -582,8 +617,8 @@ program main
      ierr)
   call VecScatterCreate(Vec_U,From,Seq_U,To,Scatter,ierr)
   allocate(uu(j),tot_uu(j)); tot_uu=f0
-  if (fault .or. stype=="alpha") then
-     if (lm_str==1) then
+  if (fault .or. galf) then
+     if (lm_str) then
         j=size(indxmap_u,1)
         call VecCreateSeq(Petsc_Comm_Self,j,Seq_SS,ierr)
         call VecCreateSeq(Petsc_Comm_Self,j,Seq_SH,ierr)
@@ -599,13 +634,13 @@ program main
         To,ierr)
      call VecScatterCreate(Vec_U_dyn,From,Seq_U_dyn,To,Scatter_dyn,ierr)
      allocate(uu_dyn(j),tot_uu_dyn(j)) 
-     if (lm_str==1) then
+     if (lm_str) then
         allocate(ss(j),sh(j),f2s(j),dip(j),nrm(j))
      end if
   end if
 
   ! Implicit Solver
-  if (stype/="explicit" .and. (.not. (fault .or. stype=="alpha"))) then
+  if (.not. (explicit .or. fault .or. galf)) then
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
      call KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
@@ -759,9 +794,12 @@ program main
   end if
 
   ! Generalized-alpha implicit Solver
-  if (stype=="alpha") then
+  if (galf) then
      ! Local to global fault node map
-     if (nceqs-nceqs_ncf>0) call GetFltMap
+     if (nceqs-nceqs_ncf>0) then 
+        call GetFltMap
+        if (Xflt>1) call GetXfltMap ! Intersection
+     end if
      if (bod_frc==1) then
         call PrintMsg("Applying gravity ...")
         call ApplyGravity
@@ -784,11 +822,15 @@ program main
         tot_uu_obs=tot_uu_obs+uu_obs
         dyn=.false.; call WriteOutput_obs 
      end if
-     if (lm_str==1) then
+     if (lm_str) then
         ! Recover stress
         call PrintMsg("Recovering stress ...")
         do i=1,nels
-           call RecoverStress(i,stress)
+           if (rve>0 .and. eltype=="hex") then 
+              call RecoverStress(i,stress,matDstr)
+           else    
+              call RecoverStress(i,stress)
+           end if
         end do
      end if
      ! Initialize spaces, and stress-to-force.
@@ -820,7 +862,7 @@ program main
      call VecGetSubVector(Vec_U,RIu,Vec_Uu,ierr)
      call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
      if (nceqs>0) call VecDuplicate(Vec_Uu,Vec_flc,ierr)
-     if (lm_str==1) then
+     if (lm_str) then
         call VecDuplicate(Vec_Uu,Vec_SS,ierr)
         call VecDuplicate(Vec_Uu,Vec_SH,ierr)
         call VecZeroEntries(Vec_SS,ierr)
@@ -844,7 +886,7 @@ program main
         call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),                 &
            Petsc_Copy_Values,To_u,ierr)
         call VecScatterCreate(Vec_fl,From_u,Seq_fl,To_u,Scatter_u,ierr)
-     elseif (lm_str==1) then
+     elseif (lm_str) then
         call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),                 &
            Petsc_Copy_Values,From_u,ierr)
         call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),                 &
@@ -861,7 +903,7 @@ program main
         call GetVec_fcoulomb
         call VecRestoreSubVector(Vec_U,RIl,Vec_Ul,ierr)
      end if
-     if (lm_str==1) then ! Scatter stress to nodes
+     if (lm_str) then ! Scatter stress to nodes
         call GetVec_Stress
         call GetVec_S
         if (nceqs>0) then
@@ -899,9 +941,6 @@ program main
      call VecDuplicate(Vec_U_dyn,Vec_U_dyn_tot,ierr)
      call VecZeroEntries(Vec_Um_dyn,ierr)
      call VecZeroEntries(Vec_U_dyn_tot,ierr)
-     call GetMat_Gt
-     call MatAssemblyBegin(Mat_Gt,Mat_Final_Assembly,ierr)
-     call MatAssemblyEnd(Mat_Gt,Mat_Final_Assembly,ierr)
      call MatCreateTranspose(Mat_Gt,Mat_G,ierr)
 
      ! Cleanup one-time static space
@@ -964,11 +1003,11 @@ program main
      steps=int(ceiling(t/dt)); t_hyb=f0
      do tstep=1,steps
         t_hyb=t_hyb+dt
+        ! Reform RHS
+        call AlphaRHS
         ! Solve
         call AlphaUpdate
         call GetVec_U; tot_uu_dyn=tot_uu_dyn+uu_dyn
-        ! Reform RHS
-        call AlphaRHS
         ! Output observation
         if (nobs_loc>0) then
            call GetVec_obs
@@ -1002,7 +1041,10 @@ program main
   ! Fault/hybrid solver
   if (fault) then
      ! Local to global fault node map
-     if (nceqs-nceqs_ncf>0) call GetFltMap
+     if (nceqs-nceqs_ncf>0) then 
+        call GetFltMap
+        if (Xflt>1) call GetXfltMap ! Intersection
+     end if
      if (bod_frc==1) then
         call PrintMsg("Applying gravity ...")
         call ApplyGravity
@@ -1089,7 +1131,7 @@ program main
         call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
         call VecCopy(Vec_Uu,Vec_fl,ierr) ! Hold Uu
         call VecDuplicate(Vec_Uu,Vec_flc,ierr)
-        if (lm_str==1) then
+        if (lm_str) then
            call VecDuplicate(Vec_Uu,Vec_SS,ierr)
            call VecDuplicate(Vec_Uu,Vec_SH,ierr)
            call VecZeroEntries(Vec_SS,ierr)
@@ -1161,11 +1203,15 @@ program main
         call GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
      end if
-     if (visco .or. lm_str==1) then
+     if (visco .or. lm_str) then
         ! Recover stress
         call PrintMsg("Recovering stress ...")
         do i=1,nels
-           call RecoverStress(i,stress)
+           if (rve>0 .and. eltype=="hex") then  
+              call RecoverStress(i,stress,matDstr)
+           else
+              call RecoverStress(i,stress)
+           end if
         end do
      end if
      
@@ -1234,7 +1280,7 @@ program main
               end if
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
            end if
-           if (lm_str==1) then ! Scatter stress to nodes
+           if (lm_str) then ! Scatter stress to nodes
               call GetVec_Stress
               call GetVec_S
               if (nceqs>0) then
@@ -1293,7 +1339,7 @@ program main
               call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
               call VecDuplicate(Vec_Uu,Vec_flc,ierr)
            end if
-           if (lm_str==1) then
+           if (lm_str) then
               call VecDuplicate(Vec_Uu,Vec_SS,ierr)
               call VecDuplicate(Vec_Uu,Vec_SH,ierr)
               call VecZeroEntries(Vec_SS,ierr)
@@ -1336,7 +1382,7 @@ program main
               end if
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
            end if
-           if (lm_str==1) then ! Scatter stress to nodes
+           if (lm_str) then ! Scatter stress to nodes
               if (nceqs==0) then ! Sequential vectors for stress
                  call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),        &
                      Petsc_Copy_Values,From_u,ierr)
@@ -1393,7 +1439,7 @@ program main
            if (rank==0) print'(A11,I0)'," Time Step ",tstep
            ! Reform stiffness matrix, if needed
            if (visco .and. (tstep==1 .or. maxval(mat(:,4))>f1) .and. .not.     &
-              (poro .and. fvin==2)) then
+              (poro .and. (fvin==2 .or. fvin==4))) then
               call PrintMsg(" Reforming [K] ...")
               call MatZeroEntries(Mat_K,ierr)
               do i=1,nels
@@ -1451,7 +1497,7 @@ program main
            end if
            call FormRHS
            if (fail) then 
-              call FaultSlip
+              call FaultSlip_sta
               ! Backup QS slip 
               qs_flt_slip=qs_flt_slip+tot_flt_slip
               fail=.false.
@@ -1479,11 +1525,17 @@ program main
            end if
            ! Record absolute solution
            if (poro .or. nceqs>0) call VecAXPY(Vec_Um,f1,Vec_U,ierr)
-           if (visco .or. (lm_str==1 .and. vout==1)) then
+           if (visco .or. vout==1) then
               ! Recover stress
               call PrintMsg(" Recovering stress ...")
               do i=1,nels
-                 call RecoverVStress(i,stress)
+                 if (visco) then   
+                    call RecoverVStress(i,stress)
+                 else if (rve>0 .and. eltype=="hex") then 
+                    call RecoverStress(i,stress,matDstr)
+                 else 
+                    call RecoverStress(i,stress)
+                 end if
               end do
               call GetVec_Stress
               call GetVec_S
@@ -1576,11 +1628,6 @@ program main
               call VecZeroEntries(Vec_Up_dyn,ierr)
               call VecZeroEntries(Vec_U_dyn_tot,ierr)
               call VecDuplicateVecsF90(Vec_U_dyn,6,Vec_W,ierr)
-              if (n_log_dyn==0) then ! Create full Gt
-                 call GetMat_Gt
-                 call MatAssemblyBegin(Mat_Gt,Mat_Final_Assembly,ierr)
-                 call MatAssemblyEnd(Mat_Gt,Mat_Final_Assembly,ierr)
-              end if
               call MatCreateTranspose(Mat_Gt,Mat_G,ierr)
               call VecDuplicate(Vec_lambda_sta,Vec_lambda,ierr)
               ! GMinvGt is replaced by its inverse, assuming GMinvGt is diagonal
@@ -1674,12 +1721,9 @@ program main
                     call GetVec_fd
                     call Write_fd("dyn")
                  end if
-                 ! Extract and output temporal fault slip
-                 call MatMult(Mat_G,Vec_U_dyn,Vec_Wlm(1),ierr)
-                 call VecGetArrayF90(Vec_Wlm(1),pntr,ierr)
-                 flt_slip=pntr
+                 ! Extract and output temporal fault slip: flt_slip
+                 call FaultSlip_dyn
                  tot_flt_slip=tot_flt_slip+flt_slip
-                 call VecRestoreArrayF90(Vec_Wlm(1),pntr,ierr)
                  if (mod(n_log_dyn,frq_slip)==0) then 
                     if (nfnd_loc>0) call Write_fe("dyn") ! H5 file
                     n_log_slip=n_log_slip+1
@@ -1759,7 +1803,7 @@ program main
      if (poro) deallocate(uup,kc,indxp,Hs,work,fp,qu)
      if (nceqs>0) then 
         deallocate(fl,flc,workl,worku)
-        if (lm_str==1) deallocate(ss,sh)
+        if (lm_str) deallocate(ss,sh)
         if (poro) deallocate(ql)
      end if
      call MatDestroy(Mat_Kc,ierr)
@@ -1810,14 +1854,13 @@ program main
   end if ! Fault solver
 
   ! Explicit (Green's function) Solver
-  if (stype=="explicit" .and. t>f0 .and. dt>f0 .and. t>=dt) then
+  if (explicit .and. t>f0 .and. dt>f0 .and. t>=dt) then
      steps=int(ceiling(t/dt))
      ! Initialize work vectors
      call VecDuplicate(Vec_U,Vec_Um,ierr)
      call VecDuplicate(Vec_U,Vec_Up,ierr)
      call VecDuplicateVecsF90(Vec_U,6,Vec_W,ierr)
      if (nceqs>0) then
-        if (gf) call GetMat_Gt
         call MatCreateTranspose(Mat_Gt,Mat_G,ierr)
         call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs,Vec_lambda,ierr)
         call VecDuplicate(Vec_lambda,Vec_I,ierr)
@@ -1971,8 +2014,8 @@ program main
   call VecDestroy(Seq_U,ierr)
   call VecDestroy(Vec_F,ierr)
   call VecDestroy(Vec_U,ierr)
-  if (stype/="alpha") call MatDestroy(Mat_K,ierr)
-  if (visco .or. (nceqs>0 .and. lm_str==1)) deallocate(stress)
+  if (.not. galf) call MatDestroy(Mat_K,ierr) ! [K]-alpha destroyed early
+  if (visco .or. ((fault .or. galf) .and. lm_str)) deallocate(stress)
   deallocate(coords,nodes,bc,mat,id,k,m,f,indx,ipoint,weight,enodes,ecoords,   &
      vvec,indxmap,tot_uu,uu,cval,fnode,fval,telsd,tval,nl2g)
   ! Delete cnstr.tmp 
@@ -1993,15 +2036,31 @@ contains
     read(10,*)stype,eltype,nodal_bw
     fault=.false.
     if (stype=="fault" .or. stype=="fault-p" .or. stype=="fault-pv" .or.       &
-       stype=="fault-v") fault=.true.
-    gf=.false.
-    if (stype=="explicit-gf") then
-       stype="explicit"; gf=.true.
+       stype=="fault-v" .or. stype=="fault-rve") fault=.true.
+    explicit=.false.; gf=.false. 
+    if (stype=="explicit" .or. stype=="explicit-gf" .or. stype=="explicit-rve")&
+       then
+       explicit=.true.
+       if (stype=="explicit-gf") gf=.true.
     end if
-    if (fault .or. gf .or. stype=="alpha") then
-       read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf
+    rve=0
+    if (stype=="implcit-rve" .or. stype=="explcit-rve" .or. stype=="fault-rve" &
+       .or. stype=="alpha-rve") rve=1
+    galf=.false.   
+    if (stype=="alpha" .or. stype=="alpha-rve") galf=.true.
+    if (fault .or. gf .or. galf) then
+       if (rve>0) then 
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf,&
+             nincl
+       else
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf
+       end if
     else
-       read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs
+       if (rve>0) then 
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs,nincl
+       else
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs
+       end if
     end if
     read(10,*)t,dt,frq,dsp
     poro=.false.; visco=.false.
@@ -2010,10 +2069,11 @@ contains
     if (stype=="fault-p" .or. stype=="fault-pv") poro=.true.
     if (stype=="fault-v" .or. stype=="fault-pv") visco=.true.
     ! Dynamic run time before jumping back to static model
-    if (fault .or. stype=="alpha") then 
-       read(10,*)t_dyn,dt_dyn,frq_dyn,t_lim,dsp_hyb,lm_str,bod_frc,            &
-       hyb,rsf,init
-       if (stype=="alpha") dt_dyn=dt
+    if (fault .or. galf) then 
+       lm_str=.false. ! Calculate LM to stress ratio: lm*r_f2s = str
+       read(10,*)t_dyn,dt_dyn,frq_dyn,t_lim,dsp_hyb,Xflt,bod_frc,hyb,rsf,init
+       if (nceqs-nceqs_ncf>0) lm_str=.true.
+       if (galf) dt_dyn=dt
        ! One time (dt = 24hr) fluid source for initial pressure condition 
        if (init==1 .and. poro) then
           fdt=dt/dble(3600*24)
@@ -2025,8 +2085,13 @@ contains
     if (hyb==1 .and. rsf==0) read(10,*)frq_wave,frq_slip 
     if (hyb==1 .and. rsf==1) read(10,*)frq_wave,frq_slip,v_bg
     if (dt==f0) dt=f1
-    if (stype=="explicit") read(10,*)alpha,beta
-    if (fault .or. stype=="alpha") read(10,*)alpha,beta
+    if (explicit .or. fault .or. galf) then
+       if (Xflt>1) then
+          read(10,*)alpha,beta,nxflt
+       else
+          read(10,*)alpha,beta
+      end if
+    end if   
   end subroutine ReadParameters
 
   ! Setup implicit solver

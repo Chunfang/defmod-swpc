@@ -54,18 +54,6 @@ contains
     call MatAXPY(Mat_tmp,f1d,Mat_D,Different_Nonzero_Pattern,ierr)
     call MatDuplicate(Mat_tmp,Mat_Copy_Values,Mat_Ka,ierr)
 
-    ! Initial RHS
-    !call MatCopy(Mat_K_dyn,Mat_tmp,Same_Nonzero_Pattern,ierr)
-    !call MatAYPX(Mat_tmp,beta*f1d-alpha_f,Mat_M,Same_Nonzero_Pattern,ierr)
-    !call MatAXPY(Mat_tmp,f1d,Mat_D,Different_Nonzero_Pattern,ierr)
-    !call MatMult(Mat_tmp,Vec_U_dyn,Vec_Fa,ierr) 
-
-    ! Add initial force (dyn=true)
-    !call FormRHS
-    !call VecAssemblyBegin(Vec_F_dyn,ierr)
-    !call VecAssemblyEnd(Vec_F_dyn,ierr)
-    !call VecCopy(Vec_F_dyn,Vec_Fa,ierr)
-    
     ! Restore
     call MatScale(Mat_M,f1/(f1m+alpha*f1d),ierr)
     call MatDestroy(Mat_tmp,ierr) 
@@ -136,24 +124,22 @@ contains
 #endif
     Vec,pointer :: Vec_tmp(:)
     real(8) :: fct(2)
-    !real(8),target :: flt_dyn(n_lmnd*dmn)
 
     ! Solve and constrain
     call VecCopy(Vec_U_dyn,Vec_Um_dyn,ierr)
     call KSPSolve(Krylov,Vec_Fa,Vec_U_dyn,ierr)
-    call AlphaCnstr
+    if (nfnd>0) then
+       call AlphaCnstr
 
-    ! Extract and output temporal fault slip
-    call MatMult(Mat_G,Vec_U_dyn,Vec_Wlm(1),ierr)
-    call VecGetArrayF90(Vec_Wlm(1),pntr,ierr)
-    flt_slip=pntr
-    tot_flt_slip=tot_flt_slip+flt_slip
-    call VecRestoreArrayF90(Vec_Wlm(1),pntr,ierr)
-    if (mod(tstep,frq)==0) then
-       call GetSlip_dyn
-       rslip=real(sum(slip))/real(size(slip))
-       if (rank==0) print'(A11,I0,X,F0.2,A)'," Time Step ",tstep,rslip*100.0,  &
-          "% fault slipping."
+       ! Extract and output temporal fault slip
+       call FaultSlip_dyn
+       tot_flt_slip=tot_flt_slip+flt_slip
+       if (mod(tstep,frq)==0) then
+          call GetSlip_dyn
+          rslip=real(sum(slip))/real(size(slip))
+          if (rank==0) print'(A11,I0,X,F0.2,A)'," Time Step ",tstep,rslip*100.0,  &
+             "% fault slipping."
+       end if
     end if
 
     ! Velocity update
