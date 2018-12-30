@@ -1364,14 +1364,16 @@ contains
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
 #endif
-    integer :: node,i,j
+    integer :: node,i,j,ndim
     real(8) :: vvec(:)
-    do i=1,dmn+p
-       j=(dmn+p)*node-(dmn+p)+i-1
+    ndim=dmn; if (.not. dyn) ndim=ndim+p
+    do i=1,ndim
        val=vvec(i); if (i==dmn+1) val=scale*val
-       if(dyn) then
+       if (dyn) then
+          j=dmn*node-dmn+i-1
           call VecSetValue(Vec_F_dyn,j,val,Add_Values,ierr)
        else
+          j=(dmn+p)*node-(dmn+p)+i-1
           call VecSetValue(Vec_F,j,val,Add_Values,ierr)
        end if
     end do
@@ -1380,15 +1382,21 @@ contains
   ! Apply traction (EbEAve)
   subroutine ApplyTraction(el,side,vvec)
     implicit none
-    integer :: el,side,i,snodes(nps)
+    integer :: el,side,i,j,nd,snodes(nps),snode
     real(8) :: vvec(:),area
+    real(8),allocatable :: vec(:)
+    nd=size(vvec); allocate(vec(nd))
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     call EdgeAreaNodes(enodes,ecoords,side,area,snodes)
     vvec=vvec*area/dble(nps)
-    snodes=nl2g(snodes,2)
     do i=1,nps
-       call ApplyNodalForce(snodes(i),vvec)
+       vec=vvec
+       do j=1,nd 
+          if (bc(snodes(i),j)==0) vec(j)=f0
+       end do
+       snode=nl2g(snodes(i),2)
+       call ApplyNodalForce(snode,vec)
     end do
   end subroutine ApplyTraction
 
