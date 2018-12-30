@@ -484,7 +484,7 @@ program main
 
   ! Form RHS
   call PrintMsg("Forming RHS ...")
-  call VecDuplicate(Vec_U,Vec_F,ierr)
+  call VecDuplicate(Vec_U,Vec_F,ierr); call VecZeroEntries(Vec_F,ierr)
   tstep=0
   do i=1,nfrcs
      read(10,*)fnode(i),fval(i,:)
