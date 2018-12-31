@@ -214,7 +214,7 @@ contains
     c3=sum((x**2)/((a**2+lambda)**4))
     Fvec=f2*x/(a**2+lambda)
     call buildtensors(Fvec,F_21,F_22)
-    if (lambda==0) then 
+    if (lambda==f0) then 
        fderlambda=f0 
     else
        fderlambda=Fvec/c1
@@ -282,7 +282,7 @@ contains
     do q=1,3 
        do p=1,3 
           do r=1,3 
-             if (lambda==0) then 
+             if (lambda==f0) then 
                 tderlambda(q,p,r)=f0
              else
                 tderlambda(q,p,r)=(-f1/c1)*(sderlambda(q,p)*fderc1(r)-         &
@@ -419,7 +419,7 @@ contains
     do i=1,nellip
        a=ellip(i,4:6)
        ! Stage a1>=a2>=a3
-       exh=0
+       exh=f0
        do k=1,2
           do l=2,3
              if (a(k)<a(l)) then
@@ -531,7 +531,7 @@ contains
     do i=1,nellip
        a=ellip(i,4:6)
        ! Stage a1>=a2>=a3
-       exh=0
+       exh=f0
        do k=1,2
           do l=2,3
              if (a(k)<a(l)) then
