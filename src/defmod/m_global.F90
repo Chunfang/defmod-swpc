@@ -2546,7 +2546,7 @@ contains
        tap=tap_dyn
     else
        write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_obs_",rank,".txt"
-       tap=tap
+       tap=tap_sta
     end if
     if (.not. tap) then
        open(10,file=adjustl(name),status='replace')
