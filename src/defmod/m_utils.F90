@@ -1541,7 +1541,8 @@ contains
 
   subroutine Ang2Mat(ang,matrot,order)
     ! Rotation matrix for given angles around x,y,z axises, 
-    ! order=1 forward rotation, order-1 backward rotation
+    ! order =  1 cos matrix of original coordinate in rotated coordinate 
+    ! order = -1 cos matrix of rotated coordinate in original coordinate
     implicit none  
     real(8) :: ang(3),matrot(3,3),Rx(3,3),Ry(3,3),Rz(3,3),order
     ang=order*ang

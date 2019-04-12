@@ -24,13 +24,13 @@ module global
   integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
      worku(:),workl(:),node_pos(:),node_neg(:),slip(:),perm(:),onlst(:,:),     &
      frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),gpl2g(:), &
-     nnd_fe2fd(:),fdact_loc(:),matFD(:,:),xpair(:),XFltMap(:)
+     nnd_fe2fd(:),fdact_loc(:),matFD(:,:),xpair(:),XFltMap(:),oel(:)
   real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:),xfnd(:,:),     &
      ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:),           &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
      mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:),incls(:,:),       &
-     matDstr(:,:,:,:),vecxf(:,:),stx_init(:,:)
+     vecxf(:,:),stx_init(:,:),st_obs(:,:),tot_st_obs(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
      fl(:),ql(:),flc(:),fp(:),qu(:),ss(:),sh(:),f2s(:),dip(:),nrm(:),          &
      flt_slip(:),tot_flt_slip(:),res_flt_slip(:),qs_flt_slip(:)
@@ -70,43 +70,10 @@ module global
 contains
 
   ! Form local [K]
-!  subroutine FormLocalK(el,k,indx,strng)
-!    implicit none
-!    integer :: el,indx(:)
-!    real(8) :: k(:,:),estress(nip,cdmn)
-!    character(2) :: strng
-!    enodes=nodes(el,:)
-!    ecoords=coords(enodes,:)
-!    if (visco) estress=stress(el,:,:)
-!    if (dyn) then
-!       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
-!    else
-!       E=mat(id(el),1); nu=mat(id(el),2)
-!    end if
-!    visc=mat(id(el),3); expn=mat(id(el),4)
-!    if ((.not. poro) .or. strng=="Ke") then
-!       call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
-!    else
-!       H=mat(id(el),6)
-!       B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
-!       call FormElKp(ecoords,estress,E,nu,visc,expn,H,B,phi,Kf,1.0d0,scale,dt, &
-!          k,strng)
-!    end if
-!    call AddWinklerFdn(el,k)
-!    if (.not. dyn) call FixBCinLocalK(el,k)
-!    if (poro .and. kfv) call FixFVLocalK(el,k)
-!    if (dyn) then
-!       call FormLocalIndx_dyn(enodes,indx)
-!    else
-!       call FormLocalIndx(enodes,indx)
-!    end if
-!  end subroutine FormLocalK
-
-  subroutine FormLocalK(el,k,indx,strng,matDstr)
+  subroutine FormLocalK(el,k,indx,strng)
     implicit none
     integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn),Dstr(nip,cdmn,cdmn)
-    real(8),optional :: matDstr(nmts,nip,cdmn,cdmn)
+    real(8) :: k(:,:),estress(nip,cdmn)
     character(2) :: strng
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
@@ -117,13 +84,8 @@ contains
        E=mat(id(el),1); nu=mat(id(el),2)
     end if
     visc=mat(id(el),3); expn=mat(id(el),4)
-    if (present(matDstr)) Dstr=matDstr(id(el),:,:,:)
     if ((.not. poro) .or. strng=="Ke") then
-       if (present(matDstr)) then
-          call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng,Dstr)
-       else
-          call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
-       end if
+       call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
     else
        H=mat(id(el),6)
        B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
@@ -139,6 +101,35 @@ contains
        call FormLocalIndx(enodes,indx)
     end if
   end subroutine FormLocalK
+
+  ! Form local [K] for RVE (visco = false, poro = false)
+  subroutine FormLocalKRVE(el,k,indx)
+    implicit none
+    integer :: el,indx(:),ncol,idincl(2)
+    real(8) :: k(:,:),estress(nip,cdmn)
+    enodes=nodes(el,:)
+    ecoords=coords(enodes,:)
+    if (dyn) then
+       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+    else
+       E=mat(id(el),1); nu=mat(id(el),2)
+    end if
+    visc=mat(id(el),3); expn=mat(id(el),4)
+    ncol=size(mat,2)
+    idincl(1)=int(mat(id(el),ncol-1)); idincl(2)=int(mat(id(el),ncol))
+    if (idincl(1)>0 .and. idincl(2)>0 .and. idincl(1)<=idincl(2)) then
+       call FormElKRVE(ecoords,E,nu,k,incls(idincl(1):idincl(2),:))
+    else
+       call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,"Ke")
+    end if
+    call AddWinklerFdn(el,k)
+    if (.not. dyn) call FixBCinLocalK(el,k)
+    if (dyn) then
+       call FormLocalIndx_dyn(enodes,indx)
+    else
+       call FormLocalIndx(enodes,indx)
+    end if
+  end subroutine FormLocalKRVE
 
   ! Kp with tensor valued fluid mobility m_perm(dmn,dmn) from FV
   subroutine FormLocalKPerm(el,k,indx,m_perm,strng)
@@ -733,47 +724,6 @@ contains
     close(10); tap=.true. 
   end subroutine WriteOutput_log_rsf
 
-  subroutine GetTracDat(dat_trac) 
-    implicit none
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
-#include "petsc.h"
-#endif
-    integer :: j,j1,j2,j3,rw_loc(dmn)
-    real(8) :: dat_trac(:,:,:),flt_qs(dmn),flt_p
-    real(8),target :: flt_ndf(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),         &
-       lm_f2s(n_lmnd)
-    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
-    flt_ndf=pntr
-    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    lm_pn=f0; lm_pp=f0; lm_f2s=f0 
-    if (poro) then
-       call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
-       lm_pn=pntr
-       call VecRestoreArrayF90(Vec_lm_pn,pntr,ierr)
-       call VecGetArrayF90(Vec_lm_pp,pntr,ierr)
-       lm_pp=pntr
-       call VecRestoreArrayF90(Vec_lm_pp,pntr,ierr)
-    end if
-    call VecGetArrayF90(Vec_lm_f2s,pntr,ierr)
-    lm_f2s=pntr
-    call VecRestoreArrayF90(Vec_lm_f2s,pntr,ierr)
-    do j1=1,nfnd_loc
-       j=FltMap(j1,1); j3=FltMap(j1,2)
-       rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-       ! Rotate to fault coordinate
-       flt_qs=flt_ndf(rw_loc)
-       call Cart2Flt(vecf(j3,:),flt_qs,1)
-       flt_qs=(flt_qs+st_init(j3,:dmn))*lm_f2s(j)
-       if (poro) then
-          flt_p=(lm_pp(j)+lm_pn(j))/f2
-          ! Positive pressure affects normal stress
-          flt_qs(dmn)=flt_qs(dmn)+max(f0,biot(j3)*flt_p)
-          dat_trac(1,:,j1)=(/flt_qs,flt_p/)
-       else
-          dat_trac(1,:,j1)=flt_qs
-       end if
-    end do
-  end subroutine GetTracDat 
 
   ! Update slip from the static model (from Vec_lambda_sta)
   subroutine GetSlip_sta 
@@ -1325,15 +1275,16 @@ contains
   ! Extract solution at observation locations
   subroutine GetVec_obs
     implicit none
-    integer :: ob,i,j,ind(npel)
+    integer :: ob,i,j,ind(npel),ncol,idincl(2)
     integer,allocatable :: row(:)
-    real(8) :: vecshp(npel,1)
+    real(8) :: vecshp(npel,1),estress(nip,cdmn)
     real(8),allocatable :: vectmp(:,:),mattmp(:,:)
     if (dyn .and. .not. gf) then
        allocate(row(dmn*npel),vectmp(dmn,1),mattmp(dmn,npel))
     else
        allocate(row((dmn+p)*npel),vectmp(dmn+p,1),mattmp(dmn+p,npel))
     end if
+    ncol=size(mat,2)
     do ob=1,nobs_loc
        ind=onlst(ob,:)
        if (dyn .and. .not. gf) then
@@ -1354,6 +1305,25 @@ contains
           vectmp=matmul(mattmp,vecshp) 
           uu_obs(ob,:)=vectmp(:,1)
           if (poro) uu_obs(ob,dmn+1)=vectmp(dmn+1,1)*scale
+          el=oel(ob)
+          enodes=nodes(el,:)
+          ecoords=coords(enodes,:)
+          call FormLocalIndx(enodes,indx)
+          if (rve>0) then
+             idincl(1)=int(mat(id(el),ncol-1)); idincl(2)=int(mat(id(el),ncol))
+             if (idincl(1)>0 .and. idincl(2)>0 .and. idincl(1)<=idincl(2)) then
+                call CalcElStressRVE(ecoords,uu(indx),mat(id(el),1),           &   
+                   mat(id(el),2),estress(:,:),incls(idincl(1):idincl(2),:))    
+             else
+                call CalcElStress(ecoords,uu(indx),mat(id(el),1),mat(id(el),2),&
+                   estress(:,:))
+             end if
+          else
+             call CalcElStress(ecoords,uu(indx),mat(id(el),1),mat(id(el),2),   &
+                estress(:,:))
+          end if
+          st_obs(ob,:)=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),&
+             sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)/dble(nip)
        end if
     end do
   end subroutine GetVec_obs
@@ -1368,12 +1338,11 @@ contains
     real(8) :: vvec(:)
     ndim=dmn; if (.not. dyn) ndim=ndim+p
     do i=1,ndim
+       j=ndim*node-ndim+i-1
        val=vvec(i); if (i==dmn+1) val=scale*val
        if (dyn) then
-          j=dmn*node-dmn+i-1
           call VecSetValue(Vec_F_dyn,j,val,Add_Values,ierr)
        else
-          j=(dmn+p)*node-(dmn+p)+i-1
           call VecSetValue(Vec_F,j,val,Add_Values,ierr)
        end if
     end do
@@ -1551,23 +1520,37 @@ contains
   end subroutine FormLocalIndx_dyn
 
   ! Recover stress
-  subroutine RecoverStress(el,stress,matDstr)
+  subroutine RecoverStress(el,stress)
     implicit none
     integer :: el,indxl(eldof)
-    real(8) :: stress(:,:,:),Dstr(nip,cdmn,cdmn)
-    real(8),optional :: matDstr(nmts,nip,cdmn,cdmn)
+    real(8) :: stress(:,:,:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     call FormLocalIndx(enodes,indx)
     indxl=indx(1:eldof)
-    if (present(matDstr)) then
-       Dstr=matDstr(id(el),:,:,:)
-       call CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:),Dstr)
+    call CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:))
+  end subroutine RecoverStress
+
+  ! Recover stress for RVE (visco = false, poro = false)
+  subroutine RecoverStressRVE(el,stress)
+    implicit none
+    integer :: el,indxl(eldof),ncol,idincl(2)
+    real(8) :: stress(:,:,:)
+    enodes=nodes(el,:)
+    ecoords=coords(enodes,:)
+    E=mat(id(el),1); nu=mat(id(el),2)
+    call FormLocalIndx(enodes,indx)
+    indxl=indx(1:eldof)
+    ncol=size(mat,2)
+    idincl(1)=int(mat(id(el),ncol-1)); idincl(2)=int(mat(id(el),ncol))
+    if (idincl(1)>0 .and. idincl(2)>0 .and. idincl(1)<=idincl(2)) then
+       call CalcElStressRVE(ecoords,uu(indxl),E,nu,stress(el,:,:),             &
+          incls(idincl(1):idincl(2),:))
     else
        call CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:))
     end if
-  end subroutine RecoverStress
+  end subroutine RecoverStressRVE
 
   ! Scatter stress to vertices (normal: SS, shear: SH)
   subroutine GetVec_Stress
@@ -1660,7 +1643,7 @@ contains
     implicit none
     character(2) :: strng 
     integer :: neval,ob,el
-    integer,allocatable :: nd_full(:,:),pick(:)
+    integer,allocatable :: nd_full(:,:),oel_full(:),pick(:)
     real(8) :: xmin,xmax,ymin,ymax,zmin,zmax,xmind,xmaxd,ymind,ymaxd,zmind,    &
        zmaxd,dd,du,dl,dr,df,db,d,eta,nu,psi,xob(dmn),N(npel),c,vec12(dmn),     &
        vec13(dmn),vec14(dmn),vec23(dmn),vec24(dmn),vec34(dmn),vec1o(dmn),      &
@@ -1669,25 +1652,22 @@ contains
     real(8),allocatable :: N_full(:,:)
     logical :: p_in_dom, p_in_el
     c=0.125d0
-
     ! Type of the evaluation Obs or FD
     if (strng=="ob") neval=nobs
     if (strng=="fd") neval=ngp
     allocate(pick(neval))
     pick=0
-
     select case(eltype) 
     case("tri"); allocate(nd_full(neval,3),N_full(neval,3))
     case("qua"); allocate(nd_full(neval,4),N_full(neval,4))
     case("tet"); allocate(nd_full(neval,4),N_full(neval,4))
     case("hex"); allocate(nd_full(neval,8),N_full(neval,8))
-    end select
+    end select; allocate(oel_full(neval))
     xmind=minval(coords(:,1)); xmaxd=maxval(coords(:,1))
     ymind=minval(coords(:,2)); ymaxd=maxval(coords(:,2))
     if (dmn>2) then
        zmind=minval(coords(:,3)); zmaxd=maxval(coords(:,3))
     end if
-
     do ob=1,neval ! Observation loop
        if (strng=="ob") then
           xob=ocoord(ob,:)*km2m
@@ -1817,6 +1797,7 @@ contains
                 pick(ob)=ob
                 N_full(ob,:)=N
                 nd_full(ob,:)=enodes
+                oel_full(ob)=el
                 exit
              end if
           end do ! Element loop
@@ -1830,11 +1811,12 @@ contains
        case("qua"); allocate(onlst(nobs_loc,4),oshape(nobs_loc,4))
        case("tet"); allocate(onlst(nobs_loc,4),oshape(nobs_loc,4))
        case("hex"); allocate(onlst(nobs_loc,8),oshape(nobs_loc,8))
-       end select
+       end select; allocate(oel(nobs_loc))
        ol2g=pack(pick,pick/=0)
        ocoord_loc=ocoord(ol2g,:)
        onlst=nd_full(ol2g,:)
        oshape=N_full(ol2g,:)
+       oel=oel_full(ol2g)
     elseif (strng=="fd") then
        ngp_loc=size(pack(pick,pick/=0))
        allocate(gpl2g(ngp_loc),idgp_loc(ngp_loc,dmn))

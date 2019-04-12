@@ -4,18 +4,18 @@
 module local
 
   use elems
+  use esh3d
   implicit none
   real(8),allocatable :: ipoint(:,:),weight(:)
 
 contains
 
   ! Form element [K]
-  subroutine FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng,Dstr)
+  subroutine FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
     implicit none
     real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,dt,          &
        k(eldof,eldof),alpha,D(cdmn,cdmn),S(cdmn,cdmn),dN(dmn,npel),detj,       &
        B(cdmn,eldof),betad(cdmn,cdmn)
-    real(8),optional :: Dstr(nip,cdmn,cdmn)
     integer :: i
     character(2) :: strng
     k=f0
@@ -31,35 +31,26 @@ contains
           call Matbetad(betad,estress(i,:),visc,expn)
           call MatInv(S+alpha*dt*betad,D)
        end if
-       if (present(Dstr)) D=matmul(D,Dstr(i,:,:)) 
        k=k+matmul(transpose(B),matmul(D,B))*weight(i)*detj
     end do
   end subroutine FormElK
 
-!  subroutine FormRVElK(ecoords,estress,E,nu,visc,expn,dt,k,strng,Dstr)
-!    implicit none
-!    real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,dt,          &
-!       k(eldof,eldof),alpha,D(cdmn,cdmn),S(cdmn,cdmn),dN(dmn,npel),detj,       &
-!       B(cdmn,eldof),betad(cdmn,cdmn),Dstr(8,6,6)
-!    integer :: i
-!    character(2) :: strng
-!    k=f0
-!    call DMat(D,E,nu)
-!    if (strng=="Kv") then
-!       alpha=f1
-!       call MatInv(D,S)
-!    end if
-!    do i=1,nip
-!       call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
-!       call BMat(dN,B)
-!       if (strng=="Kv") then
-!          call Matbetad(betad,estress(i,:),visc,expn)
-!          call MatInv(S+alpha*dt*betad,D)
-!       end if
-!       D=matmul(D,Dstr(i,:,:))
-!       k=k+matmul(transpose(B),matmul(D,B))*weight(i)*detj
-!    end do
-!  end subroutine FormRVElK
+  ! Form element [K] for RVE (visco = false, poro = false)
+  subroutine FormElKRVE(ecoords,E,nu,k,ellip)
+    implicit none
+    real(8) :: ecoords(npel,dmn),E,nu,k(eldof,eldof),D(cdmn,cdmn),dN(dmn,npel),&
+       detj,B(cdmn,eldof),ellip(:,:),Dstr(cdmn,cdmn)
+    integer :: i
+    k=f0
+    call DMat(D,E,nu)
+    do i=1,nip
+       call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+       call BMat(dN,B)
+       call FormDstr(ipoint(i,:),ecoords,E,nu,ellip,Dstr)
+       D=matmul(D,Dstr)
+       k=k+matmul(transpose(B),matmul(D,B))*weight(i)*detj
+    end do
+  end subroutine FormElKRVE
 
   ! Rescale element [Kv] for new dt
   subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,ddt)
@@ -344,20 +335,35 @@ contains
   end subroutine FormElIndxp
 
   ! Calculate element stress
-  subroutine CalcElStress(ecoords,edisp,E,nu,estress,Dstr)
+  subroutine CalcElStress(ecoords,edisp,E,nu,estress)
     implicit none
     real(8) :: ecoords(npel,dmn),edisp(eldof),E,nu,estrain(nip,cdmn),          &
        estress(nip,cdmn),D(cdmn,cdmn),dN(dmn,npel),detj,B(cdmn,eldof)
-    real(8),optional :: Dstr(nip,cdmn,cdmn)
     integer :: i
     call DMat(D,E,nu)
     do i=1,nip
        call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
        call BMat(dN,B)
-       if (present(Dstr)) D=matmul(D,Dstr(i,:,:))
        estrain(i,:)=matmul(B,edisp); estress(i,:)=matmul(D,estrain(i,:))
     end do
   end subroutine CalcElStress
+
+  ! Calculate element stress for RVE (visco = false, poro = false)
+  subroutine CalcElStressRVE(ecoords,edisp,E,nu,estress,ellip)
+    implicit none
+    real(8) :: ecoords(npel,dmn),edisp(eldof),E,nu,estrain(nip,cdmn),          &
+       estress(nip,cdmn),D(cdmn,cdmn),dN(dmn,npel),detj,B(cdmn,eldof),         &
+       ellip(:,:),Dstr(cdmn,cdmn)
+    integer :: i
+    call DMat(D,E,nu)
+    do i=1,nip
+       call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+       call BMat(dN,B)
+       call FormDstr(ipoint(i,:),ecoords,E,nu,ellip,Dstr)
+       D=matmul(D,Dstr)
+       estrain(i,:)=matmul(B,edisp); estress(i,:)=matmul(D,estrain(i,:))
+    end do
+  end subroutine CalcElStressRVE
 
   ! Reform element RHS
   subroutine ReformElRHS(ecoords,estress,E,nu,visc,expn,dt,f)
@@ -423,6 +429,84 @@ contains
        end do
     end select
   end subroutine BMat
+
+  ! (ipcoord, ecoords, ellip) -> Dstr(cdmn,cdmn) 
+  subroutine FormDstr(ipcoord,ecoords,Em,vm,ellip,Dstr)
+    ! ipcoord(3), Gauss points of FE;  
+    ! ellip(nellip,11), nellip inclusions in one element, center, semi-axes,
+    ! rotation angels, Eh, vh;
+    ! Dstr(6,6), Strain=>elastic strain at Gauss points;
+    ! Dstr(i,:,:)=[I+sum_e(Dei(Cm-dCeSe)^-1dCe)]^-1, i inp, e ellip;
+    ! S2(6,6), Rank 2 first Eshelby tensors of each inclusion;
+    ! D2(6,6), Rank 2 second Eshelby tensors of each inclusion and gauss point;
+    ! D2e(6,6), elastic stran=>eigen strain (Cm-dCeSe)^-1dCe of each inclusion;
+    ! Cm(6,6), Rank 2 host stiffness matrix;
+    ! Ch(6,6), Rank 2 stiffness matrix of each inclusion;
+    ! dC(6,6), Cm-Ch
+    implicit none
+    real(8) :: ipcoord(dmn),ecoords(npel,dmn),Dstr(cdmn,cdmn),dN(dmn,npel),    &
+       jacob(dmn,dmn),invj(dmn,dmn),xobs(3),Em,vm,DInv(6,6),Cm(6,6),Ch(6,6),   &
+       dC(6,6),PIvec(3),fderphi(3),tderpsi(3,3,3),S2(6,6),D4(3,3,3,3),D2(6,6), &
+       D2e(6,6),R(3,3),Rb(3,3),R_init(3,3),Rb_init(3,3),R2(3,3),R2b(3,3),      &
+       D2R(6,6),ang(3),a(3),exh(3,3),tmp,ellip(:,:),Eh,vh
+    integer :: i,k,l,nellip
+    nellip=size(ellip,1)
+    call ShapeFuncd(dN,ipcoord) ! Form dN/de, dN/dn, (dN/ds)
+    jacob=matmul(dN,ecoords)
+    call MatInv(jacob,invj)
+    xobs=matmul(invj,ipcoord) ! (eps,eta,sig) -> (x,y,z)
+    xobs=xobs/sqrt(xobs(1)**2+xobs(2)**2+xobs(3)**2) ! Normalize
+    DInv=f0
+    do i=1,cdmn
+       DInv(i,i)=f1 
+    end do
+    call CMat(Em,vm,Cm)
+    do i=1,nellip
+       a=ellip(i,4:6)
+       ! Stage a1>=a2>=a3
+       exh=0
+       do k=1,2
+          do l=2,3
+             if (a(k)<a(l)) then
+                exh(k,l)=f1
+                tmp=a(k)
+                a(k)=a(l)
+                a(l)=tmp
+             end if 
+          end do
+       end do
+       ! Initial rotation matrices due to axis exchange
+       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
+       call Ang2Mat(ang,R_init,f1)
+       call Ang2Mat(ang,Rb_init,-f1)
+       ! Rotation matrices w.r.t the ellipsoid
+       ang=ellip(i,7:9)
+       call Ang2Mat(ang,R,f1)
+       call Ang2Mat(ang,Rb,-f1) 
+       R2=matmul(R_init,Rb)  ! Gauss=>ellipsoid 
+       R2b=matmul(R,Rb_init) ! Ellipsoid=>Gauss
+       call EshS2(vm,a,S2,PIvec)
+       Eh=ellip(i,10); vh=ellip(i,11)
+       call CMat(Eh,vh,Ch); dC=Cm-Ch
+       call MatInv(Cm-matmul(dC,S2),D2e)
+       D2e=matmul(D2e,dC)
+       xobs=xobs-ellip(i,:3) ! Relative coordinate
+       xobs=matmul(R2,xobs)  ! Element=>ellipsoid
+       if (xobs(1)**2/a(1)**2+xobs(2)**2/a(2)**2+xobs(3)**2/a(3)**2<=f1) then
+          D2=S2
+       else 
+          call EshD4(vm,a,xobs,D4,fderphi,tderpsi)
+          call T4T2(D4,D2)
+       end if
+       D2=matmul(D2,D2e)
+       call T2Rot(D2,R2b,D2R) ! Rotate to Cartesian before add
+       DInv=DInv+D2R
+    end do
+    call MatInv(DInv,Dstr)
+    ! Inspect
+    !call MatDet(Dstr(:3,:3),tmp)
+    !print'(7(F0.6X))',xobs,DStr(1,1),DStr(2,2),DStr(3,3),tmp
+  end subroutine FormDstr
 
   ! Computes dN/dx(yz) and the determinant of Jacobian 'detj'
   subroutine FormdNdetJ(ipcoord,ecoords,dN,detj)

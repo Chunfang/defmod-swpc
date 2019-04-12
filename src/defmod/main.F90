@@ -10,7 +10,6 @@ program main
   use fefd 
   use fvfe
   use h5io
-  use esh3d
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
   implicit none
 #include "petsc.h"
@@ -229,13 +228,13 @@ program main
   do i=1,nmts
      read(10,*)mat(i,:)
   end do
-  if (rve>0 .and. eltype=="hex") then ! Only for 8-node hex
+  if (rve>0 .and. nincl>0) then
      allocate(incls(nincl,11)) 
      do i=1,nincl
         read(10,*)incls(i,:) 
      end do
-     allocate(matDstr(nmts,8,6,6))
-     call RVEHex8Dstr(mat,incls,matDstr)
+     !allocate(matDstr(nmts,8,6,6))
+     !call RVEHex8Dstr(mat,incls,matDstr)
      ! Inspect Dstr(l,k,:,:) for l-th material at k-th Gauss point
      !do i=1,6
      !   print'(6(F0.6X))',matDstr(1,5,i,:) 
@@ -285,8 +284,8 @@ program main
 
   kfv=.false. ! Full matrix without FV Bc
   do i=1,nels
-     if (rve>0 .and. eltype=="hex") then  
-        call FormLocalK(i,k,indx,"Ke",matDstr)
+     if (rve>0 .and. dmn==3 .and. nincl>0) then  
+        call FormLocalKRVE(i,k,indx)
      else 
         if (poro) then
            call FormLocalK(i,k,indx,"Kp")
@@ -298,8 +297,8 @@ program main
      call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
      if (fault .or. galf) then
         dyn=.true.
-        if (rve>0 .and. eltype=="hex") then
-           call FormLocalK(i,k_dyn,indx_dyn,"Ke",matDstr)
+        if (rve>0 .and. dmn==3 .and. nincl>0) then
+           call FormLocalKRVE(i,k_dyn,indx_dyn)
         else
            call FormLocalK(i,k_dyn,indx_dyn,"Ke")
         end if
@@ -506,8 +505,9 @@ program main
      call GetObsNd("ob")
      if (nobs_loc>0) then
         allocate(uu_obs(nobs_loc,dmn+p),tot_uu_obs(nobs_loc,dmn+p),            &
-           uu_dyn_obs(nobs_loc,dmn),tot_uu_dyn_obs(nobs_loc,dmn))
-        tot_uu_obs=f0; tot_uu_dyn_obs=f0
+           uu_dyn_obs(nobs_loc,dmn),tot_uu_dyn_obs(nobs_loc,dmn),              &
+           st_obs(nobs_loc,cdmn),tot_st_obs(nobs_loc,cdmn))
+        tot_uu_obs=f0; tot_uu_dyn_obs=f0; tot_st_obs=f0
      end if
      n_log_dyn=0
   end if
@@ -654,6 +654,9 @@ program main
      if (nobs_loc>0) then
         call GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
+        tot_st_obs=tot_st_obs+st_obs
+        !call WriteOutput_obs
+        call Write_obs("sta")
      end if
      if (visco) then
         ! Recover stress
@@ -663,7 +666,7 @@ program main
         end do
      end if
      ! Write output
-     call WriteOutput
+     if (vout>0) call WriteOutput
      ! Prepare for time stepping
      if (t>f0 .and. dt>f0 .and. t>=dt) then
         if (poro) then
@@ -773,13 +776,14 @@ program main
               end do
            end if
            ! Write output
-           if (mod(tstep,frq)==0) call WriteOutput
+           if (mod(tstep,frq)==0 .and. vout==1) call WriteOutput
            if (nobs_loc>0) then
               call GetVec_obs
               tot_uu_obs=tot_uu_obs+uu_obs
-              call WriteOutput_obs
+              tot_st_obs=tot_st_obs+st_obs
+              !call WriteOutput_obs
+              call Write_obs("sta")
            end if
-           !end if
         end do
         if (poro) deallocate(uup,kc,indxp,Hs,work)
      end if
@@ -820,14 +824,16 @@ program main
      if (nobs_loc>0) then
         call GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
-        dyn=.false.; call WriteOutput_obs 
+        tot_st_obs=tot_st_obs+st_obs
+        !call WriteOutput_obs 
+        call Write_obs("sta")
      end if
      if (lm_str) then
         ! Recover stress
         call PrintMsg("Recovering stress ...")
         do i=1,nels
-           if (rve>0 .and. eltype=="hex") then 
-              call RecoverStress(i,stress,matDstr)
+           if (rve>0 .and. dmn==3 .and. nincl>0) then 
+              call RecoverStressRVE(i,stress)
            else    
               call RecoverStress(i,stress)
            end if
@@ -983,7 +989,7 @@ program main
         call VecDuplicate(Vec_lambda,Vec_lambda_tot,ierr)
         call VecZeroEntries(Vec_lambda_tot,ierr)
         ! Record static slip and traction  
-        if (nfnd_loc>0) call Write_fe("sta")
+        if (nfnd_loc>0) call Write_fault("sta")
      end if
 
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
@@ -1014,13 +1020,14 @@ program main
            tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
            if (mod(tstep,frq_wave)==0) then
               uu_dyn_obs=uu_dyn_obs/dt
-              call WriteOutput_obs
+              !call WriteOutput_obs
+              call Write_obs("dyn") 
            end if
         end if
         if (mod(tstep,frq_wave)==0) n_log_wave=n_log_wave+1
         ! Output fault slip
         if (mod(tstep,frq_slip)==0 .and. nfnd>0) then
-           if (nfnd_loc>0) call Write_fe("dyn") ! H5 file
+           if (nfnd_loc>0) call Write_fault("dyn") ! H5 file
            n_log_slip=n_log_slip+1
         end if
         ! Output snapshots
@@ -1150,7 +1157,7 @@ program main
         if (fvin>0) then
            call PrintMsg("Initializing FV pressure ...")
            call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
-           kfv=.true. ! FV bc 
+           kfv=.true. ! [K] and F with FE domain pressure imposed by FV
            if (fvin<3) then
               call FVInit
               call FVReformKF(ef_eldof)
@@ -1202,13 +1209,14 @@ program main
      if (nobs_loc>0) then
         call GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
+        tot_st_obs=tot_st_obs+st_obs
      end if
      if (visco .or. lm_str) then
         ! Recover stress
         call PrintMsg("Recovering stress ...")
         do i=1,nels
-           if (rve>0 .and. eltype=="hex") then  
-              call RecoverStress(i,stress,matDstr)
+           if (rve>0 .and. dmn==3 .and. nincl>0) then  
+              call RecoverStressRVE(i,stress)
            else
               call RecoverStress(i,stress)
            end if
@@ -1300,7 +1308,8 @@ program main
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
-           if (nobs_loc>0) call WriteOutput_obs 
+           !if (nobs_loc>0) call WriteOutput_obs 
+           if (nobs_loc>0) call Write_obs("dyn")
            if (init==1) then
               call PrintMsg("Applying one step (24 hr) fluid source ...")
               ! Zero initial pressure 
@@ -1329,7 +1338,7 @@ program main
               if (vout==1) then
                  call WriteOutput_init
               end if
-              ! Single phase FV model 
+              ! Single phase [K] with pressure partially synced with FV
               if (fvin==1) call FVReformKPerm(f0,ef_eldof) 
               if (fvin==3) call FVReformKPermUsg(f0,ef_eldof)
            end if
@@ -1410,7 +1419,8 @@ program main
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
-           if (nobs_loc>0) call WriteOutput_obs
+           !if (nobs_loc>0) call WriteOutput_obs
+           if (nobs_loc>0) call Write_obs("sta") 
         end if ! Poro or not
 
         ! Solution space is allocated differently for static and dynamic runs, 
@@ -1453,7 +1463,8 @@ program main
               call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
               call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
            end if
-           if (poro .and. (fvin==2 .or. fvin==4)) then ! Multiphase FV model
+           ! Multiphase permeability [K] with pressure partially synced with FV
+           if (poro .and. (fvin==2 .or. fvin==4)) then
               call PrintMsg(" Reforming [Kp] ...")
               if (fvin==2) call FVReformKPerm(t_abs,ef_eldof)
               if (fvin==4) call FVReformKPermUsg(t_abs,ef_eldof)
@@ -1522,6 +1533,7 @@ program main
            if (nobs_loc>0) then 
               call GetVec_obs
               tot_uu_obs=tot_uu_obs+uu_obs
+              tot_st_obs=tot_st_obs+st_obs
            end if
            ! Record absolute solution
            if (poro .or. nceqs>0) call VecAXPY(Vec_Um,f1,Vec_U,ierr)
@@ -1531,8 +1543,8 @@ program main
               do i=1,nels
                  if (visco) then   
                     call RecoverVStress(i,stress)
-                 else if (rve>0 .and. eltype=="hex") then 
-                    call RecoverStress(i,stress,matDstr)
+                 else if (rve>0 .and. dmn==3 .and. nincl>0) then 
+                    call RecoverStressRVE(i,stress)
                  else 
                     call RecoverStress(i,stress)
                  end if
@@ -1575,7 +1587,8 @@ program main
                  ! Write output
                  if (mod(tstep,frq)==0) call WriteOutput_x
               end if
-              if (nobs_loc>0) call WriteOutput_obs
+              !if (nobs_loc>0) call WriteOutput_obs
+              if (nobs_loc>0) call Write_obs("sta") 
            else
               if (vout==1) then
                  ! Extract lambda and induced nodal f
@@ -1592,7 +1605,8 @@ program main
                  ! Write output
                  if (mod(tstep,frq)==0) call WriteOutput_x
               end if
-              if (nobs_loc>0) call WriteOutput_obs
+              !if (nobs_loc>0) call WriteOutput_obs
+              if (nobs_loc>0) call Write_obs("sta") 
            end if
 
            ! Determine if the fault shall fail by LM 
@@ -1606,7 +1620,7 @@ program main
                  call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               end if  
               ! Record static slip and traction  
-              if (mod(tstep,frq)==0 .and. nfnd_loc>0) call Write_fe("sta")
+              if (mod(tstep,frq)==0 .and. nfnd_loc>0) call Write_fault("sta")
               ! Determine if the fault shall fail
               call GetSlip_sta
               rslip=real(sum(slip))/real(size(slip))
@@ -1700,7 +1714,8 @@ program main
                        call GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs 
+                       !if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs 
+                       if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn") 
                     end if
                     if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
                     dyn=.false.
@@ -1711,7 +1726,8 @@ program main
                        call GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs
+                       !if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs
+                       if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn") 
                     end if
                     if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
                  end if
@@ -1725,7 +1741,7 @@ program main
                  call FaultSlip_dyn
                  tot_flt_slip=tot_flt_slip+flt_slip
                  if (mod(n_log_dyn,frq_slip)==0) then 
-                    if (nfnd_loc>0) call Write_fe("dyn") ! H5 file
+                    if (nfnd_loc>0) call Write_fault("dyn") ! H5 file
                     n_log_slip=n_log_slip+1
                  end if
                  ! Export dynamic snapshot
@@ -1795,7 +1811,8 @@ program main
         Scatter_u=Scatter
         call GetVec_S
         if (vout==1) call WriteOutput_x
-        if (nobs_loc>0) call WriteOutput_obs
+        !if (nobs_loc>0) call WriteOutput_obs
+        if (nobs_loc>0) call Write_obs("sta") 
      end if ! Assert implicit time
      crp=.true.
      if (rank==0) call WriteOutput_log 
@@ -1960,9 +1977,10 @@ program main
                  tot_uu_dyn_obs=tot_uu_dyn_obs+uu_obs
                  uu_dyn_obs=uu_obs/dt
                  if (mod(n_log_dyn,frq_wave)==0) then
-                    dyn=.true.
-                    call WriteOutput_obs;
-                    dyn=.false.
+                    !dyn=.true.
+                    !call WriteOutput_obs;
+                    !dyn=.false.
+                    call Write_obs("dyn")
                  end if
               end if
               if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
@@ -2044,8 +2062,8 @@ contains
        if (stype=="explicit-gf") gf=.true.
     end if
     rve=0
-    if (stype=="implcit-rve" .or. stype=="explcit-rve" .or. stype=="fault-rve" &
-       .or. stype=="alpha-rve") rve=1
+    if (stype=="implicit-rve" .or. stype=="explicit-rve" .or.                  &
+       stype=="fault-rve" .or. stype=="alpha-rve") rve=1
     galf=.false.   
     if (stype=="alpha" .or. stype=="alpha-rve") galf=.true.
     if (fault .or. gf .or. galf) then
