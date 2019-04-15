@@ -1275,7 +1275,7 @@ contains
   ! Extract solution at observation locations
   subroutine GetVec_obs
     implicit none
-    integer :: ob,i,j,ind(npel),ncol,idincl(2)
+    integer :: el,ob,i,j,ind(npel),ncol,idincl(2)
     integer,allocatable :: row(:)
     real(8) :: vecshp(npel,1),estress(nip,cdmn)
     real(8),allocatable :: vectmp(:,:),mattmp(:,:)
@@ -1322,8 +1322,14 @@ contains
              call CalcElStress(ecoords,uu(indx),mat(id(el),1),mat(id(el),2),   &
                 estress(:,:))
           end if
-          st_obs(ob,:)=(/sum(estress(:,1)),sum(estress(:,2)),sum(estress(:,3)),&
-             sum(estress(:,4)),sum(estress(:,5)),sum(estress(:,6))/)/dble(nip)
+          if (dmn<3) then
+             st_obs(ob,:)=(/sum(estress(:,1)),sum(estress(:,2)),               &
+                            sum(estress(:,3))/)/dble(nip)
+          else
+             st_obs(ob,:)=(/sum(estress(:,1)),sum(estress(:,2)),               &
+                            sum(estress(:,3)),sum(estress(:,4)),               &
+                            sum(estress(:,5)),sum(estress(:,6))/)/dble(nip)
+          end if
        end if
     end do
   end subroutine GetVec_obs
