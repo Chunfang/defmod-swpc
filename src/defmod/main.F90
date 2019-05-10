@@ -476,7 +476,7 @@ program main
 
   call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
   call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
-  if ((fault .and. lm_str) .or. galf) then
+  if (fault .or. galf) then
      call MatAssemblyBegin(Mat_K_dyn,Mat_Final_Assembly,ierr)
      call MatAssemblyEnd(Mat_K_dyn,Mat_Final_Assembly,ierr)
   end if
@@ -1802,7 +1802,7 @@ program main
               call VecCopy(Vec_lambda_sta,Vec_lambda_sta0,ierr)
            end if
         end do ! Implicit time steps
-     elseif (.not. poro) then ! One time static
+     elseif (.not. poro .and. lm_str) then ! One time static
         call VecDuplicate(Vec_U,Vec_SS,ierr)
         call VecDuplicate(Vec_U,Vec_SH,ierr)
         call VecZeroEntries(Vec_SS,ierr)
@@ -1811,62 +1811,67 @@ program main
         Scatter_u=Scatter
         call GetVec_S
         if (vout==1) call WriteOutput_x
-        !if (nobs_loc>0) call WriteOutput_obs
         if (nobs_loc>0) call Write_obs("sta") 
      end if ! Assert implicit time
      crp=.true.
      if (rank==0) call WriteOutput_log 
      ! Cleanup hybrid
-     if (poro) deallocate(uup,kc,indxp,Hs,work,fp,qu)
+     if (poro) then
+        deallocate(uup,kc,indxp,Hs,work,fp,qu)
+        call MatDestroy(Mat_Kc,ierr)
+        call MatDestroy(Mat_H,ierr)
+        call MatDestroy(Mat_Ht,ierr)
+        call VecDestroy(Vec_I,ierr)
+        call VecDestroy(Vec_Up,ierr)
+        call VecDestroy(Vec_fp,ierr)
+        call VecDestroy(Vec_qu,ierr)
+        call VecDestroy(Seq_fp,ierr)
+        call VecDestroy(Seq_qu,ierr)
+        call ISDestroy(RI,ierr)
+        call ISDestroy(From_p,ierr)
+        call ISDestroy(To_p,ierr)
+        call VecScatterDestroy(Scatter_q,ierr)
+        if (nceqs>0) then
+           deallocate(ql)
+           call VecDestroy(Vec_ql,ierr)
+           call VecDestroy(Seq_ql,ierr)
+        end if
+     end if 
+     if (lm_str) then
+        deallocate(ss,sh)
+        call VecDestroy(Seq_SS,ierr)
+        call VecDestroy(Seq_SH,ierr)
+        call VecDestroy(Vec_SS,ierr)
+        call VecDestroy(Vec_SH,ierr)
+        call VecDestroy(Vec_Cst,ierr)
+     end if
      if (nceqs>0) then 
         deallocate(fl,flc,workl,worku)
-        if (lm_str) deallocate(ss,sh)
-        if (poro) deallocate(ql)
+        call VecDestroy(Vec_fl,ierr)
+        call VecDestroy(Vec_flc,ierr)
+        call VecDestroy(Seq_fl,ierr)
+        call VecDestroy(Seq_flc,ierr)
+        call VecDestroy(Vec_Ul,ierr)
+        call VecDestroy(Vec_lambda_sta,ierr)
+        call VecDestroy(Vec_lambda_sta0,ierr)
+        call ISDestroy(RIl,ierr)
+        call VecScatterDestroy(Scatter_s2d,ierr)
+        call VecScatterDestroy(Scatter_dyn,ierr)
+        if (lm_str) call VecDestroy(Vec_f2s,ierr)
+        if (rsf==1) call VecDestroy(Vec_lambda_bk,ierr)
      end if
-     call MatDestroy(Mat_Kc,ierr)
-     call MatDestroy(Mat_H,ierr)
-     call MatDestroy(Mat_Ht,ierr)
      call MatDestroy(Mat_K_dyn,ierr)
      call MatDestroy(Mat_Gt,ierr)
      call MatDestroy(Mat_M,ierr)
      call MatDestroy(Mat_Minv,ierr)
-     call VecDestroy(Vec_I,ierr)
-     call VecDestroy(Vec_fp,ierr)
-     call VecDestroy(Vec_Up,ierr)
      call VecDestroy(Vec_Uu,ierr)
      call VecDestroy(Vec_Um,ierr)
-     call VecDestroy(Vec_qu,ierr)
-     call VecDestroy(Vec_Ul,ierr)
-     call VecDestroy(Vec_lambda_sta,ierr)
-     call VecDestroy(Vec_lambda_sta0,ierr)
-     if (rsf==1) call VecDestroy(Vec_lambda_bk,ierr)
-     call VecDestroy(Vec_fl,ierr)
-     call VecDestroy(Vec_flc,ierr)
-     call VecDestroy(Vec_f2s,ierr)
-     call VecDestroy(Vec_ql,ierr)
      call VecDestroy(Vec_U_dyn,ierr)
-     call VecDestroy(Vec_SS,ierr)
-     call VecDestroy(Vec_SH,ierr)
-     call VecDestroy(Vec_Cst,ierr)
-     call VecDestroy(Seq_fp,ierr)
-     call VecDestroy(Seq_qu,ierr)
-     call VecDestroy(Seq_fl,ierr)
-     call VecDestroy(Seq_flc,ierr)
-     call VecDestroy(Seq_ql,ierr)
      call VecDestroy(Seq_U_dyn,ierr)
-     call VecDestroy(Seq_SS,ierr)
-     call VecDestroy(Seq_SH,ierr)
-     call ISDestroy(RI,ierr)
      call ISDestroy(RIu,ierr)
-     call ISDestroy(RIl,ierr)
      call ISDestroy(From_u,ierr)
      call ISDestroy(To_u,ierr)   
-     call ISDestroy(From_p,ierr)
-     call ISDestroy(To_p,ierr)
      call VecScatterDestroy(Scatter_u,ierr)
-     call VecScatterDestroy(Scatter_q,ierr)
-     call VecScatterDestroy(Scatter_s2d,ierr)
-     call VecScatterDestroy(Scatter_dyn,ierr)
      call KSPDestroy(Krylov,ierr)
   end if ! Fault solver
 
