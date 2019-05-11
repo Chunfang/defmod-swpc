@@ -655,7 +655,6 @@ program main
         call GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
         tot_st_obs=tot_st_obs+st_obs
-        !call WriteOutput_obs
         call Write_obs("sta")
      end if
      if (visco) then
@@ -666,7 +665,7 @@ program main
         end do
      end if
      ! Write output
-     if (vout>0) call WriteOutput
+     if (vout==1) call WriteOutput
      ! Prepare for time stepping
      if (t>f0 .and. dt>f0 .and. t>=dt) then
         if (poro) then
@@ -781,7 +780,6 @@ program main
               call GetVec_obs
               tot_uu_obs=tot_uu_obs+uu_obs
               tot_st_obs=tot_st_obs+st_obs
-              !call WriteOutput_obs
               call Write_obs("sta")
            end if
         end do
@@ -825,7 +823,6 @@ program main
         call GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
         tot_st_obs=tot_st_obs+st_obs
-        !call WriteOutput_obs 
         call Write_obs("sta")
      end if
      if (lm_str) then
@@ -911,15 +908,17 @@ program main
      end if
      if (lm_str) then ! Scatter stress to nodes
         call GetVec_Stress
-        call GetVec_S
         if (nceqs>0) then
            call GetVec_f2s
-           call GetVec_f2s_seq
         else
            call GetVec_ft
         end if
-        call GetVec_dip_nrm
-        if (vout==1) call WriteOutput_f2s
+        if (vout==1) then
+            call GetVec_f2s_seq
+            call GetVec_Stress_Seq
+            call GetVec_dip_nrm_seq
+            call WriteOutput_f2s
+        end if
         ! Cleanup
         call VecDestroy(Vec_dip,ierr)
         call VecDestroy(Seq_dip,ierr)
@@ -1020,7 +1019,6 @@ program main
            tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
            if (mod(tstep,frq_wave)==0) then
               uu_dyn_obs=uu_dyn_obs/dt
-              !call WriteOutput_obs
               call Write_obs("dyn") 
            end if
         end if
@@ -1290,15 +1288,17 @@ program main
            end if
            if (lm_str) then ! Scatter stress to nodes
               call GetVec_Stress
-              call GetVec_S
               if (nceqs>0) then
                  call GetVec_f2s
-                 call GetVec_f2s_seq
               else
                  call GetVec_ft
               end if
-              call GetVec_dip_nrm
-              if (vout==1) call WriteOutput_f2s
+              if (vout==1) then
+                 call GetVec_f2s_seq
+                 call GetVec_Stress_Seq
+                 call GetVec_dip_nrm_seq
+                 call WriteOutput_f2s
+              end if
               call VecDestroy(Vec_dip,ierr)
               call VecDestroy(Seq_dip,ierr)
               call VecDestroy(Vec_nrm,ierr)
@@ -1308,7 +1308,6 @@ program main
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
-           !if (nobs_loc>0) call WriteOutput_obs 
            if (nobs_loc>0) call Write_obs("dyn")
            if (init==1) then
               call PrintMsg("Applying one step (24 hr) fluid source ...")
@@ -1400,15 +1399,17 @@ program main
                  call VecScatterCreate(Vec_U,From_u,Seq_U,To_u,Scatter_u,ierr)
               end if
               call GetVec_Stress
-              call GetVec_S
               if (nceqs>0) then
                  call GetVec_f2s
-                 call GetVec_f2s_seq
               else
                  call GetVec_ft
               end if
-              call GetVec_dip_nrm
-              if (vout==1) call WriteOutput_f2s
+              if (vout==1) then
+                 call GetVec_f2s_seq
+                 call GetVec_Stress_Seq
+                 call GetVec_dip_nrm_seq
+                 call WriteOutput_f2s
+              end if
               ! Cleanup
               call VecDestroy(Vec_dip,ierr)
               call VecDestroy(Seq_dip,ierr)
@@ -1419,7 +1420,6 @@ program main
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
-           !if (nobs_loc>0) call WriteOutput_obs
            if (nobs_loc>0) call Write_obs("sta") 
         end if ! Poro or not
 
@@ -1550,7 +1550,7 @@ program main
                  end if
               end do
               call GetVec_Stress
-              call GetVec_S
+              if (vout==1) call GetVec_Stress_Seq
            end if
            ! Extract nodal force by p
            if (poro) then
@@ -1559,7 +1559,7 @@ program main
                  tot_uu=f0 
                  if (nobs_loc>0) tot_uu_obs=f0
               end if
-              if (vout==1) then
+              if (vout==1 .and. mod(tstep,frq)==0) then
                  ! Extract force by p
                  call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
                  call MatMult(Mat_H,Vec_Up,Vec_fp,ierr)
@@ -1585,12 +1585,11 @@ program main
                     call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
                  end if
                  ! Write output
-                 if (mod(tstep,frq)==0) call WriteOutput_x
+                 call WriteOutput_x
               end if
-              !if (nobs_loc>0) call WriteOutput_obs
               if (nobs_loc>0) call Write_obs("sta") 
            else
-              if (vout==1) then
+              if (vout==1 .and. mod(tstep,frq)==0) then
                  ! Extract lambda and induced nodal f
                  if (nceqs>0) then
                     call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
@@ -1603,9 +1602,8 @@ program main
                     call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
                  end if
                  ! Write output
-                 if (mod(tstep,frq)==0) call WriteOutput_x
+                 call WriteOutput_x
               end if
-              !if (nobs_loc>0) call WriteOutput_obs
               if (nobs_loc>0) call Write_obs("sta") 
            end if
 
@@ -1714,7 +1712,6 @@ program main
                        call GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       !if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs 
                        if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn") 
                     end if
                     if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
@@ -1726,7 +1723,6 @@ program main
                        call GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       !if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs
                        if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn") 
                     end if
                     if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
@@ -1809,8 +1805,10 @@ program main
         call VecZeroEntries(Vec_SH,ierr)
         call GetVec_Stress
         Scatter_u=Scatter
-        call GetVec_S
-        if (vout==1) call WriteOutput_x
+        if (vout==1) then
+           call GetVec_Stress_Seq
+           call WriteOutput_x
+        end if
         if (nobs_loc>0) call Write_obs("sta") 
      end if ! Assert implicit time
      crp=.true.
@@ -1820,7 +1818,7 @@ program main
         deallocate(uup,kc,indxp,Hs,work,fp,qu)
         call MatDestroy(Mat_Kc,ierr)
         call MatDestroy(Mat_H,ierr)
-        call MatDestroy(Mat_Ht,ierr)
+        if (vout==1) call MatDestroy(Mat_Ht,ierr)
         call VecDestroy(Vec_I,ierr)
         call VecDestroy(Vec_Up,ierr)
         call VecDestroy(Vec_fp,ierr)
@@ -1982,9 +1980,6 @@ program main
                  tot_uu_dyn_obs=tot_uu_dyn_obs+uu_obs
                  uu_dyn_obs=uu_obs/dt
                  if (mod(n_log_dyn,frq_wave)==0) then
-                    !dyn=.true.
-                    !call WriteOutput_obs;
-                    !dyn=.false.
                     call Write_obs("dyn")
                  end if
               end if
@@ -2143,17 +2138,17 @@ contains
     end if
   end subroutine GetVec_U
 
-  subroutine GetVec_S
+  subroutine GetVec_Stress_Seq
     implicit none
     call GetVec(Scatter_u,Vec_SS,Seq_SS,ss)
     call GetVec(Scatter_u,Vec_SH,Seq_SH,sh)
-  end subroutine GetVec_S
+  end subroutine GetVec_Stress_Seq
 
-  subroutine GetVec_dip_nrm
+  subroutine GetVec_dip_nrm_seq
     implicit none
     call GetVec(Scatter_u,Vec_dip,Seq_dip,dip)
     call GetVec(Scatter_u,Vec_nrm,Seq_nrm,nrm)
-  end subroutine GetVec_dip_nrm
+  end subroutine GetVec_dip_nrm_seq
 
   subroutine GetVec_f2s_seq
     implicit none
