@@ -22,7 +22,7 @@ program main
   logical :: l,v,w,pbc
   integer,pointer :: null_i=>null()
   real(8),pointer :: null_r=>null()
-  real(8) :: fdt
+  real(8) :: fdt,t1,t2
   integer :: i,j,j1,j2,j3,j4,j5,j6,n,n_dyn,nodal_bw,ef_eldof,ng,vout,fdout
   
   call PetscInitialize(Petsc_Null_Character,ierr)
@@ -87,6 +87,7 @@ program main
      output_file=input_file
   end if
 
+  call cpu_time(t1)
   call PrintMsg("Reading input ...")
   call ReadParameters
   ! Bounding box pressure (from pflotran) option
@@ -606,6 +607,8 @@ program main
   close(10)
   if (fvin>2) call MakeEl2g
   deallocate(nmap,emap) ! End of input reading
+  call cpu_time(t2)
+  if (rank==0) print'(F0.2,A)',t2-t1," seconds to assemble."
 
   ! Initialize arrays to communicate ghost node values
   call PrintMsg("Setting up solver ...")
@@ -815,7 +818,7 @@ program main
      call SetupKSPSolver
      call PrintMsg("Static solving ...")
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
+     if (rank==0) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
      call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
      call GetVec_U; tot_uu=tot_uu+uu
      ! Get observation
@@ -1000,7 +1003,7 @@ program main
      call SetupKSPSolver    
      call PrintMsg("Alpha-solving ...")
      call VecGetOwnershipRange(Vec_U_dyn,j1,j2,ierr)
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
+     if (rank==0) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
      ! Dummy static event log
      n_log=1; crp=.false.
      if (rank==0) call WriteOutput_log 
@@ -1059,7 +1062,7 @@ program main
      call VecZeroEntries(Vec_Um,ierr)
      call VecGetLocalSize(Vec_U,j,ierr)
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2," dofs on ", nprcs," processors."
+     if (rank==0) print'(I0,A,I0,A)',j2," dofs on ", nprcs," processors."
      ! Create pressure, force and traction IDs (RI RIu RIl) 
      if (poro) then
         j2=0; j3=0; j4=0; j5=0; j6=0
@@ -1200,7 +1203,10 @@ program main
 #endif
      call SetupKSPSolver
      call PrintMsg("Static solving (step 0) ...")
+     call cpu_time(t1)
      call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+     call cpu_time(t2)
+     if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
      call GetVec_U; tot_uu=tot_uu+uu
      call VecAXPY(Vec_Um,f1,Vec_U,ierr)
      ! Get observation
@@ -1317,7 +1323,10 @@ program main
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               call VecZeroEntries(Vec_F,ierr)
               call ApplySource
+              call cpu_time(t1)
               call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+              call cpu_time(t2)
+              if (rank==0) print'(F0.2,A)',t2-t1," second to converge."
               call GetVec_U; tot_uu=uu
               call VecAXPY(Vec_Um,f1,Vec_U,ierr)
               call Rscdt(fdt) ! Scale [K] with dt = fdt*24hr (pv)
@@ -1521,7 +1530,10 @@ program main
            if (fvin==3 .or. fvin==4) call FVSyncBDUsg(t_abs)
            ! Solve
            call PrintMsg(" Solving ...")
+           call cpu_time(t1)
            call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+           call cpu_time(t2)
+           if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
            ! Reset dynamic (slip) solutions 
            if (nceqs>0 .and. hyb>0) then
               tot_uu_dyn=f0
@@ -1667,6 +1679,7 @@ program main
            end if
            
            ! Explicit/implicit hybrid step for rupture propagation
+           call cpu_time(t1)
            do while (dyn .or. (t_sta>f0 .and. (t_sta<t_lim) .and. .not. crp))
               ! Explicit time step
               do tstep_dyn=0,steps_dyn
@@ -1770,6 +1783,8 @@ program main
               ! Hybrid iteration count
               ih=ih+1
            end do ! Hybrid run
+           call cpu_time(t2)
+           if (rank==0) print'(F0.2,A)',t2-t1," seconds to end dynamic run."
            if (fail) then
               if (rank==0 .and. nobs>0) then 
                  call WriteOutput_log
@@ -1889,7 +1904,7 @@ program main
      ! Start time stepping
      call PrintMsg("Solving ...") ! Up=Minv(dt^2(F-KU)-dt(C(U-Um)))+2U-Um
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2+nceqs," dofs on ", nprcs,        &
+     if (rank==0) print'(I0,A,I0,A)',j2+nceqs," dofs on ", nprcs,        &
         " processors."
      ng=1
      if (nobs_loc>0) tot_uu_dyn_obs=f0

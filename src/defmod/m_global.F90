@@ -311,6 +311,7 @@ contains
              call VecSetValue(Vec_ql,j4,-wt*q,Insert_Values,ierr)
           end if
        end if
+       call MPI_Barrier(MPI_Comm_World,ierr)
     end do
     call VecAssemblyBegin(Vec_fl,ierr)
     call VecAssemblyEnd(Vec_fl,ierr)
@@ -375,6 +376,7 @@ contains
           call VecSetValues(Vec_flc,dmn,workpos,wt*vecfl,Insert_Values,ierr)
           call VecSetValues(Vec_flc,dmn,workneg,-wt*vecfl,Insert_Values,ierr)
        end if
+       call MPI_Barrier(MPI_Comm_World,ierr)
     end do
     call VecAssemblyBegin(Vec_flc,ierr)
     call VecAssemblyEnd(Vec_flc,ierr)
@@ -544,6 +546,7 @@ contains
           call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
           call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
        end if
+       call MPI_Barrier(MPI_Comm_World,ierr)
     end do
     call VecAssemblyBegin(Vec_f2s,ierr)
     call VecAssemblyEnd(Vec_f2s,ierr)
