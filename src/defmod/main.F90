@@ -87,7 +87,7 @@ program main
      output_file=input_file
   end if
 
-  call cpu_time(t1)
+  t1=MPI_Wtime()
   call PrintMsg("Reading input ...")
   call ReadParameters
   ! Bounding box pressure (from pflotran) option
@@ -607,7 +607,7 @@ program main
   close(10)
   if (fvin>2) call MakeEl2g
   deallocate(nmap,emap) ! End of input reading
-  call cpu_time(t2)
+  t2=MPI_Wtime()
   if (rank==0) print'(F0.2,A)',t2-t1," seconds to assemble."
 
   ! Initialize arrays to communicate ghost node values
@@ -1203,9 +1203,9 @@ program main
 #endif
      call SetupKSPSolver
      call PrintMsg("Static solving (step 0) ...")
-     call cpu_time(t1)
+     t1=MPI_Wtime()
      call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-     call cpu_time(t2)
+     t2=MPI_Wtime()
      if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
      call GetVec_U; tot_uu=tot_uu+uu
      call VecAXPY(Vec_Um,f1,Vec_U,ierr)
@@ -1323,9 +1323,9 @@ program main
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               call VecZeroEntries(Vec_F,ierr)
               call ApplySource
-              call cpu_time(t1)
+              t1=MPI_Wtime()
               call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-              call cpu_time(t2)
+              t2=MPI_Wtime()
               if (rank==0) print'(F0.2,A)',t2-t1," second to converge."
               call GetVec_U; tot_uu=uu
               call VecAXPY(Vec_Um,f1,Vec_U,ierr)
@@ -1530,9 +1530,9 @@ program main
            if (fvin==3 .or. fvin==4) call FVSyncBDUsg(t_abs)
            ! Solve
            call PrintMsg(" Solving ...")
-           call cpu_time(t1)
+           t1=MPI_Wtime()
            call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-           call cpu_time(t2)
+           t2=MPI_Wtime()
            if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
            ! Reset dynamic (slip) solutions 
            if (nceqs>0 .and. hyb>0) then
@@ -1679,7 +1679,7 @@ program main
            end if
            
            ! Explicit/implicit hybrid step for rupture propagation
-           call cpu_time(t1)
+           t1=MPI_Wtime()
            do while (dyn .or. (t_sta>f0 .and. (t_sta<t_lim) .and. .not. crp))
               ! Explicit time step
               do tstep_dyn=0,steps_dyn
@@ -1783,7 +1783,7 @@ program main
               ! Hybrid iteration count
               ih=ih+1
            end do ! Hybrid run
-           call cpu_time(t2)
+           t2=MPI_Wtime()
            if (rank==0) print'(F0.2,A)',t2-t1," seconds to end dynamic run."
            if (fail) then
               if (rank==0 .and. nobs>0) then 
