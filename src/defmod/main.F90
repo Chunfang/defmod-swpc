@@ -818,7 +818,8 @@ program main
      call SetupKSPSolver
      call PrintMsg("Static solving ...")
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
+        " processors."
      call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
      call GetVec_U; tot_uu=tot_uu+uu
      ! Get observation
@@ -1003,7 +1004,8 @@ program main
      call SetupKSPSolver    
      call PrintMsg("Alpha-solving ...")
      call VecGetOwnershipRange(Vec_U_dyn,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A)',j2," dofs on ",nprcs," processors."
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
+        " processors."
      ! Dummy static event log
      n_log=1; crp=.false.
      if (rank==0) call WriteOutput_log 
@@ -1062,7 +1064,8 @@ program main
      call VecZeroEntries(Vec_Um,ierr)
      call VecGetLocalSize(Vec_U,j,ierr)
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A)',j2," dofs on ", nprcs," processors."
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
+        " processors."
      ! Create pressure, force and traction IDs (RI RIu RIl) 
      if (poro) then
         j2=0; j3=0; j4=0; j5=0; j6=0
@@ -1904,7 +1907,7 @@ program main
      ! Start time stepping
      call PrintMsg("Solving ...") ! Up=Minv(dt^2(F-KU)-dt(C(U-Um)))+2U-Um
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A)',j2+nceqs," dofs on ", nprcs,        &
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
         " processors."
      ng=1
      if (nobs_loc>0) tot_uu_dyn_obs=f0
