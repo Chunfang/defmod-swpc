@@ -641,7 +641,7 @@ contains
           theta=dtpsd/(f1+0.5*dd)+theta*(f1-dd*0.5)/(f1+dd*0.5)
           rsfstate(j4,j,:)=(/v_qs,mu,theta/)
        end do
-       call MPI_AllReduce(size(pack(rsfstate(j4,:,1),rsfstate(j4,:,1)>vtol)), &
+       call MPI_Allreduce(size(pack(rsfstate(j4,:,1),rsfstate(j4,:,1)>vtol)), &
           nslip,1,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
        ! At least ntol fault nodes nucleate
        if (nslip>=ntol) then 
@@ -821,7 +821,7 @@ contains
           slip_loc(j3)=0
        endif
     end do
-250 call MPI_AllReduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,MPI_Comm_World,  &
+250 call MPI_Allreduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,MPI_Comm_World,  &
        ierr)
     slip0=slip
     slip_sum=slip
@@ -1202,9 +1202,9 @@ contains
        slip_loc=0
        slip_sum_loc=0
     end if
-    call MPI_AllReduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,                 &
+    call MPI_Allreduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,                 &
        MPI_Comm_World,ierr)
-    call MPI_AllReduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
+    call MPI_Allreduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
        MPI_Comm_World,ierr)
     ! Identify aseismic slip, nc=10 for SCEC10/14 (slow weakening)
     nc=5; nr=15

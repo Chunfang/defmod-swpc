@@ -123,7 +123,7 @@ contains
     ! Loop over files to read sources
     nfile=size(pack(fe2fd,fe2fd/=0))
     np_tot=sum(fe2fd)
-    call MPI_AllReduce(np_tot,np_rup,1,MPI_INTEGER,MPI_Sum,MPI_Comm_World,ierr)
+    call MPI_Allreduce(np_tot,np_rup,1,MPI_INTEGER,MPI_Sum,MPI_Comm_World,ierr)
     allocate(idfile_pt(nfile),np_pt(nfile),idx_tmp(np_tot,3),fdact(np_tot),    &
       u_tmp(np_tot,nt_rup,3))
     idfile_pt=pack(idfile,idfile>-1)

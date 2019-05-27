@@ -155,7 +155,7 @@ program main
   do i=1,nnds
      if (npart(i)==rank) j=j+1
   end do
-  call MPI_AllGather(j,1,MPI_Integer,work,1,MPI_Integer,MPI_Comm_World,ierr)
+  call MPI_Allgather(j,1,MPI_Integer,work,1,MPI_Integer,MPI_Comm_World,ierr)
   if (rank==0) then
      n=1
   else
@@ -168,7 +168,7 @@ program main
   end do
   deallocate(work)
   allocate(work(nnds))
-  call MPI_AllReduce(nmap,work,nnds,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
+  call MPI_Allreduce(nmap,work,nnds,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
   nmap=work
   npart=0
   do i=1,nels
