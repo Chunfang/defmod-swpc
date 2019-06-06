@@ -455,7 +455,8 @@ contains
     jacob=matmul(dN,ecoords)
     call MatInv(jacob,invj)
     xobs=matmul(invj,ipcoord) ! (eps,eta,sig) -> (x,y,z)
-    xobs=xobs/sqrt(xobs(1)**2+xobs(2)**2+xobs(3)**2) ! Normalize
+    xobs=xobs*sqrt((ipcoord(1)**2+ipcoord(2)**2+ipcoord(3)**2)/(xobs(1)**2+    &
+       xobs(2)**2+xobs(3)**2)) ! Normalize
     DInv=f0
     do i=1,cdmn
        DInv(i,i)=f1 

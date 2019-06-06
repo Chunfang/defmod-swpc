@@ -57,7 +57,7 @@ contains
 #endif
     character(256) :: name,name0,name1,namegrp,namedat
     integer(hid_t) :: idfile,idgrp,iddat,spc_dat,spc_dom
-    integer :: i,row,iv,nbd,it,nt_fv,nx,ny,nz,err,lnnds,ix,iy,iz
+    integer :: i,row,iv,nbd,it,nt_fv,nx,ny,nz,err,lnnds
     real(8) :: xref,yref,zref,xmax,ymax,zmax,p_hst
     real(8),allocatable :: p_dom(:,:,:)
     name0=output_file(:index(output_file,"/",BACK=.TRUE.))
@@ -76,14 +76,14 @@ contains
     xmin=minval(coords(:,1)); xmax=maxval(coords(:,1))
     ymin=minval(coords(:,2)); ymax=maxval(coords(:,2))
     zmin=minval(coords(:,3)); zmax=maxval(coords(:,3))
-    ! Reversed and zero based hdf5 offsets
-    off_dom(3)=int((xmin-xref)/dx)
-    off_dom(2)=int((ymin-yref)/dy)
-    off_dom(1)=int((zmin-zref)/dz)
+    ! Reversed and zero based hdf5 offsets, 3 layers (27 nodes) interpolation
+    off_dom(3)=int((xmin-xref)/dx)-1
+    off_dom(2)=int((ymin-yref)/dy)-1
+    off_dom(1)=int((zmin-zref)/dz)-1
     ! One based
-    dim_dom(3)=int((xmax-xmin)/dx)+1
-    dim_dom(2)=int((ymax-ymin)/dy)+1
-    dim_dom(1)=int((zmax-zmin)/dz)+1
+    dim_dom(3)=int((xmax-xmin)/dx)+3
+    dim_dom(2)=int((ymax-ymin)/dy)+3
+    dim_dom(1)=int((zmax-zmin)/dz)+3
     ! Ascertain domain containment
     if (off_dom(3)<0 .or. off_dom(2)<0 .or. off_dom(1)<0 .or.                  &
        off_dom(3)+dim_dom(3)>nx .or. off_dom(2)+dim_dom(2)>ny .or.             &
@@ -113,10 +113,7 @@ contains
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
     call VecZeroEntries(Vec_Up_hst,ierr)
     do iv=1,lnnds
-       ix=int((coords(iv,1)-xmin)/dx)+1 
-       iy=int((coords(iv,2)-ymin)/dy)+1
-       iz=int((coords(iv,3)-zmin)/dz)+1
-       p_hst=p_dom(iz,iy,ix)
+       call Interp27(p_dom,coords(iv,:),p_hst)
        row=nl2g(iv,2)-1
        call VecSetValue(Vec_Up_hst,row,p_hst/scale,Insert_Values,ierr)
     end do
@@ -136,12 +133,9 @@ contains
        call h5gclose_f(idgrp,err)
        i=1
        do iv=1,lnnds
-          ix=int((coords(iv,1)-xmin)/dx)+1 
-          iy=int((coords(iv,2)-ymin)/dy)+1
-          iz=int((coords(iv,3)-zmin)/dz)+1
-          if (it==1) p_fv0(iv)=p_dom(iz,iy,ix)
+          if (it==1) call Interp27(p_dom,coords(iv,:),p_fv0(iv))
           if (bc(iv,dmn+1)==2) then 
-             p_fv_bd(it,i)=p_dom(iz,iy,ix)
+             call Interp27(p_dom,coords(iv,:),p_fv_bd(it,i)) 
              bdnd(i)=iv
              i=i+1
           end if
@@ -563,6 +557,21 @@ contains
     call VecGetSubVector(Vec_F,RI,Vec_Up,ierr) 
     call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr) 
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    ! Add FV pressure contribution to unsynced pressure
+    call MatMult(Mat_Kc,Vec_Up_fv,Vec_I,ierr)
+    call VecScale(Vec_I,-dt,ierr)
+    do i=1,size(bdnd)
+       row=nl2g(bdnd(i),2)-1
+       call VecSetValue(Vec_I,row,f0,Insert_Values,ierr) 
+    end do
+    call VecAssemblyBegin(Vec_I,ierr)
+    call VecAssemblyEnd(Vec_I,ierr)
+    call VecGetArrayF90(Vec_I,pntr,ierr)
+    uup=pntr
+    call VecRestoreArrayF90(Vec_I,pntr,ierr)
+    call VecSetValues(Vec_F,size(uup),work,uup,Add_Values,ierr)
+    call VecAssemblyBegin(Vec_F,ierr)
+    call VecAssemblyEnd(Vec_F,ierr)
     ! Add FV pressure contribution to nodal force
     call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
     call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
@@ -651,6 +660,21 @@ contains
     call VecPointwiseDivide(Vec_Up,Vec_Up,Vec_Cp0,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
     call VecPointwiseDivide(Vec_Up_fv,Vec_Up_fv,Vec_Cp0,ierr)
+    ! Add FV pressure contribution to unsynced pressure
+    call MatMult(Mat_Kc,Vec_Up_fv,Vec_I,ierr)
+    call VecScale(Vec_I,-dt,ierr)
+    do i=1,size(bdnd)
+       row=nl2g(bdnd(i),2)-1
+       call VecSetValue(Vec_I,row,f0,Insert_Values,ierr) 
+    end do
+    call VecAssemblyBegin(Vec_I,ierr)
+    call VecAssemblyEnd(Vec_I,ierr)
+    call VecGetArrayF90(Vec_I,pntr,ierr)
+    uup=pntr
+    call VecRestoreArrayF90(Vec_I,pntr,ierr)
+    call VecSetValues(Vec_F,size(uup),work,uup,Add_Values,ierr)
+    call VecAssemblyBegin(Vec_F,ierr)
+    call VecAssemblyEnd(Vec_F,ierr)
     ! Add FV pressure contribution to nodal force
     call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
     call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
@@ -658,4 +682,105 @@ contains
     call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)
   end subroutine FVSyncBDUsg 
 
-end module fvfe 
+  ! 27 centroids pressure interpolation for structured FV
+  subroutine Interp27(p_dom,coord,p_int)
+    implicit none
+    integer :: ix,iy,iz,i
+    real(8) :: p_dom(:,:,:),coord(3),pnode(27),p_int,psi(3),N(27)
+    ! Containing brick
+    ix=int((coord(1)-xmin)/dx)+2 
+    iy=int((coord(2)-ymin)/dy)+2
+    iz=int((coord(3)-zmin)/dz)+2
+    ! 27 nodes pressure
+    pnode(1)=p_dom(iz-1,iy-1,ix-1)
+    pnode(2)=p_dom(iz-1,iy-1,ix+1)
+    pnode(3)=p_dom(iz-1,iy+1,ix+1)
+    pnode(4)=p_dom(iz-1,iy+1,ix-1)
+    pnode(5)=p_dom(iz+1,iy-1,ix-1)
+    pnode(6)=p_dom(iz+1,iy-1,ix+1)
+    pnode(7)=p_dom(iz+1,iy+1,ix+1)
+    pnode(8)=p_dom(iz+1,iy+1,ix-1)
+    pnode(9)=p_dom(iz-1,iy-1,ix)
+    pnode(10)=p_dom(iz-1,iy,ix+1)
+    pnode(11)=p_dom(iz-1,iy+1,ix)
+    pnode(12)=p_dom(iz-1,iy,ix-1)
+    pnode(13)=p_dom(iz-1,iy-1,ix)
+    pnode(14)=p_dom(iz+1,iy,ix+1)
+    pnode(15)=p_dom(iz+1,iy+1,ix)
+    pnode(16)=p_dom(iz+1,iy,ix-1)
+    pnode(17)=p_dom(iz,iy-1,ix-1)
+    pnode(18)=p_dom(iz,iy-1,ix+1)
+    pnode(19)=p_dom(iz,iy+1,ix+1)
+    pnode(20)=p_dom(iz,iy+1,ix-1)
+    pnode(21)=p_dom(iz-1,iy,ix)
+    pnode(22)=p_dom(iz+1,iy,ix)
+    pnode(23)=p_dom(iz,iy-1,ix)
+    pnode(24)=p_dom(iz,iy,ix+1)
+    pnode(25)=p_dom(iz,iy+1,ix)
+    pnode(26)=p_dom(iz,iy,ix-1)
+    pnode(27)=p_dom(iz,iy,ix)
+    ! Element coordinate
+    psi(1)=(mod(coord(1)-xmin,dx)-0.5d0*dx)/dx
+    psi(2)=(mod(coord(2)-ymin,dy)-0.5d0*dy)/dy
+    psi(3)=(mod(coord(3)-zmin,dz)-0.5d0*dz)/dz
+    ! Shape function of 27 nodes element
+    N(1)=0.125d0*(f1-psi(1))*(f1-psi(2))*(f1-psi(3)) 
+    N(2)=0.125d0*(f1+psi(1))*(f1-psi(2))*(f1-psi(3)) 
+    N(3)=0.125d0*(f1+psi(1))*(f1+psi(2))*(f1-psi(3)) 
+    N(4)=0.125d0*(f1-psi(1))*(f1+psi(2))*(f1-psi(3)) 
+    N(5)=0.125d0*(f1-psi(1))*(f1-psi(2))*(f1+psi(3))
+    N(6)=0.125d0*(f1+psi(1))*(f1-psi(2))*(f1+psi(3))
+    N(7)=0.125d0*(f1+psi(1))*(f1+psi(2))*(f1+psi(3))
+    N(8)=0.125d0*(f1-psi(1))*(f1+psi(2))*(f1+psi(3))
+
+    N(9) =0.25d0*(f1-psi(1)**2)*(f1-psi(2))*(f1-psi(3))  
+    N(10)=0.25d0*(f1+psi(1))*(f1-psi(2)**2)*(f1-psi(3)) 
+    N(11)=0.25d0*(f1-psi(1)**2)*(f1+psi(2))*(f1-psi(3)) 
+    N(12)=0.25d0*(f1-psi(1))*(f1-psi(2)**2)*(f1-psi(3)) 
+    N(13)=0.25d0*(f1-psi(1)**2)*(f1-psi(2))*(f1+psi(3)) 
+    N(14)=0.25d0*(f1+psi(1))*(f1-psi(2)**2)*(f1+psi(3)) 
+    N(15)=0.25d0*(f1-psi(1)**2)*(f1+psi(2))*(f1+psi(3)) 
+    N(16)=0.25d0*(f1-psi(1))*(f1-psi(2)**2)*(f1+psi(3)) 
+    N(17)=0.25d0*(f1-psi(1))*(f1-psi(2))*(f1-psi(3)**2) 
+    N(18)=0.25d0*(f1+psi(1))*(f1-psi(2))*(f1-psi(3)**2) 
+    N(19)=0.25d0*(f1+psi(1))*(f1+psi(2))*(f1-psi(3)**2) 
+    N(20)=0.25d0*(f1-psi(1))*(f1+psi(2))*(f1-psi(3)**2) 
+
+    N(1)=N(1)-0.5d0*(N(12)+N(9) +N(17)); N(5)=N(5)-0.5d0*(N(16)+N(13)+N(17))
+    N(2)=N(2)-0.5d0*(N(9 )+N(10)+N(18)); N(6)=N(6)-0.5d0*(N(13)+N(14)+N(18))
+    N(3)=N(3)-0.5d0*(N(10)+N(11)+N(19)); N(7)=N(7)-0.5d0*(N(14)+N(15)+N(19))
+    N(4)=N(4)-0.5d0*(N(11)+N(12)+N(20)); N(8)=N(8)-0.5d0*(N(15)+N(16)+N(20))
+    
+    N(21)=0.5d0*(f1-psi(1)**2)*(f1-psi(2)**2)*(f1-psi(3)) 
+    N(22)=0.5d0*(f1-psi(1)**2)*(f1-psi(2)**2)*(f1+psi(3)) 
+    N(23)=0.5d0*(f1-psi(1)**2)*(f1-psi(2))*(f1-psi(3)**2) 
+    N(24)=0.5d0*(f1+psi(1))*(f1-psi(2)**2)*(f1-psi(3)**2) 
+    N(25)=0.5d0*(f1-psi(1)**2)*(f1+psi(2))*(f1-psi(3)**2)
+    N(26)=0.5d0*(f1-psi(1))*(f1-psi(2)**2)*(f1-psi(3)**2) 
+    
+    N(1)=N(1)+0.25d0*(N(21)+N(26)+N(23)); N(5)=N(5)+0.25d0*(N(22)+N(26)+N(23))
+    N(2)=N(2)+0.25d0*(N(21)+N(23)+N(24)); N(6)=N(6)+0.25d0*(N(22)+N(23)+N(24))
+    N(3)=N(3)+0.25d0*(N(21)+N(24)+N(25)); N(7)=N(7)+0.25d0*(N(22)+N(24)+N(25))
+    N(4)=N(4)+0.25d0*(N(21)+N(25)+N(26)); N(8)=N(8)+0.25d0*(N(22)+N(25)+N(26))
+    
+    N(9) =N(9) -0.5*(N(21)+N(23)); N(15)=N(15)-0.5*(N(22)+N(25))
+    N(10)=N(10)-0.5*(N(21)+N(24)); N(16)=N(16)-0.5*(N(22)+N(26))
+    N(11)=N(11)-0.5*(N(21)+N(25)); N(17)=N(17)-0.5*(N(26)+N(23))
+    N(12)=N(12)-0.5*(N(21)+N(26)); N(18)=N(18)-0.5*(N(23)+N(24))
+    N(13)=N(13)-0.5*(N(22)+N(23)); N(19)=N(19)-0.5*(N(24)+N(25))
+    N(14)=N(14)-0.5*(N(22)+N(24)); N(20)=N(20)-0.5*(N(25)+N(26))
+    N(27)=(f1-psi(1)**2)*(f1-psi(2)**2)*(f1-psi(3)**2)
+    do i=1,8
+       N(i)=N(i)-0.125d0*N(27)
+    end do
+    do i=9,20
+       N(i)=N(i)+0.25d0*N(27)
+    end do
+    do i=21,26
+       N(i)=N(i)-0.5d0*N(27) 
+    end do
+    ! Interpolate
+    p_int=sum(N*pnode)
+   end subroutine Interp27
+ 
+ end module fvfe 
