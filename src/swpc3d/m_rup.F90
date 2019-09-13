@@ -9,7 +9,7 @@
 #include "m_debug.h"
 module m_rup
 
-  !! dependency  
+  !! dependency
   use m_std
   use m_global
   use m_debug
@@ -18,13 +18,13 @@ module m_rup
 
   private
   save
-  
+
   !! public routines
   public :: rup__Init
   public :: rup__getTime
   public :: rup__getFE2FD
-  public :: rup__setSrc 
-  public :: rup__getObsFD  
+  public :: rup__setSrc
+  public :: rup__getObsFD
   public :: rup__evalObsFD
   public :: rup__writeObsFD
 
@@ -32,7 +32,7 @@ module m_rup
   integer :: i0_rup ! start frame, number rupture samples
   integer :: nobsFE ! number of obs passed by FE
   integer :: nobsFD ! number on-rank obs for FD
-  integer :: nviz ! obs sample interval 
+  integer :: nviz ! obs sample interval
   integer :: nproc_fe ! number of FE MPI
   integer :: np_tot ! total point sources held by local FD rank
   integer, allocatable :: xobsFD(:,:)  ! Local obs grid indices
@@ -42,14 +42,14 @@ module m_rup
   real(MP) :: dt_rup ! rupture sample interval
   real(SP) :: xref,yref,zref ! FD corner at FE domain
   real(sp) :: km2m
-  real(SP), allocatable :: xobsFE(:,:) ! Global obs coordinates, by FE 
+  real(SP), allocatable :: xobsFE(:,:) ! Global obs coordinates, by FE
   real(SP), allocatable :: xobsFE_loc(:,:) ! Global obs coordinates, by FE
-  real(MP), allocatable :: u_src(:,:,:) ! Local rupture source 
+  real(MP), allocatable :: u_src(:,:,:) ! Local rupture source
   real(MP), allocatable :: obsFD(:,:)   ! Local obs passed from FE
 
 contains
 
-  subroutine rup__Init 
+  subroutine rup__Init
     implicit none
     integer :: i
     character(256) :: name0
@@ -63,8 +63,8 @@ contains
     xref=km2m*xref; yref=km2m*yref; zref=km2m*zref
     read(248,*) nviz,nobsFE
     allocate(xobsFE(nobsFE,3),idobsFE(nobsFE))
-    do i=1,nobsFE 
-      read(248,*)xobsFE(i,:),idobsFE(i) 
+    do i=1,nobsFE
+      read(248,*)xobsFE(i,:),idobsFE(i)
     end do
     close(248)
   end subroutine rup__Init
@@ -85,7 +85,7 @@ contains
       read(249,*)i0_rup
       read(249,*)i1_rup
       nt_rup=i1_rup-i0_rup
-    else    
+    else
       i1_rup=0
       read(249,*)nt_rup ! only read first event
     end if
@@ -98,7 +98,7 @@ contains
     integer :: j,j2,nfile,nproc_fe2fd,ierr
     integer, allocatable :: idfile_pt(:),np_pt(:),idx_src_loc(:,:),rw(:),      &
       fe2fd(:),idfile(:),mattmp(:,:),fdact_loc(:),fdact(:),idx_tmp(:,:)
-    real(MP), allocatable :: u_src_loc(:,:,:),u_tmp(:,:,:) 
+    real(MP), allocatable :: u_src_loc(:,:,:),u_tmp(:,:,:)
     character(256) :: name0,name1
     write(name0,'(A,A)')trim(name_fe),"_fe2fd.txt"
     open(250,file=adjustl(name0),status='old')
@@ -119,7 +119,7 @@ contains
       else
         idfile(j)=-1
       end if
-    end do 
+    end do
     ! Loop over files to read sources
     nfile=size(pack(fe2fd,fe2fd/=0))
     np_tot=sum(fe2fd)
@@ -135,7 +135,7 @@ contains
       write(name1,'(A,A,I0.6,A)')trim(name_fe),"_fe2fd_",idfile_pt(j),".h5"
       call RupSrc(name1,idx_src_loc,u_src_loc,fdact_loc,size(rw),nt_rup)
       idx_tmp(rw,:)=idx_src_loc
-      u_tmp(rw,:,:)=u_src_loc 
+      u_tmp(rw,:,:)=u_src_loc
       fdact(rw)=fdact_loc
       deallocate(rw,idx_src_loc,u_src_loc,fdact_loc)
     end do
@@ -143,7 +143,7 @@ contains
     allocate(idx_src(np_tot,3),u_src(np_tot,nt_rup,3))
     j2=0
     do j=1,size(fdact)
-       if (fdact(j)>0) then  
+       if (fdact(j)>0) then
           j2=j2+1
           idx_src(j2,:)=idx_tmp(j,:)
           u_src(j2,:,:)=u_tmp(j,:,:)
@@ -152,7 +152,7 @@ contains
   end subroutine rup__getFE2FD
 
   ! Read rupture source from FE patch
-  subroutine RupSrc(nameh5,idx_src,u_src,fdact_loc,nrw,nt_rup)  
+  subroutine RupSrc(nameh5,idx_src,u_src,fdact_loc,nrw,nt_rup)
     implicit none
     integer(hid_t) :: idfile,iddat,spc_dat,spc_src
     integer(hsize_t) :: dim_dat(3),dim_tmp(3),offset(3)
@@ -166,7 +166,7 @@ contains
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
     call h5dopen_f(idfile,"ID",iddat,err)
     call h5dget_space_f(iddat,spc_dat,err)
-    call h5sget_simple_extent_dims_f(spc_dat,dim_dat(2:3),dim_tmp(2:3),err) 
+    call h5sget_simple_extent_dims_f(spc_dat,dim_dat(2:3),dim_tmp(2:3),err)
     n_glb=dim_dat(3)
     allocate(ID_glb(dim_dat(2),n_glb),src_glb(nt_rup,3,n_glb))
     call h5dread_f(iddat,h5t_native_integer,ID_glb,dim_dat(2:3),err)
@@ -184,9 +184,9 @@ contains
     call h5close_f(err)
     hit=0
     do isrc=1,n_glb
-      i=ID_glb(1,isrc); j=ID_glb(2,isrc); k=ID_glb(3,isrc) 
+      i=ID_glb(1,isrc); j=ID_glb(2,isrc); k=ID_glb(3,isrc)
       rankxy=((j-1)/nyp)*nproc_x+(i-1)/nxp
-      if (myid==rankxy .and. hit<nrw) then 
+      if (myid==rankxy .and. hit<nrw) then
         hit=hit+1
         idx_src(hit,:)=(/i,j,k/)
         fdact_loc(hit)=ID_glb(3+max(1,eid),isrc)
@@ -202,7 +202,7 @@ contains
     real(MP) :: t_rup,t,vxs,vys,vzs
     t = dble(it-1)*dt
     i_rup=int(t/dt_rup)
-    if (i_rup>0 .and. i_rup<nt_rup) then 
+    if (i_rup>0 .and. i_rup<nt_rup) then
       t_rup=i_rup*dt_rup
       do i=1,np_tot
         ii=idx_src(i,1)
@@ -226,7 +226,7 @@ contains
     endif
   end subroutine rup__setSrc
 
-  ! FE observation to FD->nobsFD, xobsFD, obsFD, xobsFE_loc 
+  ! FE observation to FD->nobsFD, xobsFD, obsFD, xobsFE_loc
   subroutine rup__getObsFD
     implicit none
     integer :: i,xid,yid,zid,rankxy,xobsFD_full(nobsFE,3),hit(nobsFE)
@@ -248,7 +248,7 @@ contains
       if (myid==rankxy) then
         xobsFD_full(i,:)=(/xid,yid,zid/)
         hit(i)=i
-      else 
+      else
         hit(i)=0
       end if
     end do
@@ -269,7 +269,7 @@ contains
                      vy(xobsFD(i,3),xobsFD(i,1),xobsFD(i,2)),&
                     -vz(xobsFD(i,3),xobsFD(i,1),xobsFD(i,2))/) ! deep negative by FE
       end do
-    end if 
+    end if
   end subroutine rup__evalObsFD
 
   ! Output FD observations
@@ -287,17 +287,17 @@ contains
         fmt='(3(F0.3,1X),I0)'
         do i=1,nobsFD
            write(252,fmt)xobsFE_loc(i,:),idobsFD(i)
-        end do 
+        end do
       else
         open(252,file=adjustl(name_fd),status='old',position='append',action='write')
-      endif 
+      endif
       fmt='(3(F0.6,1X))'
       do i=1,nobsFD
         write(252,fmt)obsFD(i,:)
       end do
       close(252)
       k=k+1
-    end if 
+    end if
   end subroutine rup__writeObsFD
 
 end module m_rup

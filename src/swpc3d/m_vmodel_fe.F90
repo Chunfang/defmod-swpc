@@ -1,13 +1,13 @@
 !! ----------------------------------------------------------------------------------------------------------------------------- !!
 !>
-!!  Overwrite the FD velocity with FE velocity 
+!!  Overwrite the FD velocity with FE velocity
 !!
 !! @copyright
 !!   Copyright 2013-2018 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 module m_vmodel_fe
-  
+
   !! dependency
   use m_std
   use m_global
@@ -17,7 +17,7 @@ module m_vmodel_fe
 
   private
   save
-  
+
   !! public routines
   public :: vmodel__fe
   !! local vars
@@ -26,7 +26,7 @@ contains
   subroutine vmodel__fe
     implicit none
     character(256) :: name0,name1
-    integer :: nproc_fe,nproc_fe2fd,nmat,cmat,imat,nels,irank 
+    integer :: nproc_fe,nproc_fe2fd,nmat,cmat,imat,nels,irank
     integer :: i0,i1,j0,j1,k0,k1,i,j,k,el,err ! i,j,k regions
     integer,allocatable :: mattmp(:,:),dat_mat(:,:)
     real(SP),allocatable :: mat(:,:)
@@ -39,7 +39,7 @@ contains
     read(247,*)nmat,cmat,nproc_fe,nproc_fe2fd
     call assert( nproc == nproc_fe2fd )
     allocate(mat(nmat,cmat),mattmp(nproc_fe,nproc_fe2fd))
-    do i=1,nmat 
+    do i=1,nmat
       read(247,*)mat(i,:)
     end do
     do i=1,nproc_fe
@@ -55,7 +55,7 @@ contains
         call h5dget_space_f(iddat,spc_dat,err)
         call h5sget_simple_extent_dims_f(spc_dat,dim_dat,dim_tmp,err)
         nels=dim_dat(2)
-        allocate(dat_mat(7,nels)) 
+        allocate(dat_mat(7,nels))
         call h5dread_f(iddat,h5t_native_integer,dat_mat,dim_dat,err)
         call h5dclose_f(iddat,err)
         call h5fclose_f(idfile,err)
@@ -67,7 +67,7 @@ contains
           if (i0<=i1 .and. j0<=j1 .and. k0<=k1) then ! positive volume
             imat=dat_mat(7,el)
             rho0=mat(imat,5)
-            select case(cmat) 
+            select case(cmat)
             case(7)
               E=mat(imat,6); nu=mat(imat,7)
             case(11)
@@ -81,16 +81,16 @@ contains
               do i = i0, i1
                 do k = k0, k1
                   rho(k,i,j) = rho0*1.d-3 ! g/cm^3
-                  mu (k,i,j) = mu0*1.d-9  ! g/cm^3)*(km/s)^2 
+                  mu (k,i,j) = mu0*1.d-9  ! g/cm^3)*(km/s)^2
                   lam(k,i,j) = lam0*1.d-9 ! g/cm^3)*(km/s)^2
                 end do !k
               end do !i
             end do !j
           end if ! positive volume
-        end do    
+        end do
         deallocate(dat_mat)
       end if ! has on-rank pixel
     end do
   end subroutine vmodel__fe
-  
+
 end module m_vmodel_fe

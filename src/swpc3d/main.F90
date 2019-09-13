@@ -66,7 +66,7 @@ program SWPC_3D
   call std__getio( io_prm )
   open( io_prm, file=trim(fn_prm), action='read', status='old' )
   call readini( io_prm, 'stopwatch_mode', stopwatch_mode, .true.  )
-    
+
   !!
   !! Point/rupture source
   !!
@@ -74,9 +74,9 @@ program SWPC_3D
   have_rs=.false.; have_ps=.false.
   if (name_fe/='RS' .and. is_opt) have_rs=.true.
   if (.not. have_rs) have_ps=.true.
-  
+
   !!
-  !! Select event, see XXX_dyn.log for event numbers  
+  !! Select event, see XXX_dyn.log for event numbers
   !!
   if (have_rs) then
     call getopt('e', is_opt,str_eid, 'ID' )
@@ -119,20 +119,20 @@ program SWPC_3D
      ! FE vmodel overwrite
      if (have_rs) call vmodel__fe
      ! wait until deallocation by medium__setup
-     call mpi_barrier( mpi_comm_world, ierr ) 
+     call mpi_barrier( mpi_comm_world, ierr )
 
      call kernel__setup( )
-     if (have_ps) then 
+     if (have_ps) then
        call source__setup( io_prm )
      else if (have_rs) then ! rupture source no rescale
        UC=1D0; M0=1D0
-     end if 
+     end if
 
      ! Rupture source setup
      if (have_rs) then
        call rup__Init
        call rup__getTime
-       call rup__getFE2FD 
+       call rup__getFE2FD
        call rup__getObsFD
        call mpi_barrier( mpi_comm_world, ierr )
      end if
@@ -170,10 +170,10 @@ program SWPC_3D
 
      ! Set rupture source
      if (have_rs) then
-       call rup__setSrc(it) 
+       call rup__setSrc(it)
        call rup__evalObsFD(it)
        call rup__writeObsFD(it)
-     end if 
+     end if
 
     call green__source( it )
 
