@@ -18,7 +18,7 @@ module h5io
   character(256) :: file_flt,file_obs,file_fd
   integer(hsize_t) :: dim_flt(3),dim_st(3),dim_fd(3)
 contains
-  
+
   ! Output fault slip qs_flt_slip (sta) or (tot_)flt_slip (dyn)
   subroutine Write_fault(strng)
     implicit none
@@ -38,7 +38,7 @@ contains
        write(file_flt,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_flt_",rank,   &
           ".h5"
        call h5fcreate_f(trim(file_flt),H5F_ACC_TRUNC_F,idfile,err)
-       ! Create initial date space and close 
+       ! Create initial date space and close
        do j1=1,nfnd_loc
           j3=FltMap(j1,2)
           dat_fndx(:dmn,j1)=xfnd(j3,:)
@@ -54,17 +54,17 @@ contains
        dim_flt=(/1,dmn,nfnd_loc/)
     end if
     if (strng=="sta") then
-       namedat="slip_sta" 
+       namedat="slip_sta"
        nametrc="trac_sta"
        call GetSlipDat(dat_slip,qs_flt_slip)
        dim_trc=(/1,dmn+p,nfnd_loc/)
        k=k+1; dim_flts=(/k,dmn,nfnd_loc/); dim_trcs=(/k,dmn+p,nfnd_loc/)
     elseif (strng=="dyn") then
-       namedat="slip_dyn" 
+       namedat="slip_dyn"
        nametrc="trac_dyn"
        if (dsp_hyb==0) then
           call GetSlipDat(dat_slip,flt_slip/dt_dyn)
-       elseif (dsp_hyb==1) then 
+       elseif (dsp_hyb==1) then
           call GetSlipDat(dat_slip,tot_flt_slip)
        end if
        dim_trc=(/1,dmn,nfnd_loc/)
@@ -90,7 +90,7 @@ contains
           call h5dcreate_f(idfile,nametrc,h5t_native_double,spc_dat,iddat,err, &
              config)
           call h5dwrite_f(iddat,h5t_native_double,dat_trac,dim_trc,err)
-       else ! Dynamic traction 
+       else ! Dynamic traction
           limit(2:3)=(/dmn,nfnd_loc/)
           call h5screate_simple_f(3,dim_trc,spc_dat,err,limit)
           call h5pcreate_f(H5P_DATASET_CREATE_F,config,err)
@@ -101,7 +101,7 @@ contains
              err)
        end if
     else ! Extend data
-       ! Slip 
+       ! Slip
        offset(1)=dim_flts(1)-1; offset(2:3)=0
        call h5dopen_f(idfile,namedat,iddat,err)
        call h5dset_extent_f(iddat,dim_flts,err)
@@ -118,7 +118,7 @@ contains
        if (strng=="sta") then ! Static traction and pressure
           call H5dwrite_f(iddat,h5t_native_double,dat_trac,dim_trc,err,spc_trc,&
              spc_dat)
-       else ! Dynamic traction  
+       else ! Dynamic traction
           call H5dwrite_f(iddat,h5t_native_double,dat_trac(:,:dmn,:),dim_trc,  &
              err,spc_trc,spc_dat)
        end if
@@ -147,7 +147,7 @@ contains
        write(file_obs,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_ofe_",rank,   &
           ".h5"
        call h5fcreate_f(trim(file_obs),H5F_ACC_TRUNC_F,idfile,err)
-       ! Create initial date space and close 
+       ! Create initial date space and close
        do j1=1,nobs_loc
           j3=ol2g(j1)
           dat_idx(j1)=j3
@@ -165,10 +165,10 @@ contains
        call h5dclose_f(iddat,err)
        call h5fclose_f(idfile,err)
        dim_st=(/1,cdmn,nobs_loc/)
-    end if 
+    end if
     if (strng=="sta") then
        dim_uu=(/1,dmn+p,nobs_loc/)
-       nameuu="uu_sta" 
+       nameuu="uu_sta"
        namest="st_sta"
        do j1=1,nobs_loc
           if (dsp==0) then
@@ -182,11 +182,11 @@ contains
        k=k+1; dim_uus=(/k,dmn+p,nobs_loc/); dim_sts=(/k,cdmn,nobs_loc/)
     elseif (strng=="dyn") then
        dim_uu=(/1,dmn,nobs_loc/)
-       nameuu="uu_dyn" 
+       nameuu="uu_dyn"
        do j1=1,nobs_loc
           if (dsp_hyb==0) then
              dat_uu(1,:,j1)=uu_dyn_obs(j1,:)
-          elseif (dsp_hyb==1) then 
+          elseif (dsp_hyb==1) then
              dat_uu(1,:,j1)=tot_uu_dyn_obs(j1,:)
           end if
        end do
@@ -203,7 +203,7 @@ contains
        call h5dcreate_f(idfile,nameuu,h5t_native_double,spc_dat,iddat,err,     &
           config)
        call h5dwrite_f(iddat,h5t_native_double,dat_uu,dim_uu,err)
-       if (strng=="sta") then ! Static stress 
+       if (strng=="sta") then ! Static stress
           limit(2:3)=(/cdmn,nobs_loc/)
           call h5screate_simple_f(3,dim_st,spc_dat,err,limit)
           call h5pcreate_f(H5P_DATASET_CREATE_F,config,err)
@@ -242,7 +242,7 @@ contains
     integer,save :: k=0
     character(256) :: name0,name1
     character(3) :: strng
-    real(8) :: dat_fd(1,dmn,ngp_loc) ! H5 reverse order 
+    real(8) :: dat_fd(1,dmn,ngp_loc) ! H5 reverse order
     call h5open_f(err)
     dim_fd=(/1,dmn,ngp_loc/)
     dat_fd(1,:,:)=transpose(uu_fd)
@@ -253,7 +253,7 @@ contains
        write(file_fd,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_fe2fd_",rank,  &
           ".h5"
        call h5fcreate_f(trim(file_fd),H5F_ACC_TRUNC_F,idfile,err)
-       dim_dat(1:2)=(/size(matFD,2),size(matFD,1)/) 
+       dim_dat(1:2)=(/size(matFD,2),size(matFD,1)/)
        call h5screate_simple_f(2,dim_dat(1:2),spc_fd,err)
        call h5dcreate_f(idfile,"mat",h5t_native_integer,spc_fd,iddat,err)
        call h5dwrite_f(iddat,h5t_native_integer,transpose(matFD),dim_dat(1:2)  &
@@ -283,12 +283,12 @@ contains
        call h5dget_space_f(iddat,spc_dat,err)
        call h5sget_simple_extent_dims_f(spc_dat,dim_dat,dim_tmp,err)
        offset(1)=dim_dat(1); offset(2:3)=0
-       dim_dat(1)=dim_dat(1)+1 
+       dim_dat(1)=dim_dat(1)+1
        call h5dset_extent_f(iddat,dim_dat,err)
        call h5dget_space_f(iddat,spc_dat,err)
        call h5sselect_hyperslab_f(spc_dat,H5S_SELECT_SET_F,offset,dim_fd,err)
        call H5dwrite_f(iddat,h5t_native_double,dat_fd,dim_fd,err,spc_fd,spc_dat)
-    elseif (strng=="act") then ! Extend node activity  
+    elseif (strng=="act") then ! Extend node activity
        call h5fopen_f(trim(file_fd),H5F_ACC_RDWR_F,idfile,err)
        call h5dopen_f(idfile,"ID",iddat,err)
        call h5dget_space_f(iddat,spc_dat,err)
@@ -309,22 +309,22 @@ contains
     call h5fclose_f(idfile,err)
     call h5close_f(err)
     k=k+1
-  end subroutine Write_fd  
+  end subroutine Write_fd
 
   ! Create fault slip data to output
   subroutine GetSlipDat(dat_slip,dat_src)
-    implicit none  
+    implicit none
     integer :: j,j1,j2,rw_loc(dmn)
     real(8) :: dat_slip(:,:,:),dat_src(:)
-    do j1=1,nfnd_loc 
-       j=FltMap(j1,1) 
+    do j1=1,nfnd_loc
+       j=FltMap(j1,1)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        dat_slip(1,:,j1)=dat_src(rw_loc)
     end do
-  end subroutine GetSlipDat 
+  end subroutine GetSlipDat
 
   ! Create fault traction/pressure data to output
-  subroutine GetTracDat(dat_trac,strng) 
+  subroutine GetTracDat(dat_trac,strng)
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
@@ -337,7 +337,7 @@ contains
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
     call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    lm_pn=f0; lm_pp=f0; lm_f2s=f0 
+    lm_pn=f0; lm_pp=f0; lm_f2s=f0
     if (poro) then
        call VecGetArrayF90(Vec_lm_pn,pntr,ierr)
        lm_pn=pntr
@@ -365,15 +365,15 @@ contains
           flt_p=(lm_pp(j)+lm_pn(j))/f2
           ! Positive pressure affects normal stress
           flt_qs(dmn)=flt_qs(dmn)+max(f0,biot(j3)*flt_p)
-       end if   
+       end if
        if (poro .and. strng=="sta") then
           dat_trac(1,:,j1)=(/flt_qs,flt_p/)
-       else if (strng=="sta") then 
+       else if (strng=="sta") then
           dat_trac(1,:,j1)=flt_qs
        else ! Dynamic traction
           dat_trac(1,:dmn,j1)=flt_qs+flt_ndf_dyn(rw_loc)*lm_f2s(j)
        end if
     end do
-  end subroutine GetTracDat 
+  end subroutine GetTracDat
 
-end module h5io 
+end module h5io

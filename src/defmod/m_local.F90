@@ -130,7 +130,25 @@ contains
        end do
     end if
   end subroutine FormElKp
-  
+
+  ! Dynamic poroelastic stiffness
+  subroutine AddELHSinvHt(ecoords,Bc,Kf,k)
+    implicit none
+    real(8) :: ecoords(npel,dmn),Bc,Kf,dN(dmn,npel),detj,B(cdmn,eldof),SinvB2, &
+       m(cdmn,1)
+    real(8),target :: k(eldof,eldof)
+    integer :: i
+    SinvB2=Kf*Bc**2
+    if (dmn==2) m(:,1)=(/f1,f1,f0/)
+    if (dmn==3) m(:,1)=(/f1,f1,f1,f0,f0,f0/)
+    do i=1,nip
+       call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+       call BMat(dN,B)
+       k=k+matmul(transpose(B),matmul(matmul(m,transpose(m)),B))*SinvB2*       &
+          weight(i)*detj
+    end do
+  end subroutine AddELHSinvHt
+
   ! Kp with tensor valued fluid mobility Q(dmn,dmn)
   subroutine FormElKPerm(ecoords,estress,E,nu,visc,expn,Q,Bc,fi,Kf,theta,      &
     scale,dt,k,strng)
@@ -222,7 +240,7 @@ contains
        kl=>k(eldof+1:,eldof+1:)
        kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*theta*ddt*s*s
     end do
-  end subroutine RscElKp 
+  end subroutine RscElKp
 
   ! Form element Hs (-ve)
   subroutine FormElHs(ecoords,epr,E,nu,scale,f)
@@ -348,6 +366,19 @@ contains
     end do
   end subroutine CalcElStress
 
+  ! Calculate element strain
+  subroutine CalcElStrain(ecoords,edisp,estrain)
+    implicit none
+    real(8) :: ecoords(npel,dmn),edisp(eldof),estrain(nip,cdmn),dN(dmn,npel),  &
+       detj,B(cdmn,eldof)
+    integer :: i
+    do i=1,nip
+       call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+       call BMat(dN,B)
+       estrain(i,:)=matmul(B,edisp)
+    end do
+  end subroutine CalcElStrain
+
   ! Calculate element stress for RVE (visco = false, poro = false)
   subroutine CalcElStressRVE(ecoords,edisp,E,nu,estress,ellip)
     implicit none
@@ -430,9 +461,9 @@ contains
     end select
   end subroutine BMat
 
-  ! (ipcoord, ecoords, ellip) -> Dstr(cdmn,cdmn) 
+  ! (ipcoord, ecoords, ellip) -> Dstr(cdmn,cdmn)
   subroutine FormDstr(ipcoord,ecoords,Em,vm,ellip,Dstr)
-    ! ipcoord(3), Gauss points of FE;  
+    ! ipcoord(3), Gauss points of FE;
     ! ellip(nellip,11), nellip inclusions in one element, center, semi-axes,
     ! rotation angels, Eh, vh;
     ! Dstr(6,6), Strain=>elastic strain at Gauss points;
@@ -459,7 +490,7 @@ contains
        xobs(2)**2+xobs(3)**2)) ! Normalize
     DInv=f0
     do i=1,cdmn
-       DInv(i,i)=f1 
+       DInv(i,i)=f1
     end do
     call CMat(Em,vm,Cm)
     do i=1,nellip
@@ -473,7 +504,7 @@ contains
                 tmp=a(k)
                 a(k)=a(l)
                 a(l)=tmp
-             end if 
+             end if
           end do
        end do
        ! Initial rotation matrices due to axis exchange
@@ -483,8 +514,8 @@ contains
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(i,7:9)
        call Ang2Mat(ang,R,f1)
-       call Ang2Mat(ang,Rb,-f1) 
-       R2=matmul(R_init,Rb)  ! Gauss=>ellipsoid 
+       call Ang2Mat(ang,Rb,-f1)
+       R2=matmul(R_init,Rb)  ! Gauss=>ellipsoid
        R2b=matmul(R,Rb_init) ! Ellipsoid=>Gauss
        call EshS2(vm,a,S2,PIvec)
        Eh=ellip(i,10); vh=ellip(i,11)
@@ -495,7 +526,7 @@ contains
        xobs=matmul(R2,xobs)  ! Element=>ellipsoid
        if (xobs(1)**2/a(1)**2+xobs(2)**2/a(2)**2+xobs(3)**2/a(3)**2<=f1) then
           D2=S2
-       else 
+       else
           call EshD4(vm,a,xobs,D4,fderphi,tderpsi)
           call T4T2(D4,D2)
        end if
@@ -608,7 +639,7 @@ contains
     real(8) :: betad(3,3),estress(3),kappa,c1,c2,c3,visc,expn,s1,s2,s3
     s1=estress(1); s2=estress(2); s3=estress(3)
     kappa=sqrt(((s1-s2)/f2)**2+s3**2)
-    if (kappa==f0) then 
+    if (kappa==f0) then
        betad=f0; return
     end if
     c1=f1+(expn-f1)*((s1-s2)/(f2*kappa))**2

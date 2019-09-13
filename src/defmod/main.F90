@@ -7,7 +7,7 @@ program main
 
   use global
   use galpha
-  use fefd 
+  use fefd
   use fvfe
   use h5io
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
@@ -24,7 +24,7 @@ program main
   real(8),pointer :: null_r=>null()
   real(8) :: fdt,t1,t2
   integer :: i,j,j1,j2,j3,j4,j5,j6,n,n_dyn,nodal_bw,ef_eldof,ng,vout,fdout
-  
+
   call PetscInitialize(Petsc_Null_Character,ierr)
 
   call MPI_Comm_Rank(MPI_Comm_World,rank,ierr)
@@ -60,8 +60,8 @@ program main
   end if
   vout=0
   if (v) then
-     read (viz,'(I1.0)')vout 
-     if (vout==1) then 
+     read (viz,'(I1.0)')vout
+     if (vout==1) then
         call PrintMsg("Snapshot output will slow the run!")
      else
         call PrintMsg("Shosen NOT to output snapshot.")
@@ -230,15 +230,15 @@ program main
      read(10,*)mat(i,:)
   end do
   if (rve>0 .and. nincl>0) then
-     allocate(incls(nincl,11)) 
+     allocate(incls(nincl,11))
      do i=1,nincl
-        read(10,*)incls(i,:) 
+        read(10,*)incls(i,:)
      end do
      !allocate(matDstr(nmts,8,6,6))
      !call RVEHex8Dstr(mat,incls,matDstr)
      ! Inspect Dstr(l,k,:,:) for l-th material at k-th Gauss point
      !do i=1,6
-     !   print'(6(F0.6X))',matDstr(1,5,i,:) 
+     !   print'(6(F0.6X))',matDstr(1,5,i,:)
      !end do
   end if
   deallocate(epart,npart)
@@ -266,7 +266,7 @@ program main
                 exp((log(maxval(mat(:,6)))+log(minval(mat(:,6))))/f2)/         &
                 dt/km2m)
   else
-     scale=f1 
+     scale=f1
   end if
 
   ! Form stiffness matrix
@@ -283,13 +283,12 @@ program main
         ierr)
   end if
 
-  kfv=.false. ! Full matrix without FV Bc
   do i=1,nels
-     if (rve>0 .and. dmn==3 .and. nincl>0) then  
+     if (rve>0 .and. dmn==3 .and. nincl>0) then
         call FormLocalKRVE(i,k,indx)
-     else 
+     else
         if (poro) then
-           call FormLocalK(i,k,indx,"Kp")
+           call FormLocalK(i,k,indx,"Kp") ! Full matrix without FV Bc
         else
            call FormLocalK(i,k,indx,"Ke")
         end if
@@ -420,10 +419,10 @@ program main
      if (fault .or. gf .or. galf) then
         allocate(node_pos(nfnd),node_neg(nfnd),vecf(nfnd,dmn*dmn),fc(nfnd),    &
            fcd(nfnd),dc(nfnd),perm(nfnd),st_init(nfnd,dmn),xfnd(nfnd,dmn),     &
-           frc(nfnd),coh(nfnd),dcoh(nfnd),biot(nfnd))    
-        ! Have frictional fault intersection 
+           frc(nfnd),coh(nfnd),dcoh(nfnd),biot(nfnd))
+        ! Have frictional fault intersection
         ! xpair global fault node id paired with intersection
-        ! vecxf alternative fault (strike,dip,normal) vectors at intersection 
+        ! vecxf alternative fault (strike,dip,normal) vectors at intersection
         ! XFltMap map global fault id to intersection id, 0 off-intersection
         if (Xflt>1) allocate(XFltMap(nfnd),xpair(nxflt),vecxf(nxflt,dmn*dmn),  &
            stx_init(nxflt,dmn),xlock(nxflt))
@@ -512,15 +511,15 @@ program main
      end if
      n_log_dyn=0
   end if
-  
-  ! FD domain grid bocks containing fault nodes, xgp, idgp(_loc), gpnlst, 
+
+  ! FD domain grid bocks containing fault nodes, xgp, idgp(_loc), gpnlst,
   ! gpshape
   if (nceqs-nceqs_ncf>0 .and. fdout==1) then
      call PrintMsg("Locating FD grid points ...")
      call FDInit
-     call GetFDFnd 
+     call GetFDFnd
      call GetObsNd("fd")
-     !deallocate(xgp,idgp)  
+     !deallocate(xgp,idgp)
      deallocate(xgp)
      if (ngp_loc>0) allocate(uu_fd(ngp_loc,dmn))
      call NndFE2FD
@@ -533,14 +532,14 @@ program main
   ! Account for absorbing boundaries (FormLocalAbsC1 for arbitrary boundary)
   if (explicit .or. ((fault .and. lm_str) .or. galf)) then
      call PrintMsg("Absorbing boundary ...")
-     if (galf) then 
+     if (galf) then
         call MatDuplicate(Mat_M,Mat_Do_Not_Copy_Values,Mat_D,ierr)
         call MatZeroEntries(Mat_D,ierr)
      end if
      do i=1,nabcs
         ! For axis aligned absorbing boundaries
         !read(10,*)el,side,j; el=emap(el)
-        ! j (dir ID) has no use for arbitrarily facing AbsC 
+        ! j (dir ID) has no use for arbitrarily facing AbsC
         read(10,*)el,side; el=emap(el)
         if (el/=0) then
            if (fault) then
@@ -552,10 +551,10 @@ program main
               !   call MatSetValue(Mat_M,indx_dyn(j),indx_dyn(j),val,           &
               !      Add_Values,ierr)
               !end do
-              ! [C] being sparse, bw=3, instead of 
+              ! [C] being sparse, bw=3, instead of
               !call MatSetValues(Mat_M,eldof,indx_dyn,eldof,indx_dyn,m,         &
               !   Add_Values,ierr)
-              ! , follow 
+              ! , follow
               do j1=1,eldof
                  do j2=1,eldof
                     val=m(j1,j2)
@@ -636,7 +635,7 @@ program main
      call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),Petsc_Copy_Values,  &
         To,ierr)
      call VecScatterCreate(Vec_U_dyn,From,Seq_U_dyn,To,Scatter_dyn,ierr)
-     allocate(uu_dyn(j),tot_uu_dyn(j)) 
+     allocate(uu_dyn(j),tot_uu_dyn(j))
      if (lm_str) then
         allocate(ss(j),sh(j),f2s(j),dip(j),nrm(j))
      end if
@@ -801,7 +800,7 @@ program main
   ! Generalized-alpha implicit Solver
   if (galf) then
      ! Local to global fault node map
-     if (nceqs-nceqs_ncf>0) then 
+     if (nceqs-nceqs_ncf>0) then
         call GetFltMap
         if (Xflt>1) call GetXfltMap ! Intersection
      end if
@@ -833,9 +832,9 @@ program main
         ! Recover stress
         call PrintMsg("Recovering stress ...")
         do i=1,nels
-           if (rve>0 .and. dmn==3 .and. nincl>0) then 
+           if (rve>0 .and. dmn==3 .and. nincl>0) then
               call RecoverStressRVE(i,stress)
-           else    
+           else
               call RecoverStress(i,stress)
            end if
         end do
@@ -934,11 +933,11 @@ program main
 
      ! Initialize slip indicator and slip history
      if (nceqs>0 .and. hyb>0) then
-        allocate(slip(nfnd),slip0(nfnd),slip_sum(nfnd)) 
+        allocate(slip(nfnd),slip0(nfnd),slip_sum(nfnd))
         slip(:)=0;slip_sum=0
         n_log_wave=0
         n_log_slip=0
-        if (rsf==1) then 
+        if (rsf==1) then
            allocate(mu_cap(nfnd),rsfv(nfnd))
            trunc=f0
         end if
@@ -956,7 +955,7 @@ program main
      call MatDestroy(Mat_K,ierr)
      call VecDestroy(Vec_Ul,ierr)
 
-     ! Prepare implicit dynamic run 
+     ! Prepare implicit dynamic run
      dyn=.true.
      write_dyn=.true.
      call VecDuplicate(Vec_U_dyn,Vec_F_dyn,ierr)
@@ -968,7 +967,7 @@ program main
      if (nceqs>0) then
         ! Scatter static LM to dynamic Vec_lambda_sta
         call VecGetSubVector(Vec_U,RIl,Vec_Ul,ierr)
-        call LM_s2d  
+        call LM_s2d
         call VecRestoreSubVector(Vec_U,RIl,Vec_Ul,ierr)
         call VecDuplicate(Vec_lambda_sta,Vec_lambda,ierr)
         ! GMinvGt is replaced by its inverse, assuming GMinvGt is diagonal
@@ -981,17 +980,17 @@ program main
         call MatDiagonalSet(Mat_GMinvGt,Vec_Wlm(1),Insert_Values,ierr)
         call VecZeroEntries(Vec_Wlm(1),ierr)
         ! Form 1/dt^2GMinvGt assuming it doesnt change with time
-        ! FIXME Scale with f1m, (1-alpha_m)/beta/dt**2, instead of 1/dt**2 
-        ! seems to replicate explicit solver, why? 
+        ! FIXME Scale with f1m, (1-alpha_m)/beta/dt**2, instead of 1/dt**2
+        ! seems to replicate explicit solver, why?
         !call MatScale(Mat_GMinvGt,f1/dt**2,ierr)
         call MatScale(Mat_GMinvGt,f1m,ierr)
         call VecDuplicateVecsF90(Vec_U_dyn,2,Vec_W,ierr)
-        ! Dynamic constraint I=0 
+        ! Dynamic constraint I=0
         call VecDuplicate(Vec_lambda,Vec_I_dyn,ierr)
         call VecZeroEntries(Vec_I_dyn,ierr)
         call VecDuplicate(Vec_lambda,Vec_lambda_tot,ierr)
         call VecZeroEntries(Vec_lambda_tot,ierr)
-        ! Record static slip and traction  
+        ! Record static slip and traction
         if (nfnd_loc>0) call Write_fault("sta")
      end if
 
@@ -1001,14 +1000,14 @@ program main
 #else
      call KSPSetOperators(Krylov,Mat_Ka,Mat_Ka,ierr)
 #endif
-     call SetupKSPSolver    
+     call SetupKSPSolver
      call PrintMsg("Alpha-solving ...")
      call VecGetOwnershipRange(Vec_U_dyn,j1,j2,ierr)
      if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
         " processors."
      ! Dummy static event log
      n_log=1; crp=.false.
-     if (rank==0) call WriteOutput_log 
+     if (rank==0) call WriteOutput_log
      ! Start time stepping
      steps=int(ceiling(t/dt)); t_hyb=f0
      do tstep=1,steps
@@ -1024,7 +1023,7 @@ program main
            tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
            if (mod(tstep,frq_wave)==0) then
               uu_dyn_obs=uu_dyn_obs/dt
-              call Write_obs("dyn") 
+              call Write_obs("dyn")
            end if
         end if
         if (mod(tstep,frq_wave)==0) n_log_wave=n_log_wave+1
@@ -1034,7 +1033,7 @@ program main
            n_log_slip=n_log_slip+1
         end if
         ! Output snapshots
-        if (vout==1 .and. mod(tstep,frq)==0) then 
+        if (vout==1 .and. mod(tstep,frq)==0) then
            uu_dyn=uu_dyn/dt
            call WriteOutput
         end if
@@ -1051,7 +1050,7 @@ program main
   ! Fault/hybrid solver
   if (fault) then
      ! Local to global fault node map
-     if (nceqs-nceqs_ncf>0) then 
+     if (nceqs-nceqs_ncf>0) then
         call GetFltMap
         if (Xflt>1) call GetXfltMap ! Intersection
      end if
@@ -1059,14 +1058,14 @@ program main
         call PrintMsg("Applying gravity ...")
         call ApplyGravity
      end if
-     ! Create cumulative static solution space Vec_Um 
+     ! Create cumulative static solution space Vec_Um
      call VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
      call VecZeroEntries(Vec_Um,ierr)
      call VecGetLocalSize(Vec_U,j,ierr)
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
      if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
         " processors."
-     ! Create pressure, force and traction IDs (RI RIu RIl) 
+     ! Create pressure, force and traction IDs (RI RIu RIl)
      if (poro) then
         j2=0; j3=0; j4=0; j5=0; j6=0
         do i=1,j
@@ -1161,7 +1160,7 @@ program main
         if (fvin>0) then
            call PrintMsg("Initializing FV pressure ...")
            call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
-           kfv=.true. ! [K] and F with FE domain pressure imposed by FV
+           ! Form [K] and F with FE domain pressure imposed by FV
            if (fvin<3) then
               call FVInit
               call FVReformKF(ef_eldof)
@@ -1196,7 +1195,7 @@ program main
         j=size(workl)
         call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values,       &
            RIl,ierr)
-     end if ! Is poro? 
+     end if ! Is poro?
 
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
@@ -1222,25 +1221,25 @@ program main
         ! Recover stress
         call PrintMsg("Recovering stress ...")
         do i=1,nels
-           if (rve>0 .and. dmn==3 .and. nincl>0) then  
+           if (rve>0 .and. dmn==3 .and. nincl>0) then
               call RecoverStressRVE(i,stress)
            else
               call RecoverStress(i,stress)
            end if
         end do
      end if
-     
+
      ! Have more then one static step
      if (t>f0 .and. dt>f0 .and. t>=dt) then
         if (poro) then
-           ! Initialize space for u, lambda related nodal flux 
+           ! Initialize space for u, lambda related nodal flux
            call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
            call VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
            call VecCopy(Vec_Up,Vec_I,ierr) ! Hold Up
            call VecDuplicate(Vec_Up,Vec_qu,ierr) ! qu->Htu
            call VecDuplicate(Vec_Up,Vec_ql,ierr)
            call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-           ! Sequential vectors for output 
+           ! Sequential vectors for output
            j=size(indxmap_u,1)
            if (nceqs>0) then
               allocate(fl(size(indxmap_u,1)))
@@ -1279,7 +1278,7 @@ program main
               ! Vector to communicate with dynamic LM
               call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               ! Extract lambda induced nodal force
-              ! TODO call LM_s2d, and have GetVec_fcoulomb in parallel 
+              ! TODO call LM_s2d, and have GetVec_fcoulomb in parallel
               if (vout==1) then
                  call VecZeroEntries(Vec_fl,ierr)
                  call VecZeroEntries(Vec_flc,ierr)
@@ -1290,7 +1289,7 @@ program main
                  call GetVec_fcoulomb
                  call GetVec_flc
               else
-                 ! Extract Coulomb force (needed by force-stress translation).  
+                 ! Extract Coulomb force (needed by force-stress translation).
                  call GetVec_fcoulomb
               end if
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
@@ -1320,7 +1319,7 @@ program main
            if (nobs_loc>0) call Write_obs("dyn")
            if (init==1) then
               call PrintMsg("Applying one step (24 hr) fluid source ...")
-              ! Zero initial pressure 
+              ! Zero initial pressure
               call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
               call VecZeroEntries(Vec_Up,ierr)
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
@@ -1341,21 +1340,21 @@ program main
                     call GetVec_flc
                     call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
                  end if
-                 ! Should be analyzed to see if any initial slip 
+                 ! Should be analyzed to see if any initial slip
                  call WriteOutput_init
               end if
-           end if 
+           end if
            if (fvin/=0) then
               if (vout==1) then
                  call WriteOutput_init
               end if
               ! Single phase [K] with pressure partially synced with FV
-              if (fvin==1) call FVReformKPerm(f0,ef_eldof) 
+              if (fvin==1) call FVReformKPerm(f0,ef_eldof)
               if (fvin==3) call FVReformKPermUsg(f0,ef_eldof)
            end if
         else ! Not poro
            call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-           if (nceqs>0) then 
+           if (nceqs>0) then
               call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
               call VecDuplicate(Vec_Uu,Vec_flc,ierr)
            end if
@@ -1432,17 +1431,17 @@ program main
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
-           if (nobs_loc>0) call Write_obs("sta") 
+           if (nobs_loc>0) call Write_obs("sta")
         end if ! Poro or not
 
-        ! Solution space is allocated differently for static and dynamic runs, 
+        ! Solution space is allocated differently for static and dynamic runs,
         ! so we keep mat_K and Mat_K_dyn separate instead of
         !call MatGet(Create)SubMatrix(Mat_K,RIu,RIu,Mat_Initial_Matrix,         &
         !Mat_K_dyn,ierr)
 
         ! Initialize slip indicator and slip history
         if (nceqs>0 .and. hyb>0) then
-           allocate(slip(nfnd),slip0(nfnd),slip_sum(nfnd)) 
+           allocate(slip(nfnd),slip0(nfnd),slip_sum(nfnd))
            slip(:)=0;slip_sum=0
            n_log_wave=0
            n_log_slip=0
@@ -1519,9 +1518,10 @@ program main
               end do
            end if
            call FormRHS
-           if (fail) then 
+           if (poro .and. tstep>1) call AddFluidGravity
+           if (fail) then
               call FaultSlip_sta
-              ! Backup QS slip 
+              ! Backup QS slip
               qs_flt_slip=qs_flt_slip+tot_flt_slip
               fail=.false.
               if (.not. crp) res_flt_slip=f0
@@ -1537,15 +1537,9 @@ program main
            call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
            t2=MPI_Wtime()
            if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
-           ! Reset dynamic (slip) solutions 
-           if (nceqs>0 .and. hyb>0) then
-              tot_uu_dyn=f0
-              if (nobs_loc>0) tot_uu_dyn_obs=f0
-              flt_slip=f0; tot_flt_slip=f0
-           end if
            n_log=n_log+1
            call GetVec_U; tot_uu=tot_uu+uu
-           if (nobs_loc>0) then 
+           if (nobs_loc>0) then
               call GetVec_obs
               tot_uu_obs=tot_uu_obs+uu_obs
               tot_st_obs=tot_st_obs+st_obs
@@ -1556,11 +1550,11 @@ program main
               ! Recover stress
               call PrintMsg(" Recovering stress ...")
               do i=1,nels
-                 if (visco) then   
+                 if (visco) then
                     call RecoverVStress(i,stress)
-                 else if (rve>0 .and. dmn==3 .and. nincl>0) then 
+                 else if (rve>0 .and. dmn==3 .and. nincl>0) then
                     call RecoverStressRVE(i,stress)
-                 else 
+                 else
                     call RecoverStress(i,stress)
                  end if
               end do
@@ -1571,7 +1565,7 @@ program main
            if (poro) then
               ! Reset tot_uu at step 1
               if (tstep==1 .and. fvin>0) then
-                 tot_uu=f0 
+                 tot_uu=f0
                  if (nobs_loc>0) tot_uu_obs=f0
               end if
               if (vout==1 .and. mod(tstep,frq)==0) then
@@ -1602,7 +1596,7 @@ program main
                  ! Write output
                  call WriteOutput_x
               end if
-              if (nobs_loc>0) call Write_obs("sta") 
+              if (nobs_loc>0) call Write_obs("sta")
            else
               if (vout==1 .and. mod(tstep,frq)==0) then
                  ! Extract lambda and induced nodal f
@@ -1619,28 +1613,28 @@ program main
                  ! Write output
                  call WriteOutput_x
               end if
-              if (nobs_loc>0) call Write_obs("sta") 
+              if (nobs_loc>0) call Write_obs("sta")
            end if
 
-           ! Determine if the fault shall fail by LM 
+           ! Determine if the fault shall fail by LM
            if (nceqs-nceqs_ncf>0 .and. hyb>0) then
               call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-              call LM_s2d  
+              call LM_s2d
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-              if (poro) then 
+              if (poro) then
                  call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
                  call Up_s2d
                  call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-              end if  
-              ! Record static slip and traction  
+              end if
+              ! Record static slip and traction
               if (mod(tstep,frq)==0 .and. nfnd_loc>0) call Write_fault("sta")
               ! Determine if the fault shall fail
               call GetSlip_sta
               rslip=real(sum(slip))/real(size(slip))
               if (rank==0) print'(F0.2,A,I0,A)',rslip*100.0,"% (",sum(slip),   &
                  ") fault nodes critical."
-              if (rslip>f0 .and. sum(slip)>=1) then ! Failure threshold 
-                 dyn=.true. 
+              if (rslip>f0 .and. sum(slip)>=1) then ! Failure threshold
+                 dyn=.true.
               end if
            end if
 
@@ -1667,23 +1661,27 @@ program main
               call VecReciprocal(Vec_Wlm(1),ierr)
               call MatDiagonalSet(Mat_GMinvGt,Vec_Wlm(1),Insert_Values,ierr)
               call VecZeroEntries(Vec_Wlm(1),ierr)
-              ! Dynamic constraint I=0 
+              ! Dynamic constraint I=0
               call VecDuplicate(Vec_lambda,Vec_I_dyn,ierr)
               call VecZeroEntries(Vec_I_dyn,ierr)
               ! Pass pseudo velocity to U_dyn
-              if (rsf==1 .and. tstep>1) call Rsfv2Dyn 
+              if (rsf==1 .and. tstep>1) call Rsfv2Dyn
               call VecDuplicate(Vec_lambda,Vec_lambda_tot,ierr)
               call VecZeroEntries(Vec_lambda_tot,ierr)
               ! Form 1/dt^2GMinvGt assuming it doesnt change with time
               call MatScale(Mat_GMinvGt,f1/dt_dyn**2,ierr)
               call PrintMsg("Hybrid Solving ...")
               steps_dyn=int(ceiling(t_dyn/dt_dyn)); t_hyb=t_abs
-              ih=0; t_sta=f0; fail=.true.;crp=.false.
+              ih=0; t_ext=f0; fail=.true.;crp=.false.
+              ! Reset dynamic (slip) solutions
+              tot_uu_dyn=f0
+              if (nobs_loc>0) tot_uu_dyn_obs=f0
+              flt_slip=f0; tot_flt_slip=f0
            end if
-           
+
            ! Explicit/implicit hybrid step for rupture propagation
            t1=MPI_Wtime()
-           do while (dyn .or. (t_sta>f0 .and. (t_sta<t_lim) .and. .not. crp))
+           do while (dyn .or. (t_ext>f0 .and. (t_ext<t_lim) .and. .not. crp))
               ! Explicit time step
               do tstep_dyn=0,steps_dyn
                  t_hyb=t_hyb+dt_dyn
@@ -1703,10 +1701,10 @@ program main
                  call MatMult(Mat_G,Vec_Up_dyn,Vec_Wlm(1),ierr)
                  call VecWAXPY(Vec_Wlm(2),-f1,Vec_I_dyn,Vec_Wlm(1),ierr)
                  call MatMult(Mat_GMinvGt,Vec_Wlm(2),Vec_lambda,ierr)
-                 if (rsf==1 .and. tstep>1 .and. tstep_dyn+ih==0) then 
-                     ! Skip friction law, and reset constraint 
+                 if (rsf==1 .and. tstep>1 .and. tstep_dyn+ih==0) then
+                     ! Skip friction law, and reset constraint
                      call VecZeroEntries(Vec_I_dyn,ierr)
-                 else 
+                 else
                     ! Cap the nodal LM not to exceed max friction
                     call CapLM_dyn
                  end if
@@ -1728,7 +1726,7 @@ program main
                        call GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn") 
+                       if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn")
                     end if
                     if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
                     dyn=.false.
@@ -1739,20 +1737,20 @@ program main
                        call GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn") 
+                       if (mod(n_log_dyn,frq_wave)==0) call Write_obs("dyn")
                     end if
                     if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
                  end if
                  ! Evaluated FD grid movement
                  if (ngp_loc>0 .and. mod(n_log_dyn,frq_wave)==0 .and.          &
-                    fdout==1) then  
+                    fdout==1) then
                     call GetVec_fd
                     call Write_fd("dyn")
                  end if
                  ! Extract and output temporal fault slip: flt_slip
                  call FaultSlip_dyn
                  tot_flt_slip=tot_flt_slip+flt_slip
-                 if (mod(n_log_dyn,frq_slip)==0) then 
+                 if (mod(n_log_dyn,frq_slip)==0) then
                     if (nfnd_loc>0) call Write_fault("dyn") ! H5 file
                     n_log_slip=n_log_slip+1
                  end if
@@ -1764,42 +1762,43 @@ program main
                  end if
                  write_dyn=.false.
                  n_log_dyn=n_log_dyn+1
-              end do ! Explicit loop 
-              ! Assess the fault status 
+              end do ! Explicit loop
+              ! Assess the fault status
               if (dyn) call GetSlip_dyn
               rslip=real(sum(slip))/real(size(slip))
               if ((.not. sum(slip)>0) .or. (.not. dyn)) then
                  dyn=.false. ! Failure threshold
-                 t_sta=t_sta+t_dyn
+                 t_ext=t_ext+t_dyn
               end if
               if (rank==0 .and. dyn) print'(F0.2,A)',rslip*100.0,              &
                  "% fault slipping."
               if (rank==0 .and. crp) print'(A)',"Aseismic"
               if (rank==0 .and. .not. (dyn .or. crp)) print'(A,F0.4,A,F0.4)',  &
-                 "Wave traveling ",t_sta,"/",t_lim
+                 "Wave traveling ",t_ext,"/",t_lim
               ! Turn off "dyn" for debug if the fault cannot stabilize
               if (dble(ih+1)*t_dyn>=t_lim .and. dyn) then
                  dyn=.false.
                  slip=0
-                 t_sta=t_sta+t_dyn
+                 t_ext=t_ext+t_dyn
               end if
               ! Hybrid iteration count
               ih=ih+1
            end do ! Hybrid run
            t2=MPI_Wtime()
-           if (rank==0) print'(F0.2,A)',t2-t1," seconds to end dynamic run."
            if (fail) then
-              if (rank==0 .and. nobs>0) then 
+              if (rank==0) print'(F0.2,A)',t2-t1," seconds to complete dynamic run."
+              if (rank==0 .and. nobs>0) then
                  call WriteOutput_log
                  call WriteOutput_log_wave
                  if (nceqs>0) call WriteOutput_log_slip
               end if
-              if (fdout==1 .and. ngp_loc>0) then 
+              if (fdout==1 .and. ngp_loc>0) then
                  call GetFDAct
                  call Write_fd("act")
               end if
               ! Latest fault stress (Vec_lambda_sta0)
               call GetVec_lambda_hyb
+              t_abs=t_hyb ! Cumulative time
               ! Cleanup dynamics
               call VecDestroy(Vec_Um_dyn,ierr)
               call VecDestroy(Vec_Up_dyn,ierr)
@@ -1827,10 +1826,10 @@ program main
            call GetVec_Stress_Seq
            call WriteOutput_x
         end if
-        if (nobs_loc>0) call Write_obs("sta") 
+        if (nobs_loc>0) call Write_obs("sta")
      end if ! Assert implicit time
      crp=.true.
-     if (rank==0) call WriteOutput_log 
+     if (rank==0) call WriteOutput_log
      ! Cleanup hybrid
      if (poro) then
         deallocate(uup,kc,indxp,Hs,work,fp,qu)
@@ -1852,7 +1851,7 @@ program main
            call VecDestroy(Vec_ql,ierr)
            call VecDestroy(Seq_ql,ierr)
         end if
-     end if 
+     end if
      if (lm_str) then
         deallocate(ss,sh)
         call VecDestroy(Seq_SS,ierr)
@@ -1861,7 +1860,7 @@ program main
         call VecDestroy(Vec_SH,ierr)
         call VecDestroy(Vec_Cst,ierr)
      end if
-     if (nceqs>0) then 
+     if (nceqs>0) then
         deallocate(fl,flc,workl,worku)
         call VecDestroy(Vec_fl,ierr)
         call VecDestroy(Vec_flc,ierr)
@@ -1886,7 +1885,7 @@ program main
      call VecDestroy(Seq_U_dyn,ierr)
      call ISDestroy(RIu,ierr)
      call ISDestroy(From_u,ierr)
-     call ISDestroy(To_u,ierr)   
+     call ISDestroy(To_u,ierr)
      call VecScatterDestroy(Scatter_u,ierr)
      call KSPDestroy(Krylov,ierr)
   end if ! Fault solver
@@ -1944,7 +1943,7 @@ program main
               if (tstep==0) then
                  call MatPtAP(Mat_Minv,Mat_Gt,Mat_Initial_Matrix,f1,           &
                     Mat_GMinvGt,ierr)
-                 ! GMinvGt is replaced by its inverse, assuming GMinvGt 
+                 ! GMinvGt is replaced by its inverse, assuming GMinvGt
                  ! is diagonal
                  call MatGetDiagonal(Mat_GMinvGt,Vec_Wlm(1),ierr)
                  call VecReciprocal(Vec_Wlm(1),ierr)
@@ -1958,11 +1957,11 @@ program main
                  if (tstep==0) then
                     call VecZeroEntries(Vec_I,ierr)
                     if (rank==0) call VecSetValue(Vec_I,igf-1,f1,Insert_Values,&
-                       ierr) 
+                       ierr)
                     call VecAssemblyBegin(Vec_I,ierr)
                     call VecAssemblyEnd(Vec_I,ierr)
                  elseif (tstep==5) then
-                    call VecZeroEntries(Vec_I,ierr)  
+                    call VecZeroEntries(Vec_I,ierr)
                  end if
               else
                 call VecZeroEntries(Vec_I,ierr)
@@ -2017,11 +2016,11 @@ program main
               if (nceqs>0) call VecZeroEntries(Vec_I,ierr)
            end if
         end do ! Explicit run
-        if (.not. gf) exit 
+        if (.not. gf) exit
         if (rank==0 .and. frc(j)==1 .and. mod(igf,dmn)/=0)                     &
            call WriteOutput_log_wave
         ! Reset solutions
-        call VecZeroEntries(Vec_U,ierr) 
+        call VecZeroEntries(Vec_U,ierr)
         call VecZeroEntries(Vec_Um,ierr)
         call VecZeroEntries(Vec_Up,ierr)
         if (nobs_loc>0) tot_uu_dyn_obs=f0
@@ -2054,7 +2053,7 @@ program main
   if (visco .or. ((fault .or. galf) .and. lm_str)) deallocate(stress)
   deallocate(coords,nodes,bc,mat,id,k,m,f,indx,ipoint,weight,enodes,ecoords,   &
      vvec,indxmap,tot_uu,uu,cval,fnode,fval,telsd,tval,nl2g)
-  ! Delete cnstr.tmp 
+  ! Delete cnstr.tmp
   if (rank==0 .and. nceqs>0) then
     open(15, file=trim(output_file(:index(output_file,"/",BACK=.TRUE.)))//     &
        "cnstrns.tmp",status='old')
@@ -2073,7 +2072,7 @@ contains
     fault=.false.
     if (stype=="fault" .or. stype=="fault-p" .or. stype=="fault-pv" .or.       &
        stype=="fault-v" .or. stype=="fault-rve") fault=.true.
-    explicit=.false.; gf=.false. 
+    explicit=.false.; gf=.false.
     if (stype=="explicit" .or. stype=="explicit-gf" .or. stype=="explicit-rve")&
        then
        explicit=.true.
@@ -2082,17 +2081,17 @@ contains
     rve=0
     if (stype=="implicit-rve" .or. stype=="explicit-rve" .or.                  &
        stype=="fault-rve" .or. stype=="alpha-rve") rve=1
-    galf=.false.   
+    galf=.false.
     if (stype=="alpha" .or. stype=="alpha-rve") galf=.true.
     if (fault .or. gf .or. galf) then
-       if (rve>0) then 
+       if (rve>0) then
           read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf,&
              nincl
        else
           read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf
        end if
     else
-       if (rve>0) then 
+       if (rve>0) then
           read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs,nincl
        else
           read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs
@@ -2105,12 +2104,12 @@ contains
     if (stype=="fault-p" .or. stype=="fault-pv") poro=.true.
     if (stype=="fault-v" .or. stype=="fault-pv") visco=.true.
     ! Dynamic run time before jumping back to static model
-    if (fault .or. galf) then 
+    if (fault .or. galf) then
        lm_str=.false. ! Calculate LM to stress ratio: lm*r_f2s = str
        read(10,*)t_dyn,dt_dyn,frq_dyn,t_lim,dsp_hyb,Xflt,bod_frc,hyb,rsf,init
        if (nceqs-nceqs_ncf>0) lm_str=.true.
        if (galf) dt_dyn=dt
-       ! One time (dt = 24hr) fluid source for initial pressure condition 
+       ! One time (dt = 24hr) fluid source for initial pressure condition
        if (init==1 .and. poro) then
           fdt=dt/dble(3600*24)
           dt=dble(3600*24)
@@ -2118,7 +2117,7 @@ contains
           init=0 ! Only for poro
        end if
     end if
-    if (hyb==1 .and. rsf==0) read(10,*)frq_wave,frq_slip 
+    if (hyb==1 .and. rsf==0) read(10,*)frq_wave,frq_slip
     if (hyb==1 .and. rsf==1) read(10,*)frq_wave,frq_slip,v_bg
     if (dt==f0) dt=f1
     if (explicit .or. fault .or. galf) then
@@ -2127,7 +2126,7 @@ contains
        else
           read(10,*)alpha,beta
       end if
-    end if   
+    end if
   end subroutine ReadParameters
 
   ! Setup implicit solver

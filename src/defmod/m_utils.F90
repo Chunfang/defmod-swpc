@@ -1,4 +1,4 @@
-module utils 
+module utils
   implicit none
   real(8),parameter :: f0=0.0d0,f1=1.0d0,f2=2.0d0,f3=3.0d0,f4=4.0d0,f6=6.0d0,  &
      f8=8.0d0,km2m=1000.0d0,gravity=9.806650d0,                                &
@@ -68,7 +68,7 @@ contains
   !
   !     K(m) = B(m) + D(m),  E(m) = B(m) + (1-m) D(m)
   !
-  !  The file also includes the output file of "xelbd" 
+  !  The file also includes the output file of "xelbd"
   !
   !===============================================================================
   !	test driver for "elbd"
@@ -113,7 +113,7 @@ contains
   !
   !     Reference: T. Fukushima, (2011) J. Comp. Appl. Math., 235, 4140-4148
   !        "Precise and Fast Computation of General Incomplete Elliptic Integral
-  !         of Second Kind by Half and Double Argument Transformations"		
+  !         of Second Kind by Half and Double Argument Transformations"
   !
   !     Author: T. Fukushima Toshio.Fukushima@nao.ac.jp
   !
@@ -244,7 +244,7 @@ contains
     elseif(mc.lt.0.1d0) then
         nome=mc*(Q1+mc*(Q2+mc*(Q3+mc*(Q4+mc*(Q5+mc*(Q6 &
             +mc*(Q7+mc*(Q8+mc*(Q9+mc*(Q10+mc*(Q11+mc*(Q12 &
-            +mc*(Q13+mc*(Q14+mc*(Q15+mc*Q16))))))))))))))) 
+            +mc*(Q13+mc*(Q14+mc*(Q15+mc*Q16)))))))))))))))
         if(mc.lt.0.01d0) then
             dkkc=mc*(K1+mc*(K2+mc*(K3+mc*(K4+mc*(K5+mc*(K6+mc*K7))))))
             dddc=mc*(D1+mc*(D2+mc*(D3+mc*(D4+mc*(D5+mc*(D6+mc*D7))))))
@@ -834,7 +834,7 @@ contains
     !
     !     Reference: T. Fukushima, (2011) J. Comp. Appl. Math., 235, 4140-4148
     !        "Precise and Fast Computation of General Incomplete Elliptic Integral
-    !         of Second Kind by Half and Double Argument Transformations"		
+    !         of Second Kind by Half and Double Argument Transformations"
     !
     !     Author: T. Fukushima Toshio.Fukushima@nao.ac.jp
     !
@@ -956,7 +956,7 @@ contains
         elb=1.0
     	eld=0.386294361-0.5*log(mc)
     elseif(mc.lt.0.1) then
-        nome=mc*(Q1+mc*(Q2+mc*(Q3+mc*(Q4+mc*(Q5+mc*(Q6+mc*(Q7+mc*Q8))))))) 
+        nome=mc*(Q1+mc*(Q2+mc*(Q3+mc*(Q4+mc*(Q5+mc*(Q6+mc*(Q7+mc*Q8)))))))
         if(mc.lt.0.01) then
             dkkc=mc*(K1+mc*(K2+mc*(K3+mc*K4)))
             dddc=mc*(D1+mc*(D2+mc*(D3+mc*D4)))
@@ -1239,7 +1239,7 @@ contains
   !*                                                      *
   !********************************************************
 !  PROGRAM DEMO_ROOT_4
-!  
+!
 !    real*8 A(1:4,0:4), r(1:4)
 !    integer i,n
 !    real*8 ii,im
@@ -1261,7 +1261,7 @@ contains
 !    if (n > 4) n = 4
 !    print *,' '
 !    do i=n, 0, -1
-!      write(*,50,advance='no')  i 
+!      write(*,50,advance='no')  i
 !      read *, A(n,i)
 !    end do
 !    print *,' '
@@ -1273,17 +1273,17 @@ contains
 !      if (im .eq. 0) then
 !        write(*,60) r(1)
 !        write(*,70) r(2)
-!      else 
+!      else
 !        write(*,80) r(1), im
 !        write(*,90) r(2), im
 !      end if
 !    else if (n.eq.3) then
 !      !case n=3
 !      write(*,100) r(3)
-!      if (im .eq. 0) then 
+!      if (im .eq. 0) then
 !        write(*,110) r(1)
 !        write(*,120) r(2)
-!      else 
+!      else
 !        write(*,130) r(1), im
 !        write(*,140) r(2), im
 !      end if
@@ -1375,22 +1375,22 @@ contains
       if (am < tt) am = tt
     end do
     !Define interval where a real root exists
-    ! according to sign of A(3,0)  
+    ! according to sign of A(3,0)
     if (A(3,0) > 0) then
       aa = -am - 1.d0
       b = 0.d0
       goto 100
     end if
     aa = 0; b = am + 1.d0
-  
+
     ! Searching for( xc = real root in interval (a,b)
     !   (by Bisection method)
-    
+
     ! Define segment (xa,xb) including the root
   100 xa = aa; xb = b
     call func(aa,A,y1)
     call func(b,A,y2)
-  
+
     ! Desired précision
     er = 0.000001d0
     if (y1.eq.0) then
@@ -1400,7 +1400,7 @@ contains
       xc = b; goto 500
     end if
     ! xc : middle of segment
-  200 xc = (xa + xb) / 2.d0; 
+  200 xc = (xa + xb) / 2.d0;
     call func(xc,A,te)
     if (te.eq.0.d0) goto 500
     if ((xb - xa) < er) goto 500
@@ -1483,7 +1483,7 @@ contains
   end subroutine Root_4
 
   subroutine buildtensors(vec,t_21,t_22)
-    implicit none  
+    implicit none
     integer :: i,n
     real(8) :: vec(:),t_21(:,:),t_22(:,:)
     n=size(vec)
@@ -1491,10 +1491,10 @@ contains
        t_21(:,i)=vec
        t_22(i,:)=vec
     end do
-  end subroutine buildtensors  
+  end subroutine buildtensors
 
   subroutine kdelta(i,j,val)
-    implicit none 
+    implicit none
     integer :: i,j
     real(8) :: val
     if (i==j) then
@@ -1505,19 +1505,19 @@ contains
   end subroutine kdelta
 
   subroutine Vec2Mat(vec,tens)
-    implicit none 
+    implicit none
     integer :: i
     real(8) :: vec(6),tens(3,3)
     do i=1,3
-       tens(i,i)=vec(i) 
-    end do   
+       tens(i,i)=vec(i)
+    end do
     tens(1,2)=vec(4); tens(2,1)=vec(4)
     tens(2,3)=vec(5); tens(3,2)=vec(5)
     tens(1,3)=vec(6); tens(3,1)=vec(6)
   end subroutine Vec2Mat
 
   subroutine CMat(Em,vm,matstiff)
-    implicit none  
+    implicit none
     real(8) :: Em,Vm,lamem,Gm,matstiff(6,6)
     Gm=Em/(2+2*vm);
     lamem=2*Gm*vm/(1-2*vm)
@@ -1528,22 +1528,22 @@ contains
     matstiff(5,:)=(/f0,f0,f0,f0,2*Gm,f0/)
     matstiff(6,:)=(/f0,f0,f0,f0,f0,2*Gm/)
   end subroutine CMat
- 
+
   subroutine SolveSix(C,vec,sol)
-     ! Wrapper for lapack DGESV 6x6 linear solver 
+     ! Wrapper for lapack DGESV 6x6 linear solver
      integer :: info,ipiv(6)
      real(8) :: C(6,6),A(6,6),sol(6,1),vec(6,1)
      ! Preserve inputs
      A=C; sol=vec
-     call dgesv(6,1,A,6,ipiv,sol,6,info) 
+     call dgesv(6,1,A,6,ipiv,sol,6,info)
      if (.not. info==0) print*,"matrix inversion failed!"
   end subroutine SolveSix
 
   subroutine Ang2Mat(ang,matrot,order)
-    ! Rotation matrix for given angles around x,y,z axises, 
-    ! order =  1 cos matrix of original coordinate in rotated coordinate 
+    ! Rotation matrix for given angles around x,y,z axises,
+    ! order =  1 cos matrix of original coordinate in rotated coordinate
     ! order = -1 cos matrix of rotated coordinate in original coordinate
-    implicit none  
+    implicit none
     real(8) :: ang(3),matrot(3,3),Rx(3,3),Ry(3,3),Rz(3,3),order
     ang=order*ang
     Rx=reshape((/f1,f0,f0,f0,cos(ang(1)),-sin(ang(1)),f0,sin(ang(1)),          &
@@ -2053,4 +2053,4 @@ contains
     return
   end subroutine dccon2
 
-end module utils 
+end module utils

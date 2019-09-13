@@ -1,7 +1,7 @@
 ! Copyright (C) 2010-2015 ../AUTHORS. All rights reserved.
 ! This file is part of Defmod. See ../COPYING for license information.
 
-module fefd 
+module fefd
 
 #include <petscversion.h>
 
@@ -16,14 +16,14 @@ module fefd
 ! FD variables needed by FE
 ! total number of grid points in each direction of the grid
   integer :: nx,ny,nz
-  integer :: nprc_x,nprc_y ! horizontal division of FD domain 
+  integer :: nprc_x,nprc_y ! horizontal division of FD domain
   integer :: nprc_fd
   integer :: nxp,nyp ! number of layers in one dim
 ! size of a grid cell
   real(8) :: dx,dy,dz
 ! FD domain origin in FE coordination (SCEC205)
   real(8) :: xref,yref,zref
- 
+
 contains
 
   ! Initiate FD model
@@ -51,11 +51,11 @@ contains
        xref=km2m*xref; yref=km2m*yref; zref=km2m*zref
     end select
     nxp=nx/nprc_x; nyp=ny/nprc_y
-    nprc_fd=nprc_x*nprc_y 
+    nprc_fd=nprc_x*nprc_y
     close(149)
   end subroutine FDInit
 
-  ! FD domain grid blocks containing fault nodes (idgp, xgp) 
+  ! FD domain grid blocks containing fault nodes (idgp, xgp)
   subroutine GetFDFnd
     implicit none
     integer :: j2,j3,xid,yid,zid,rowfd(2**dmn),idgp_full(nfnd*(2**dmn),dmn),   &
@@ -163,15 +163,15 @@ contains
     fdact=0; j2=1
     do j=1,ngp
        if (idgp(j,1)<=xid .and. idgp(j,1)>=xid0 .and. idgp(j,2)<=yid .and.     &
-          idgp(j,2)>=yid0 .and. idgp(j,3)<=zid .and. idgp(j,3)>=zid0) then 
-          do j3=1,nact 
+          idgp(j,2)>=yid0 .and. idgp(j,3)<=zid .and. idgp(j,3)>=zid0) then
+          do j3=1,nact
              if (all((idgp(j,:)-idact(j3,:))==0)) then
                 fdact(j)=1
                 exit
              end if
           end do
        end if
-    end do 
+    end do
     fdact_loc=fdact(gpl2g)
     k=k+1
   end subroutine GetFDAct
@@ -183,9 +183,9 @@ contains
     ids=idset(nrow-2**dmn+1:,:)
     do i=1,2**dmn
        do j=nrow-2**dmn,1,-1
-          if (all((idset(j,:)-ids(i,:))==0)) then 
+          if (all((idset(j,:)-ids(i,:))==0)) then
              uniq(i)=0
-             exit 
+             exit
           end if
        end do
     end do
@@ -208,8 +208,8 @@ contains
     end do
   end subroutine GetVec_fd
 
-  ! FE to FD MPI rank match (depending on FD partitioning) 
-  subroutine NndFE2FD 
+  ! FE to FD MPI rank match (depending on FD partitioning)
+  subroutine NndFE2FD
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
 #include "petsc.h"
@@ -221,7 +221,7 @@ contains
     do rankfd=0,nprc_fd-1
        hit=0
        do igp=1,ngp_loc
-          i=idgp_loc(igp,1) 
+          i=idgp_loc(igp,1)
           j=idgp_loc(igp,2)
           rankxy=((j-1)/nyp)*nprc_x+(i-1)/nxp
           if (rankxy==rankfd) hit=hit+1
@@ -230,19 +230,19 @@ contains
     end do
     call MPI_Gather(nnd_loc,nprc_fd,MPI_Integer,buf,nprc_fd,MPI_Integer,       &
        nprcs-1,MPI_Comm_World,ierr)
-    if (rank==nprcs-1) then 
+    if (rank==nprcs-1) then
        nnd_fe2fd=transpose(reshape(buf,(/nprc_fd,nprcs/)))
        name0=output_file(:index(output_file,"/",BACK=.TRUE.))
        name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
        write(name,'(A,A,A)')trim(name0),trim(name1),"_fe2fd.txt"
        open(150,file=adjustl(name),status='replace')
-       write(150,*)nprcs,nprc_fd 
+       write(150,*)nprcs,nprc_fd
        do k=1,nprcs
           write(150,*)nnd_fe2fd(k,:)
        end do
        close(150)
     end if
-  end subroutine NndFE2FD 
+  end subroutine NndFE2FD
 
   ! Mat type from FE to FD (matFD(idx0,idx1,idy0,idy1,idz0,idz1,idmat))
   subroutine MatFE2FD
@@ -261,7 +261,7 @@ contains
         ymin=minval(coords(:,2)); ymax=maxval(coords(:,2))
         ixmin=int(( xmin-xref)/dx)+1; ixmax=int(( xmax-xref)/dx)+1
         iymin=int((-ymin+yref)/dy)+1; iymax=int((-ymax+yref)/dy)+1
-        do el=1,nels 
+        do el=1,nels
            enodes=nodes(el,:)
            ecoords=coords(enodes,:)
            xmin=minval(ecoords(:,1)); xmax=maxval(ecoords(:,1))
@@ -283,17 +283,17 @@ contains
         do rankx=0,nprc_x-1
            do ranky=0,nprc_y-1
               rankxy=ranky*nprc_x+rankx
-              if (rankx>=rankx0 .and. & 
+              if (rankx>=rankx0 .and. &
                   rankx<=rankx1 .and. &
                   ranky>=ranky0 .and. &
                   ranky<=ranky1) hasFD(rankxy+1)=1
            end do
         end do
         call MPI_Gather(hasFD,nprc_fd,MPI_Integer,buf,nprc_fd,MPI_Integer,     &
-           nprcs-1,MPI_Comm_World,ierr) 
+           nprcs-1,MPI_Comm_World,ierr)
         name0=output_file(:index(output_file,"/",BACK=.TRUE.))
         name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-        if (rank==nprcs-1) then 
+        if (rank==nprcs-1) then
            vfe2fd=transpose(reshape(buf,(/nprc_fd,nprcs/)))
            write(name,'(A,A,A)')trim(name0),trim(name1),"_mfe2fd.txt"
            open(151,file=adjustl(name),status='replace')
@@ -306,7 +306,7 @@ contains
            end do
            close(151)
         end if
-        do el=1,nels 
+        do el=1,nels
            enodes=nodes(el,:)
            ecoords=coords(enodes,:)
            xmin=minval(ecoords(:,1)); xmax=maxval(ecoords(:,1))
@@ -320,4 +320,4 @@ contains
      end select
   end subroutine MatFE2FD
 
-end module fefd 
+end module fefd

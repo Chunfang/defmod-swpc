@@ -1,7 +1,7 @@
 ! Copyright (C) 2010-2015 ../AUTHORS. All rights reserved.
 ! This file is part of Defmod. See ../COPYING for license information.
 
-module galpha 
+module galpha
 
 #include <petscversion.h>
 
@@ -15,7 +15,7 @@ module galpha
   implicit none
 #endif
   ! Generalized alpha parameters
-  real(8) :: f1m,f2m,f3m,f1d,f2d,f3d,alpha_m,alpha_f,bt,gm 
+  real(8) :: f1m,f2m,f3m,f1d,f2d,f3d,alpha_m,alpha_f,bt,gm
   Mat :: Mat_Ka,Mat_D
   Vec :: Vec_V,Vec_A,Vec_Fa
 
@@ -44,22 +44,22 @@ contains
     call VecDuplicate(Vec_U_dyn,Vec_A,ierr)
     call VecZeroEntries(Vec_V,ierr)
     call VecZeroEntries(Vec_A,ierr)
-    call VecDuplicate(Vec_F_dyn,Vec_Fa,ierr) 
+    call VecDuplicate(Vec_F_dyn,Vec_Fa,ierr)
 
     ! [K]-alpha
     call MatScale(Mat_M,f1m+alpha*f1d,ierr)
     call MatDuplicate(Mat_K_dyn,Mat_Copy_Values,Mat_tmp,ierr)
     call MatAYPX(Mat_tmp,f1-alpha_f+beta*f1d,Mat_M,Different_Nonzero_Pattern   &
-       ,ierr) 
+       ,ierr)
     call MatAXPY(Mat_tmp,f1d,Mat_D,Different_Nonzero_Pattern,ierr)
     call MatDuplicate(Mat_tmp,Mat_Copy_Values,Mat_Ka,ierr)
 
     ! Restore
     call MatScale(Mat_M,f1/(f1m+alpha*f1d),ierr)
-    call MatDestroy(Mat_tmp,ierr) 
+    call MatDestroy(Mat_tmp,ierr)
   end subroutine AlphaInit
 
-  ! RHS of implicit dynamics 
+  ! RHS of implicit dynamics
   subroutine AlphaRHS
     implicit none
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
@@ -70,7 +70,7 @@ contains
     real(8) :: fct(3)
     call MatDuplicate(Mat_K_dyn,Mat_Copy_Values,Mat_tmp,ierr)
     call VecDuplicateVecsF90(Vec_U_dyn,3,Vec_tmp,ierr)
-    
+
     ! New force term (dyn=true)
     call VecCopy(Vec_F_dyn,Vec_Fm_dyn,ierr)
     call VecZeroEntries(Vec_F_dyn,ierr)
@@ -97,7 +97,7 @@ contains
     call MatMult(Mat_tmp,Vec_A,Vec_tmp(2),ierr)
     call VecWAXPY(Vec_Fa,f1,Vec_tmp(1),Vec_tmp(2),ierr)
 
-    ! Force terms at time n+1-alpha_f 
+    ! Force terms at time n+1-alpha_f
     call VecCopy(Vec_Fm_dyn,Vec_tmp(1),ierr)
     call VecCopy(vec_F_dyn,Vec_tmp(2),ierr)
     fct(:2)=(/alpha_f,f1-alpha_f/)
@@ -109,8 +109,8 @@ contains
     call MatMult(Mat_D,Vec_A,    Vec_tmp(3),ierr)
     fct=(/f1d,f2d,f3d/)
     call VecMAXPY(Vec_Fa,3,fct,Vec_tmp,ierr)
-    
-    ! Restore 
+
+    ! Restore
     call MatScale(Mat_M,f1/(f3m+alpha*f3d),ierr)
     call MatDestroy(Mat_tmp,ierr)
     call VecDestroyVecsF90(3,Vec_tmp,ierr)
@@ -146,10 +146,10 @@ contains
     call VecDuplicateVecsF90(Vec_U_dyn,3,Vec_tmp,ierr)
     call VecWAXPY(Vec_tmp(1),-f1,Vec_Um_dyn,Vec_U_dyn,ierr)
     call VecCopy(Vec_V,Vec_tmp(2),ierr)
-    call VecCopy(Vec_A,Vec_tmp(3),ierr) 
+    call VecCopy(Vec_A,Vec_tmp(3),ierr)
     call VecScale(Vec_tmp(3),dt*(f1-gm/f2/bt),ierr)
     fct=(/gm/bt/dt,f1-gm/bt/)
-    call VecMAXPY(Vec_tmp(3),2,fct,Vec_tmp(:2),ierr) 
+    call VecMAXPY(Vec_tmp(3),2,fct,Vec_tmp(:2),ierr)
 
     ! Acceleration update
     call VecScale(Vec_A,f1-f1/f2/bt,ierr)
@@ -180,6 +180,6 @@ contains
     ! replicate explicit solver, why?
     !call VecAXPY(Vec_U_dyn,-dt**2,Vec_W(2),ierr)
     call VecAXPY(Vec_U_dyn,-f1/f1m,Vec_W(2),ierr)
-  end subroutine AlphaCnstr 
+  end subroutine AlphaCnstr
 
 end module galpha
