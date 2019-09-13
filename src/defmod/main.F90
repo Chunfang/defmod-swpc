@@ -2002,20 +2002,17 @@ program main
               end if
               if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
               n_log_dyn=n_log_dyn+1
-              ! Write output
-              call GetVec_U; tot_uu=tot_uu+uu
-              if (mod(tstep,frq)==0) call WriteOutput
            else
               call VecZeroEntries(Vec_F,ierr)
               call FormRHS
               call VecAssemblyBegin(Vec_F,ierr)
               call VecAssemblyEnd(Vec_F,ierr)
-              ! Write output
-              call GetVec_U; tot_uu=tot_uu+uu
-              if (mod(tstep,frq)==0) call WriteOutput
               if (nceqs>0) call VecZeroEntries(Vec_I,ierr)
            end if
-        end do ! Explicit run
+           ! Write output
+           call GetVec_U; tot_uu=tot_uu+uu
+           if (vout==1 .and. mod(tstep,frq)==0) call WriteOutput
+       end do ! Explicit run
         if (.not. gf) exit
         if (rank==0 .and. frc(j)==1 .and. mod(igf,dmn)/=0)                     &
            call WriteOutput_log_wave
