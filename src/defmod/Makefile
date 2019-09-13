@@ -15,7 +15,7 @@ else
 	ifeq ($(CC),icc)
 		FFLAGS += -ipo -diag-disable ipo -static_intel 
 	else
-		FFLAGS += -Wno-maybe-uninitialized -Wno-tabs
+		FFLAGS += -Wno-maybe-uninitialized -Wno-tabs -Wno-unused-function
 	endif
 endif
 
