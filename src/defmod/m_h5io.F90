@@ -331,7 +331,7 @@ contains
 #endif
     character(3) :: strng
     integer :: j,j1,j2,j3,rw_loc(dmn)
-    real(8) :: dat_trac(:,:,:),flt_qs(dmn),flt_p
+    real(8) :: dat_trac(:,:,:),flt_qs(dmn),flt_p,flt_dyn(dmn)
     real(8),target :: flt_ndf(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),         &
        lm_f2s(n_lmnd),flt_ndf_dyn(n_lmnd*dmn)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -371,7 +371,9 @@ contains
        else if (strng=="sta") then
           dat_trac(1,:,j1)=flt_qs
        else ! Dynamic traction
-          dat_trac(1,:dmn,j1)=flt_qs+flt_ndf_dyn(rw_loc)*lm_f2s(j)
+          flt_dyn=flt_ndf_dyn(rw_loc)*lm_f2s(j)
+          call Cart2Flt(vecf(j3,:),flt_dyn,1)
+          dat_trac(1,:dmn,j1)=flt_qs+flt_dyn
        end if
     end do
   end subroutine GetTracDat

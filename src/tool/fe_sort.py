@@ -1,11 +1,11 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 import numpy as np
 import os,sys
 from itertools import islice
 import glob as glb
 import warnings
 warnings.filterwarnings("ignore")
-import h5py 
+import h5py
 from functools import reduce
 
 def save_dict_to_hdf5(dic, filename):
@@ -46,18 +46,18 @@ def recursively_load_dict_contents_from_group(h5file, path):
             ans[key] = recursively_load_dict_contents_from_group(h5file, path + key + '/')
     return ans
 
-# Model poroelastics, dimension and rate-state-friction 
+# Model poroelastics, dimension and rate-state-friction
 name_sol = sys.argv[1]
-if 'slip' in sys.argv: 
-    slip=True 
+if 'slip' in sys.argv:
+    slip=True
 else:
     slip=False
 if 'dyn' in sys.argv:
     dyn=True
 else:
     dyn=False
-if 'clean' in sys.argv: 
-    clean=True 
+if 'clean' in sys.argv:
+    clean=True
 else:
     clean=False
 if 'rsf' in sys.argv:
@@ -68,7 +68,7 @@ if 'poro' in sys.argv:
     p=1
 else:
     p=0
-if 'alpha' in sys.argv: 
+if 'alpha' in sys.argv:
     alpha=1
 else:
     alpha=0
@@ -86,7 +86,7 @@ dt = np.loadtxt(log_file, delimiter=" ", usecols=[0], unpack=False, dtype=np.flo
 dt_dyn = np.loadtxt(log_dyn_file, dtype=np.float)[0]
 files_obs    = sorted(glb.glob(name_sol+"_ofe_*.h5"))
 
-print 'Merge observation grid/data...'
+print ('Merge observation grid/data...')
 # Read from ofe.h5 files
 idx=[];nobs=0
 for file_obs in files_obs:
@@ -116,7 +116,7 @@ if alpha:
     dt_alpha=np.loadtxt(log_dyn_file_alpha, dtype=np.float)[0]
     dat_log_dyn_alpha = np.loadtxt(log_dyn_file_alpha, delimiter=" ",skiprows=1, unpack=False, dtype=np.uint32)
 
-    # Read alpha h5 files        
+    # Read alpha h5 files
     files_obs_alpha=sorted(glb.glob(name_sol+"-alpha_dyn_ofe_*.h5"))
     idx=[];
     for file_obs_alpha in files_obs_alpha:
@@ -125,26 +125,26 @@ if alpha:
         idx.append(ids)
     ndyn=h5['uu_dyn'].shape[-1]
     dat_seis_alpha=np.empty(shape=[nobs,3,ndyn],dtype=np.float)
-    for file_obs_alpha,i in zip(files_obs_alpha,range(len(files_obs_alpha))): 
+    for file_obs_alpha,i in zip(files_obs_alpha,range(len(files_obs_alpha))):
         h5 = h5py.File(file_obs_alpha, 'r')
         dat_seis_alpha[idx[i]-1,:,:]=h5['uu_dyn'][:,:,:]
 
 if slip:
-    # File sets 
+    # File sets
     log_slip_file = name_sol+"_slip.log"
-    files_slip = sorted(glb.glob(name_sol+"_flt_*.h5")) 
+    files_slip = sorted(glb.glob(name_sol+"_flt_*.h5"))
     dt_slip = np.loadtxt(log_slip_file, dtype=np.float)[0]
     dat_log_slip = np.loadtxt(log_slip_file, dtype=np.uint32)[1:]
     h5 = h5py.File(files_slip[0], 'r')
     nframe_qs = np.shape(h5['slip_sta'])[-1]
-    print 'Merge seismic fault slip grid/data...'
+    print ('Merge seismic fault slip grid/data...')
     nframe=dat_log_slip[-1]
     nfnd_all=0
     for f in files_slip:
         h5 = h5py.File(f, 'r')
         nfnd_all+=np.shape(h5['slip_sta'])[0]
     fcoord=np.empty(shape=[nfnd_all,dmn*3],dtype=np.float)
-    if dyn: 
+    if dyn:
         dat_slip_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
         dat_trac_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
     h5 = h5py.File(files_slip[0], 'r')
@@ -155,14 +155,14 @@ if slip:
     for f in files_slip:
         h5 = h5py.File(f, 'r')
         j1=j0+len(h5['fault_x'])
-        fcoord[j0:j1,:]=h5['fault_x']    
+        fcoord[j0:j1,:]=h5['fault_x']
         dat_slip_sta[j0:j1,:,:]=h5['slip_sta']
         dat_trac_sta[j0:j1,:,:]=h5['trac_sta']
-        if (dyn): 
+        if (dyn):
             dat_slip_tmp[j0:j1,:,:]=h5['slip_dyn']
             dat_trac_tmp[j0:j1,:,:]=h5['trac_dyn']
         j0=j1
-        print 'fault patch ' + str(j0) +"/"+str(nfnd_all)+ " merged"
+        print ('fault patch ' + str(j0) +"/"+str(nfnd_all)+ " merged")
     nfnd=len(fcoord)
 
     # Equivalent g-alpha solver
@@ -187,8 +187,8 @@ if slip:
             pseudo=True
         except:
             pseudo=False
-        if pseudo: 
-            print 'Merge pseudo time fault grid/data...' 
+        if pseudo:
+            print ('Merge pseudo time fault grid/data...')
             dat_log_rsf=np.loadtxt(log_rsf_file,dtype=np.uint32)[1:]
             files_rsf=[file_slip.replace('slip','rsf') for file_slip in files_slip]
             fcoord=np.empty(shape=[0,dmn+1],dtype=np.float)
@@ -209,7 +209,7 @@ if slip:
                     dat_tmp=np.vstack((dat_tmp,np.loadtxt(islice(f,n_lmnd[j]),unpack=False,dtype=np.float)))
                 dat_rsf_tmp=np.vstack((dat_rsf_tmp,dat_tmp[fsort,:]))
                 if np.remainder(i+1,24)*np.remainder(i+1,nframe)==0:
-                    print "frame " + str(i+1) +"/"+str(nframe)+ " merged"
+                    print ("frame " + str(i+1) +"/"+str(nframe)+ " merged")
 
 # Sort fault slip by frame
 if slip and rsf==1 and pseudo: # RSF pseudo time
@@ -217,11 +217,11 @@ if slip and rsf==1 and pseudo: # RSF pseudo time
     for i in range(len(dat_rsf_tmp)/nfnd):
         dat_rsf[:,:,i]=dat_rsf_tmp[i*nfnd:(i+1)*nfnd,:]
 
-# Sort seismic/slip data by event 
+# Sort seismic/slip data by event
 dat_seis_sort={}
 if alpha: dat_seis_alpha_sort={}
-if slip: 
-    dat_slip_sort = {} 
+if slip:
+    dat_slip_sort = {}
     dat_trac_sort = {}
     if alpha:
         dat_slip_alpha_sort={}
@@ -259,7 +259,7 @@ for i in range(len(dat_log_dyn)):
             dat_slip_alpha_sort['step '+str(dat_log[i,0])] = dat_slip_alpha_tmp[:,:,start:end]
 
 # Sort rate state data by quasi-static time step.
-if slip and rsf==1 and pseudo: 
+if slip and rsf==1 and pseudo:
     dat_rsf_sort=[]
     for i in range(len(dat_log_rsf)):
         if i==0:
@@ -302,33 +302,33 @@ if slip:
 if alpha:
     mdict['dt_dyn_alpha'] = dt_alpha
     mdict['obs_alpha'] = dat_seis_alpha_sort
-print 'writing to '+ h5file +'...'    
+print ('writing to '+ h5file +'...')
 save_dict_to_hdf5(mdict, h5file)
-print h5file + ' created'
+print (h5file + ' created')
 
 if clean:
-    print 'Cleanup...'
+    print ('Cleanup...')
     for f in list(set([log_file,log_dyn_file])|set(files_qs)|set(files_seis)):
         if os.path.isfile(f):
             os.remove(f)
-            print 'file '+f+' deleted'
+            print ('file '+f+' deleted')
     if slip:
         for f in list(set([fqs_file,log_slip_file])|set(files_slip)):
             if os.path.isfile(f):
                 os.remove(f)
-                print 'file '+f+' deleted'
+                print ('file '+f+' deleted')
         if rsf==1 and pseudo:
             for f in list(set([log_rsf_file])|set(files_rsf)):
                 if os.path.isfile(f):
                     os.remove(f)
-                    print 'file '+f+' deleted'
+                    print ('file '+f+' deleted')
         if alpha:
             for f in list(set([log_slip_file_alpha])|set(files_slip_alpha)):
                     if os.path.isfile(f):
                         os.remove(f)
-                        print 'file '+f+' deleted'
+                        print ('file '+f+' deleted')
     if alpha:
         for f in list(set([log_dyn_file_alpha])|set(files_alpha)):
             if os.path.isfile(f):
                 os.remove(f)
-                print 'file '+f+' deleted'
+                print ('file '+f+' deleted')
