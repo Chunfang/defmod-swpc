@@ -30,7 +30,7 @@ module global
      ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:),           &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
      mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:),incls(:,:),       &
-     vecxf(:,:),stx_init(:,:),st_obs(:,:),tot_st_obs(:,:)
+     vecxf(:,:),stx_init(:,:),st_obs(:,:),tot_st_obs(:,:),trac_dyn(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
      fl(:),ql(:),flc(:),fp(:),qu(:),ss(:),sh(:),f2s(:),dip(:),nrm(:),          &
      flt_slip(:),tot_flt_slip(:),res_flt_slip(:),qs_flt_slip(:)
@@ -924,7 +924,8 @@ contains
     logical :: fail,failx
     integer ::j,j1,j2,j3,j4,rw_loc(dmn)
     real(8) :: d,dd,mu,fcoh,rsftau,vec(dmn),vec_slip(dmn-1),lm_sta(dmn),       &
-       lm_dyn(dmn),lm_dyn0(dmn),vecx(dmn),vectmp(dmn),vecxtmp(dmn),pavg
+       lm_dyn(dmn),lm_dyn0(dmn),vecx(dmn),vectmp(dmn),vecxtmp(dmn),pavg,       &
+       trac(dmn),tracx(dmn)
     real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn),                 &
        flt_dyn0(n_lmnd*dmn),lm_pn(n_lmnd),lm_pp(n_lmnd),lm_f2s(n_lmnd)
     call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
@@ -1003,25 +1004,34 @@ contains
        vec=lm_sta+lm_dyn0+lm_dyn
        vecx=vec
        pavg=biot(j3)*(lm_pp(j)+lm_pn(j))/lm_f2s(j)/f2
-       call TriFlt_dyn(vec,vecf(j3,:),st_init(j3,:),pavg,rsftau,fcoh,mu,fail)
+       call TriFlt_dyn(vec,vecf(j3,:),st_init(j3,:),pavg,rsftau,fcoh,mu,fail,trac)
+       trac_dyn(j,:)=trac ! Dynamic fault force
        if (Xflt>1) then ! Examine intersection
           j4=XFltMap(j3)
           if (j4>0 .and. .not. xlock(j4)) then ! j4-th intersection unlocked
-             vectmp=vec; vecxtmp=vec
              call TriFlt_dyn(vecx,vecxf(j4,:),stx_init(j4,:),pavg,rsftau,fcoh, &
-                mu,failx)
+                mu,failx,tracx)
              if (fail .and. .not. failx) then ! Main offsets branch
                 xlock(j4)=.true.
              else if (.not. fail .and. failx) then ! Branch offsets main
                 vec=vecx; vecf(j3,:)=vecxf(j4,:); st_init(j3,:)=stx_init(j4,:)
+                trac_dyn(j,:)=tracx
                 xlock(j4)=.true.
              else if (fail .and. failx) then ! Both offset, examine shear
+                vectmp=vec; vecxtmp=vecx
                 call Cart2Flt(vecf(j3,:),vectmp,1)
                 call Cart2Flt(vecxf(j4,:),vecxtmp,1)
+                ! Total friction force
+                vectmp=vectmp+st_init(j3,:); vecxtmp=vecxtmp+stx_init(j4,:)
+                vectmp(1)=vectmp(1)+rsftau; vecxtmp(1)=vecxtmp(1)+rsftau
+                vectmp(dmn)=vectmp(dmn)+max(f0,pavg)
+                vecxtmp(dmn)=vecxtmp(dmn)+max(f0,pavg)
+                vectmp=trac-vectmp; vecxtmp=tracx-vecxtmp ! Over stress
                 if (sum(vecxtmp(:dmn-1)*vecxtmp(:dmn-1))>                      &
-                   sum(vectmp(:dmn-1)*vecxtmp(:dmn-1))) then
+                   sum(vectmp(:dmn-1)*vectmp(:dmn-1))) then
                    vec=vecx; vecf(j3,:)=vecxf(j4,:)
                    st_init(j3,:)=stx_init(j4,:)
+                   trac_dyn(j,:)=tracx
                 end if
                 xlock(j4)=.true.
              end if
@@ -1037,10 +1047,10 @@ contains
   end subroutine CapLM_dyn
 
   ! Frictional failure law trial
-  subroutine TriFlt_dyn(vec,vec_rot,trac0,pavg,tau0,fcoh,mu,fail)
+  subroutine TriFlt_dyn(vec,vec_rot,trac0,pavg,tau0,fcoh,mu,fail,trac)
     implicit none
     real(8) :: vec(dmn),vec_rot(dmn),trac0(dmn),pavg,tau0,fcoh,mu,fsh,fnrm,fr, &
-       frs,frd
+       frs,frd,trac(dmn)
     logical :: fail
     ! Rotate to faults coordinate
     call Cart2Flt(vec_rot,vec,1)
@@ -1056,6 +1066,7 @@ contains
        fsh=sqrt(vec(1)**2+vec(2)**2)
        fnrm=vec(3)
     end select
+    trac=vec ! Record traction in fault coordinate
     ! If LM exceeds maximum friction (mu*fn)
     fail=.false.
     if (fnrm<f0 .and. abs(fsh)>mu*abs(fnrm)+fcoh) then

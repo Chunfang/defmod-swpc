@@ -29,7 +29,7 @@ contains
     integer,save :: k=0,kd=0
     character(3) :: strng
     character(256) :: name0,name1,namedat,nametrc
-    real(8) :: dat_slip(1,dmn,nfnd_loc),dat_trac(1,dmn+p,nfnd_loc),            &
+    real(8) :: dat_slip(1,dmn,nfnd_loc),dat_trac(1,2*dmn,nfnd_loc),            &
        dat_fndx(dmn*3,nfnd_loc) !H5 reverse order
     call h5open_f(err)
     if (k==0 .and. kd==0) then
@@ -67,8 +67,8 @@ contains
        elseif (dsp_hyb==1) then
           call GetSlipDat(dat_slip,tot_flt_slip)
        end if
-       dim_trc=(/1,dmn,nfnd_loc/)
-       kd=kd+1; dim_flts=(/kd,dmn,nfnd_loc/); dim_trcs=(/kd,dmn,nfnd_loc/)
+       dim_trc=(/1,2*dmn,nfnd_loc/)
+       kd=kd+1; dim_flts=(/kd,dmn,nfnd_loc/); dim_trcs=(/kd,2*dmn,nfnd_loc/)
     end if
     call GetTracDat(dat_trac,strng)
     call h5fopen_f(trim(file_flt),H5F_ACC_RDWR_F,idfile,err)
@@ -89,15 +89,16 @@ contains
           call h5pset_chunk_f(config,3,dim_trc,err)
           call h5dcreate_f(idfile,nametrc,h5t_native_double,spc_dat,iddat,err, &
              config)
-          call h5dwrite_f(iddat,h5t_native_double,dat_trac,dim_trc,err)
+          call h5dwrite_f(iddat,h5t_native_double,dat_trac(:,:dmn+p,:),        &
+             dim_trc,err)
        else ! Dynamic traction
-          limit(2:3)=(/dmn,nfnd_loc/)
+          limit(2:3)=(/2*dmn,nfnd_loc/)
           call h5screate_simple_f(3,dim_trc,spc_dat,err,limit)
           call h5pcreate_f(H5P_DATASET_CREATE_F,config,err)
           call h5pset_chunk_f(config,3,dim_trc,err)
           call h5dcreate_f(idfile,nametrc,h5t_native_double,spc_dat,iddat,err, &
              config)
-          call h5dwrite_f(iddat,h5t_native_double,dat_trac(:,:dmn,:),dim_trc,  &
+          call h5dwrite_f(iddat,h5t_native_double,dat_trac(:,:2*dmn,:),dim_trc,&
              err)
        end if
     else ! Extend data
@@ -116,10 +117,10 @@ contains
        call h5dget_space_f(iddat,spc_dat,err)
        call h5sselect_hyperslab_f(spc_dat,H5S_SELECT_SET_F,offset,dim_trc,err)
        if (strng=="sta") then ! Static traction and pressure
-          call H5dwrite_f(iddat,h5t_native_double,dat_trac,dim_trc,err,spc_trc,&
-             spc_dat)
+          call H5dwrite_f(iddat,h5t_native_double,dat_trac(:,:dmn+p,:),        &
+             dim_trc,err,spc_trc,spc_dat)
        else ! Dynamic traction
-          call H5dwrite_f(iddat,h5t_native_double,dat_trac(:,:dmn,:),dim_trc,  &
+          call H5dwrite_f(iddat,h5t_native_double,dat_trac(:,:2*dmn,:),dim_trc,&
              err,spc_trc,spc_dat)
        end if
     end if
@@ -367,13 +368,14 @@ contains
           flt_qs(dmn)=flt_qs(dmn)+max(f0,biot(j3)*flt_p)
        end if
        if (poro .and. strng=="sta") then
-          dat_trac(1,:,j1)=(/flt_qs,flt_p/)
+          dat_trac(1,:dmn+p,j1)=(/flt_qs,flt_p/)
        else if (strng=="sta") then
-          dat_trac(1,:,j1)=flt_qs
+          dat_trac(1,:dmn,j1)=flt_qs
        else ! Dynamic traction
+          dat_trac(1,:dmn,j1)=trac_dyn(j,:dmn)*lm_f2s(j)
           flt_dyn=flt_ndf_dyn(rw_loc)*lm_f2s(j)
           call Cart2Flt(vecf(j3,:),flt_dyn,1)
-          dat_trac(1,:dmn,j1)=flt_qs+flt_dyn
+          dat_trac(1,dmn+1:,j1)=flt_qs+flt_dyn
        end if
     end do
   end subroutine GetTracDat

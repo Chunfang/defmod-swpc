@@ -397,6 +397,7 @@ program main
         allocate(flt_slip(n_lmnd*dmn),tot_flt_slip(n_lmnd*dmn),                &
            res_flt_slip(n_lmnd*dmn),qs_flt_slip(n_lmnd*dmn))
         qs_flt_slip=f0; tot_flt_slip=f0; res_flt_slip=f0; flt_slip=f0
+        allocate(trac_dyn(n_lmnd,dmn)); trac_dyn=f0
      end if
      if (rank==0) open(15,file=trim(output_file(:index(output_file,"/",        &
         BACK=.TRUE.)))//"cnstrns.tmp",status="replace")
