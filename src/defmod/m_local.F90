@@ -479,8 +479,8 @@ contains
        jacob(dmn,dmn),invj(dmn,dmn),xobs(3),Em,vm,DInv(6,6),Cm(6,6),Ch(6,6),   &
        dC(6,6),PIvec(3),fderphi(3),tderpsi(3,3,3),S2(6,6),D4(3,3,3,3),D2(6,6), &
        D2e(6,6),R(3,3),Rb(3,3),R_init(3,3),Rb_init(3,3),R2(3,3),R2b(3,3),      &
-       D2R(6,6),ang(3),a(3),exh(3,3),tmp,ellip(:,:),Eh,vh
-    integer :: i,k,l,nellip
+       D2R(6,6),ang(3),a(3),ellip(:,:),Eh,vh
+    integer :: i,nellip
     nellip=size(ellip,1)
     call ShapeFuncd(dN,ipcoord) ! Form dN/de, dN/dn, (dN/ds)
     jacob=matmul(dN,ecoords)
@@ -495,22 +495,7 @@ contains
     call CMat(Em,vm,Cm)
     do i=1,nellip
        a=ellip(i,4:6)
-       ! Stage a1>=a2>=a3
-       exh=0
-       do k=1,2
-          do l=2,3
-             if (a(k)<a(l)) then
-                exh(k,l)=f1
-                tmp=a(k)
-                a(k)=a(l)
-                a(l)=tmp
-             end if
-          end do
-       end do
-       ! Initial rotation matrices due to axis exchange
-       ang=pi/f2*(/exh(2,3),exh(1,3),exh(1,2)/)
-       call Ang2Mat(ang,R_init,f1)
-       call Ang2Mat(ang,Rb_init,-f1)
+       call AxesSort(a,R_init,Rb_init)
        ! Rotation matrices w.r.t the ellipsoid
        ang=ellip(i,7:9)
        call Ang2Mat(ang,R,f1)
@@ -539,6 +524,31 @@ contains
     !call MatDet(Dstr(:3,:3),tmp)
     !print'(7(F0.6X))',xobs,DStr(1,1),DStr(2,2),DStr(3,3),tmp
   end subroutine FormDstr
+
+  ! Stage a1>=a2>=a3 and retruen rotation matrces
+  subroutine AxesSort(a,R,Rb)
+    implicit none
+    integer :: i,j
+    real(8) :: a(3),R1(3,3),R2(3,3),R3(3,3),R(3,3),Rb(3,3),exh(3,3),tmp,ang(3)
+    exh=f0; R=f0
+    do i=1,2
+       R(i,i)=f1
+       do j=2,3
+          if (a(i)<a(j)) then
+             exh(i,j)=f1
+             tmp=a(i); a(i)=a(j); a(j)=tmp
+          end if
+       end do
+    end do
+    ang=pi/f2*(/f0,f0,exh(1,2)/)
+    call Ang2Mat(ang,R1,f1)
+    ang=pi/f2*(/f0,exh(1,3),f0/)
+    call Ang2Mat(ang,R2,f1)
+    ang=pi/f2*(/exh(2,3),f0,f0/)
+    call Ang2Mat(ang,R3,f1)
+    R=matmul(R3,matmul(R2,R1))
+    Rb=transpose(R)
+  end subroutine AxesSort
 
   ! Computes dN/dx(yz) and the determinant of Jacobian 'detj'
   subroutine FormdNdetJ(ipcoord,ecoords,dN,detj)
