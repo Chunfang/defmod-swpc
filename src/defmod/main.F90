@@ -23,7 +23,7 @@ program main
   integer,pointer :: null_i=>null()
   real(8),pointer :: null_r=>null()
   real(8) :: fdt,t1,t2
-  integer :: i,j,j1,j2,j3,j4,j5,j6,n,n_dyn,nodal_bw,ef_eldof,ng,vout,fdout
+  integer :: i,j,j1,j2,j3,j4,n,n_dyn,nodal_bw,ef_eldof,ng,vout,fdout
 
   call PetscInitialize(Petsc_Null_Character,ierr)
 
@@ -652,7 +652,13 @@ program main
 #endif
      call SetupKSPSolver
      call PrintMsg("Solving ...")
+     call VecGetOwnershipRange(Vec_U,j1,j2,ierr); j=j2-j1
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",     &
+        nprcs," processors."
+     t1=MPI_Wtime()
      call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+     t2=MPI_Wtime()
+     if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
      call GetVec_U; tot_uu=tot_uu+uu
      if (nobs_loc>0) then
         call GetVec_obs
@@ -675,8 +681,6 @@ program main
            ! Form Kc and Up
            call VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
            call VecCopy(Vec_U,Vec_Um,ierr)
-           call VecGetLocalSize(Vec_U,j,ierr)
-           call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
            j2=0
            do i=1,j
               if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
@@ -767,7 +771,10 @@ program main
            call VecAssemblyEnd(Vec_F,ierr)
            ! Solve
            call PrintMsg(" Solving ...")
+           t1=MPI_Wtime()
            call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+           t2=MPI_Wtime()
+           if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
            call GetVec_U; tot_uu=tot_uu+uu
            if (poro) call VecAXPY(Vec_Um,f1,Vec_U,ierr)
            if (visco) then
@@ -817,10 +824,13 @@ program main
 #endif
      call SetupKSPSolver
      call PrintMsg("Static solving ...")
-     call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
-        " processors."
+     call VecGetOwnershipRange(Vec_U,j1,j2,ierr); j=j2-j1
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",     &
+        nprcs," processors."
+     t1=MPI_Wtime()
      call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+     t2=MPI_Wtime()
+     if (rank==0) print'(F0.2,A)',t2-t1," seconds to converge."
      call GetVec_U; tot_uu=tot_uu+uu
      ! Get observation
      if (nobs_loc>0) then
@@ -841,25 +851,23 @@ program main
         end do
      end if
      ! Initialize spaces, and stress-to-force.
-     call VecGetLocalSize(Vec_U,j,ierr)
-     call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
      j3=0; j4=0
      do i=1,j
-        if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+        if (j1+i-1<dmn*nnds) then
            j3=j3+1
-        elseif (j1+i-1<dmn*nnds) then
+        elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
            j4=j4+1
         end if
      end do
-     allocate(workl(j3)); allocate(worku(j4))
+     allocate(worku(j3),workl(j4))
      j3=0; j4=0
      do i=1,j
-        if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+        if (j1+i-1<dmn*nnds) then
            j3=j3+1
-           workl(j3)=j1+i-1
-        elseif (j1+i-1<dmn*nnds) then
+           worku(j3)=j1+i-1
+        elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
            j4=j4+1
-           worku(j4)=j1+i-1
+           workl(j4)=j1+i-1
         end if
      end do
      j=size(worku)
@@ -1004,13 +1012,14 @@ program main
      call SetupKSPSolver
      call PrintMsg("Alpha-solving ...")
      call VecGetOwnershipRange(Vec_U_dyn,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
-        " processors."
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",     &
+        nprcs," processors."
      ! Dummy static event log
      n_log=1; crp=.false.
      if (rank==0) call WriteOutput_log
      ! Start time stepping
      steps=int(ceiling(t/dt)); t_hyb=f0
+     t1=MPI_Wtime()
      do tstep=1,steps
         t_hyb=t_hyb+dt
         ! Reform RHS
@@ -1039,7 +1048,9 @@ program main
            call WriteOutput
         end if
      end do
+     t2=MPI_Wtime()
      if (rank==0) then
+        print'(F0.2,A)',t2-t1," seconds to complete Alpha run."
         call WriteOutput_log_wave
         if (nfnd>0) call WriteOutput_log_slip
         ! Dummy static event log
@@ -1062,45 +1073,33 @@ program main
      ! Create cumulative static solution space Vec_Um
      call VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
      call VecZeroEntries(Vec_Um,ierr)
-     call VecGetLocalSize(Vec_U,j,ierr)
-     call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
-        " processors."
+     call VecGetOwnershipRange(Vec_U,j1,j2,ierr); j=j2-j1
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",     &
+        nprcs," processors."
      ! Create pressure, force and traction IDs (RI RIu RIl)
      if (poro) then
-        j2=0; j3=0; j4=0; j5=0; j6=0
+        j2=0; j3=0; j4=0
         do i=1,j
            if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
               j2=j2+1
-           end if
-           if (nceqs>0) then
-              if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
-                 j3=j3+1
-              end if
-           end if
-           if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+           elseif (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+              j3=j3+1
+           elseif (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
               j4=j4+1
            end if
-           if (j1+i-1<(dmn+1)*nnds) then
-              j5=j5+1
-           end if
         end do
-        allocate(work(j2),workl(j3),worku(j4))
-        j2=0; j3=0; j4=0; j5=0
+        allocate(work(j2),worku(j3),workl(j4))
+        j2=0; j3=0; j4=0
         do i=1,j
            if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
               j2=j2+1
               work(j2)=j1+i-1
-           end if
-           if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+           elseif (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+              j3=j3+1
+              worku(j3)=j1+i-1
+           elseif (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
               j4=j4+1
-              worku(j4)=j1+i-1
-           end if
-           if (nceqs>0) then
-              if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
-                 j3=j3+1
-                 workl(j3)=j1+i-1
-              end if
+              workl(j4)=j1+i-1
            end if
         end do
         j=size(work)
@@ -1173,21 +1172,21 @@ program main
      else ! Not poroelastic
         j3=0; j4=0
         do i=1,j
-           if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+           if (j1+i-1<dmn*nnds) then
               j3=j3+1
-           elseif (j1+i-1<dmn*nnds) then
+           elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
               j4=j4+1
            end if
         end do
-        allocate(workl(j3)); allocate(worku(j4))
+        allocate(worku(j3),workl(j4))
         j3=0; j4=0
         do i=1,j
-           if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+           if (j1+i-1<dmn*nnds) then
               j3=j3+1
-              workl(j3)=j1+i-1
-           elseif (j1+i-1<dmn*nnds) then
+              worku(j3)=j1+i-1
+           elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
               j4=j4+1
-              worku(j4)=j1+i-1
+              workl(j4)=j1+i-1
            end if
         end do
         j=size(worku)
@@ -1493,7 +1492,6 @@ program main
               call VecRestoreArrayF90(Vec_I,pntr,ierr)
               j=size(uup)
               call VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
-              !call Up_s2d
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               if (fvin>0) then! Remove hydrostatic pressure gradient from RHS
                  call MatMult(Mat_Kc,Vec_Up_hst,Vec_I,ierr)
@@ -1787,7 +1785,8 @@ program main
            end do ! Hybrid run
            t2=MPI_Wtime()
            if (fail) then
-              if (rank==0) print'(F0.2,A)',t2-t1," seconds to complete dynamic run."
+              if (rank==0) print'(F0.2,A)',t2-t1," seconds to complete dynamic &
+                 &run."
               if (rank==0 .and. nobs>0) then
                  call WriteOutput_log
                  call WriteOutput_log_wave
@@ -1907,13 +1906,14 @@ program main
      ! Start time stepping
      call PrintMsg("Solving ...") ! Up=Minv(dt^2(F-KU)-dt(C(U-Um)))+2U-Um
      call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",nprcs,&
-        " processors."
+     if (rank==0) print'(I0,A,I0,A,I0,A)',j2,"/",j2*nprcs," DoFs across ",     &
+        nprcs," processors."
      ng=1
      if (nobs_loc>0) tot_uu_dyn_obs=f0
      do igf=1,nceqs
         if (ng>10) exit ! Max mumber of GFs
         j=(igf-1)/dmn+1
+        t1=MPI_Wtime()
         do tstep=0,steps
            if (gf .and. frc(j)<1) then
               exit
@@ -2013,7 +2013,9 @@ program main
            ! Write output
            call GetVec_U; tot_uu=tot_uu+uu
            if (vout==1 .and. mod(tstep,frq)==0) call WriteOutput
-       end do ! Explicit run
+        end do ! Explicit run
+        t2=MPI_Wtime()
+        print'(F0.2,A)',t2-t1," seconds to complete Alpha run."
         if (.not. gf) exit
         if (rank==0 .and. frc(j)==1 .and. mod(igf,dmn)/=0)                     &
            call WriteOutput_log_wave
