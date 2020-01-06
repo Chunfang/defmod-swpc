@@ -3,7 +3,7 @@
 !! Set-up medium velocity/attenuation structure
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"
@@ -277,7 +277,7 @@ contains
     !! scale medium velocity using reference frequency
     !!
     subroutine relaxed_medium()
-      
+
       integer :: i, j, k, im
       real(SP) :: rho_beta2, rho_alpha2
       real(SP) :: chi_mu, chi_lam
@@ -589,19 +589,19 @@ contains
     write(io) kob_bot( ibeg_m:iend_m, jbeg_m:jend_m )
     write(io) bddep  ( ibeg_m:iend_m, jbeg_m:jend_m, 0:NBD )
     if( nm > 0 ) write(io) ts(  1:nm )
-    
+
     deallocate( kfs, kob, kfs_top, kfs_bot, kob_top, kob_bot, bddep )
-    
+
   end subroutine medium__checkpoint
   !! --------------------------------------------------------------------------------------------------------------------------- !!
 
   !! --------------------------------------------------------------------------------------------------------------------------- !!
   subroutine medium__restart( io )
-    
+
     integer, intent(in) :: io
     integer :: j
     !! ----
-    
+
     call memory_allocate()
     do j=jbeg_m,jend_m;  read(io)   bx(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
     do j=jbeg_m,jend_m;  read(io)   by(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
@@ -621,13 +621,13 @@ contains
     read(io) kob_top( ibeg_m:iend_m, jbeg_m:jend_m )
     read(io) kob_bot( ibeg_m:iend_m, jbeg_m:jend_m )
     read(io) bddep  ( ibeg_m:iend_m, jbeg_m:jend_m, 0:NBD )
-    
+
     if( nm > 0 ) read(io) ts(  1:nm )
-    
+
   end subroutine medium__restart
   !! --------------------------------------------------------------------------------------------------------------------------- !!
-  
-  
+
+
 end module m_medium
 !! ----------------------------------------------------------------------------------------------------------------------------- !!
-  
+

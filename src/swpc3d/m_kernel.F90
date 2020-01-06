@@ -3,7 +3,7 @@
 !! Computation kernel for FDM numerical simulation
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"
@@ -522,10 +522,10 @@ contains
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; write(io) Ryz(kbeg_k:kend_k,i,j,1:nm);  end do; end do; deallocate( Ryz )
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; write(io) Rxz(kbeg_k:kend_k,i,j,1:nm);  end do; end do; deallocate( Rxz )
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; write(io) Rxy(kbeg_k:kend_k,i,j,1:nm);  end do; end do; deallocate( Rxy )
-        
+
     end if
 
-    
+
   end subroutine kernel__checkpoint
   !! --------------------------------------------------------------------------------------------------------------------------- !!
 
@@ -536,16 +536,16 @@ contains
   !<
   !! --
   subroutine kernel__restart( io )
-    
+
     integer, intent(in) :: io
     integer :: i, j
     !! --
-    
-    
+
+
     call memory_allocate()
-    
+
     read(io) r40x, r40y, r40z, r41x, r41y, r41z, r20x, r20y, r20z
-    
+
     do j=jbeg_m,jend_m; read(io)  Vx(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
     do j=jbeg_m,jend_m; read(io)  Vy(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
     do j=jbeg_m,jend_m; read(io)  Vz(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
@@ -555,27 +555,27 @@ contains
     do j=jbeg_m,jend_m; read(io) Syz(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
     do j=jbeg_m,jend_m; read(io) Sxz(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
     do j=jbeg_m,jend_m; read(io) Sxy(kbeg_m:kend_m,ibeg_m:iend_m,j); end do;
-                      
+
     if( nm > 0 ) then
       read(io) c1(1:nm)
       read(io) c2(1:nm)
       read(io) d1(1:nm)
       read(io) d2
-      
+
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; read(io) Rxx(kbeg_k:kend_k,i,j,1:nm); end do; end do;
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; read(io) Ryy(kbeg_k:kend_k,i,j,1:nm); end do; end do;
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; read(io) Rzz(kbeg_k:kend_k,i,j,1:nm); end do; end do;
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; read(io) Ryz(kbeg_k:kend_k,i,j,1:nm); end do; end do;
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; read(io) Rxz(kbeg_k:kend_k,i,j,1:nm); end do; end do;
       do j=jbeg_k,jend_k; do i=ibeg_k,iend_k; read(io) Rxy(kbeg_k:kend_k,i,j,1:nm); end do; end do;
-        
+
     end if
-    
+
   end subroutine kernel__restart
   !! --------------------------------------------------------------------------------------------------------------------------- !!
-  
 
-  
+
+
   !! --------------------------------------------------------------------------------------------------------------------------- !!
   subroutine memory_allocate
     !!
@@ -584,14 +584,14 @@ contains
     allocate(  Vx(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
     allocate(  Vy(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
     allocate(  Vz(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
-    
+
     allocate( Sxx(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
     allocate( Syy(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
     allocate( Szz(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
     allocate( Syz(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
     allocate( Sxz(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
     allocate( Sxy(       kbeg_m:kend_m, ibeg_m:iend_m, jbeg_m:jend_m ) )
-    
+
     if( nm > 0 ) then
       allocate( c1(nm), c2(nm), d1(nm) )
       allocate( Rxx( kbeg_k:kend_k, ibeg_k:iend_k, jbeg_k:jend_k, 1:nm ) )
@@ -601,10 +601,10 @@ contains
       allocate( Rxz( kbeg_k:kend_k, ibeg_k:iend_k, jbeg_k:jend_k, 1:nm ) )
       allocate( Rxy( kbeg_k:kend_k, ibeg_k:iend_k, jbeg_k:jend_k, 1:nm ) )
     end if
-    
+
   end subroutine memory_allocate
   !! --------------------------------------------------------------------------------------------------------------------------- !!
-  
-  
+
+
 end module m_kernel
 !! ----------------------------------------------------------------------------------------------------------------------------- !!

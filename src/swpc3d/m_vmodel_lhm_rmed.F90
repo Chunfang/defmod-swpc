@@ -3,7 +3,7 @@
 !! 1D velocity structure
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"
@@ -137,19 +137,35 @@ contains
 
     do k = k0, k1
 
-      !! air column
+      !! air/ocean column
       if( zc(k) < depth(1) ) then
 
-        vp1 = 0.0
-        vs1 = 0.0
+        if( zc(k) < 0.0 ) then 
 
-        rho(k,i0:i1,j0:j1) = 0.001
-        mu (k,i0:i1,j0:j1) = 0.0
-        lam(k,i0:i1,j0:j1) = 0.0
-        ! give artificially strong attenuation in air-column
-        qp (k,i0:i1,j0:j1) = 10.0
-        qs (k,i0:i1,j0:j1) = 10.0
+          vp1 = 0.0
+          vs1 = 0.0
+          
+          rho(k,i0:i1,j0:j1) = 0.001
+          mu (k,i0:i1,j0:j1) = 0.0
+          lam(k,i0:i1,j0:j1) = 0.0
+          ! give artificially strong attenuation in air-column
+          qp (k,i0:i1,j0:j1) = 10.0
+          qs (k,i0:i1,j0:j1) = 10.0
+          
+        else
 
+          vp1 = 1.5
+          vs1 = 0.0
+          
+          rho(k,i0:i1,j0:j1) = 1.0
+          mu (k,i0:i1,j0:j1) = 0.0
+          lam(k,i0:i1,j0:j1) = 1.0 * vp1 * vp1
+
+          qp (k,i0:i1,j0:j1) = 1000000.0
+          qs (k,i0:i1,j0:j1) = 1000000.0
+          
+        end if
+        
         cycle
       end if
 
@@ -162,8 +178,10 @@ contains
               vp1  = vp0(l)  * ( 1 +     xi(k,i,j,tbl_rmed(l)) )
               vs1  = vs0(l)  * ( 1 +     xi(k,i,j,tbl_rmed(l)) )
 
-              call vcheck( vp1, vs1, rho1, xi(k,i,j,tbl_rmed(l) ), vmin, vmax, rhomin, vmin_under, vmax_over, rhomin_under )
-
+              if( vp0(l) > 0 .and. vs0(l) > 0 ) then
+                call vcheck( vp1, vs1, rho1, xi(k,i,j,tbl_rmed(l) ), vmin, vmax, rhomin, vmin_under, vmax_over, rhomin_under )
+              end if
+              
               qp1  = qp0(l)
               qs1  = qs0(l)
             end if

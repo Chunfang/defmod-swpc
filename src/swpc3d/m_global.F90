@@ -3,7 +3,7 @@
 !! global control parameters, shared arrays and MPI communication
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"
@@ -68,7 +68,7 @@ module m_global
   !!
   character(80)         :: title                                    !<  execution title, used in filename and headers
   character(256)        :: name_fe                                  !< FE root name
-  integer               :: eid,np_rup,nt_rup                        !< Event ID 
+  integer               :: eid,np_rup,nt_rup                        !< Event ID
   integer               :: exedate                                  !<  date and time by seconds from 1970/1/1 0:0:0
 
   !!
@@ -156,6 +156,7 @@ module m_global
   real(SP) :: mxx0, myy0, mzz0, myz0, mxz0, mxy0
   real(SP) :: fx0, fy0, fz0
   real(SP) :: otim
+  real(SP) :: sx0, sy0
 
   !! Special modes
   logical  :: pw_mode                                               !< Plane wave mode

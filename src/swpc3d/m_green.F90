@@ -3,7 +3,7 @@
 !! Green's Function Special Mode for SWPC
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"
@@ -143,7 +143,7 @@ contains
     call readini( io_prm, 'green_cmp',  green_cmp,  '' )
     call readini( io_prm, 'green_trise', green_trise, 1.0 )
     call readini( io_prm, 'green_bforce', green_bforce, .false. )
-    call readini( io_prm, 'green_maxdist', green_maxdist, 1e30 )    
+    call readini( io_prm, 'green_maxdist', green_maxdist, 1e30 )
     call assert( green_maxdist > 0.0 )
 
     M0 = 1
@@ -159,7 +159,7 @@ contains
 
     call readini( io_prm, 'ntdec_w',ntdec_w, 10 )
     call readini( io_prm, 'stftype', stftype, 'kupper' )
-    call readini( io_prm, 'wav_format', wav_format, 'sac' ) 
+    call readini( io_prm, 'wav_format', wav_format, 'sac' )
 
     if( trim(adjustl(stftype)) == 'scosine' ) stftype = 'cosine'  !! backward compatibility
 
@@ -604,7 +604,7 @@ contains
         call std__getio(io, is_big=.true.)
         open(io, file=trim(fn_wav), form='unformatted', action='write', status='replace')
 #else
-        call std__getio(io, is_big=.true.) 
+        call std__getio(io, is_big=.true.)
         open(io, file=trim(fn_wav), access='stream', form='unformatted', action='write', status='replace')
 #endif
 

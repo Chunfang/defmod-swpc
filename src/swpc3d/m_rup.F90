@@ -3,7 +3,7 @@
 !! Set fault rupture source; output obs defined by Defmod.
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"

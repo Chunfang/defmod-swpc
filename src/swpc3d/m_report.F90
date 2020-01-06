@@ -3,7 +3,7 @@
 !! terminal/logfile report
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda, 2016-2018 Chunfang Meng. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda, 2016-2019 Chunfang Meng. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 #include "m_debug.h"
@@ -71,7 +71,7 @@ contains
       else if ( green_mode ) then
         write(STDERR,'(A)') "  SWPC_3D (Green's function mode)                                             "
       else if ( have_rs ) then
-        write(STDERR,'(3A,I0,A,I0,A,I0)') "  SWPC_3D (FE rupture) ",trim(name_fe),": event ",eid," pixel ",np_rup," nframe ",nt_rup 
+        write(STDERR,'(3A,I0,A,I0,A,I0)') "  SWPC_3D (FE rupture) ",trim(name_fe),": event ",eid," pixel ",np_rup," nframe ",nt_rup
       else
         write(STDERR,'(A)') "  SWPC_3D                                                                     "
       end if
@@ -91,9 +91,9 @@ contains
       write(STDERR,'(A,F15.3,A)'     ) "  Total Memory Size       : ", mem_all,  "  [GiB]"
       write(STDERR,'(A,F15.3,A)'     ) "  Node Memory Size        : ", mem_node, "  [GiB]"
       write(STDERR,'(A,F15.3,A)'     ) "  Stability  Condition c  : ", c,        "  (c<1)"
-      if (have_ps) then 
-        write(STDERR,'(A,F15.3,A)'  ) "  Wavelength Condition r  : ", r       , "  (r>5-10)"
-        write(STDERR,'(A,F15.3,A)'  ) "  Maximum frequency       : ", fmax,     "  [Hz]"
+      if (have_ps) then
+        write(STDERR,'(A,F15.3,A)'   ) "  Wavelength Condition r  : ", r       , "  (r>5-10)"
+        write(STDERR,'(A,F15.3,A)'   ) "  Maximum frequency       : ", fmax,     "  [Hz]"
       end if
       write(STDERR,'(A,F15.3,A)'     ) "  Minimum velocity        : ", vmin,     "  [km/s]"
       write(STDERR,'(A,F15.3,A)'     ) "  Maximum velocity        : ", vmax,     "  [km/s]"

@@ -21,7 +21,7 @@
 !!  <- na ->
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda. All rights reserved. This project is released under the MIT license.
 !!
 !<
 !! ----
@@ -569,13 +569,13 @@ contains
 
   end subroutine absorb_p__checkpoint
   !! --------------------------------------------------------------------------------------------------------------------------- !!
-  
+
   !! --------------------------------------------------------------------------------------------------------------------------- !!
   subroutine absorb_p__restart(io)
 
     integer, intent(in) :: io
     integer :: j
-    
+
     read(io) r20x, r20y, r20z
     read(io) kbeg_min
 
@@ -617,7 +617,7 @@ contains
     do j=jbeg,jend;  read(io)  axVz(kbeg_min:kend,ibeg:iend,j); end do;
     do j=jbeg,jend;  read(io)  ayVz(kbeg_min:kend,ibeg:iend,j); end do;
     do j=jbeg,jend;  read(io)  azVz(kbeg_min:kend,ibeg:iend,j); end do;
-      
+
     do j=jbeg,jend;  read(io) axSxx(kbeg_min:kend,ibeg:iend,j); end do;
     do j=jbeg,jend;  read(io) aySxy(kbeg_min:kend,ibeg:iend,j); end do;
     do j=jbeg,jend;  read(io) azSxz(kbeg_min:kend,ibeg:iend,j); end do;
@@ -635,7 +635,7 @@ contains
   !! ADE-CFS PML damping factor according to Zhao and Shen
   !!
   subroutine damping_profile( x, H, xbeg, xend, g )
-    
+
     real(SP), intent(in) :: x   !< cartesian coordinate location
     real(SP), intent(in) :: H   !< absorption layer thickness
     real(SP), intent(in) :: xbeg

@@ -3,7 +3,7 @@
 !! User-routine for defining velocity/attenuation structure
 !!
 !! @copyright
-!!   Copyright 2013-2018 Takuto Maeda. All rights reserved. This project is released under the MIT license.
+!!   Copyright 2013-2019 Takuto Maeda. All rights reserved. This project is released under the MIT license.
 !<
 !! ----
 module m_vmodel_user
@@ -44,7 +44,7 @@ contains
   !! Note:
   !! bd(:,:,0) are treated as topography shape for output.
   !!    this is only for output and visualization. topography in the simulation will be automatically detected by medium params.
-  !! bd(:,:,1:NBD) may contain internal boundary depths. The boundary number can be specified as source depth or station depth. 
+  !! bd(:,:,1:NBD) may contain internal boundary depths. The boundary number can be specified as source depth or station depth.
   !!
   !<
   !! ----
@@ -74,12 +74,12 @@ contains
     !! ----
 
     !!
-    !! The following dummy code is an example how to discribe the routine. 
+    !! The following dummy code is an example how to discribe the routine.
     !!
 
     !!
     !! subroutine readini() can access parameters defined in the input file.
-    !! Any original parameters can be added in the input file. 
+    !! Any original parameters can be added in the input file.
     !!
     call readini( io_prm, 'vp0',    vp0, 5.0 )
     call readini( io_prm, 'vs0',    vs0, vp0/sqrt(3.0) )
@@ -91,7 +91,7 @@ contains
     !!
     !! The medium parameter must be set from given region (i0:i1, j0:j1, k0:k1)
     !! Note that the order of indices is k->i->j, for improving performance
-    !! 
+    !!
     do j = j0, j1
       do i = i0, i1
 
