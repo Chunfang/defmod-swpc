@@ -1,23 +1,24 @@
 #!/usr/bin/env python
 import numpy as np
 import os, sys, netCDF4
-import argparse 
+import argparse
 
 ap=argparse.ArgumentParser()
 ap.add_argument('-m') # mesh file
 ap.add_argument('-p') # problem number
-ap.add_argument('-d') # absolute output 1 
+ap.add_argument('-d') # absolute output 1
+ap.add_argument('-q') # quasi-static damping
 # Exodus mesh file
 fin= ap.parse_args().m
 # SCEC problem index
 idcase=int(ap.parse_args().p)
 if not idcase in [205,10,102]:
-    print 'Choose a problem number in (205, 10, 102)'
+    print ('Choose a problem number in (205, 10, 102)')
     sys.exit(0)
 nc = netCDF4.Dataset(fin)
 dim=3
 
-# dsp_str=1 output fault stress; bod_frc=1 body force; hyb=1 engage hybrid; rsf=1 rate state friction
+# dsp_str=1 output fault stress; bod_frc=1 body force; hyb=1 engage hybrid; rsf=1 rate state friction; q=1 quasi-static damping
 t=.05; dt=.05; nviz=1
 t_dyn=0.1; t_lim=10.; dsp=1; dsp_str=1
 if ap.parse_args().d==None:
@@ -28,8 +29,11 @@ if idcase in [205,10]:
     rsf=0
 elif idcase==102:
     rsf=1; v_bg=1E-12
-bod_frc=0; hyb=1; nviz_dyn=100; init=0 
-alpha=0.; beta=0.0025; rfrac=0
+if ap.parse_args().q==None:
+    damp=0
+else:
+    damp=min(1,int(ap.parse_args().q))
+bod_frc=0; hyb=1; nviz_dyn=100; init=0
 
 # Dynamic step; output frequency
 if idcase==205:
@@ -40,15 +44,15 @@ elif idcase==102:
     dt_dyn=0.00125; nviz_wave=16; nviz_slip=40
 line1 = ["fault hex 51"]
 line3 = np.array([t,dt,nviz,dsp]).reshape(1,4)
-line4 = np.array([t_dyn,dt_dyn,nviz_dyn,t_lim,dsp_hyb,dsp_str,bod_frc,hyb,rsf,init]).reshape(1,10)
-if rsf==1: 
+Xflt=1
+line4 = np.array([t_dyn,dt_dyn,nviz_dyn,t_lim,dsp_hyb,Xflt,bod_frc,hyb,rsf,init]).reshape(1,10)
+if rsf==1:
     line5 = np.array([nviz_wave,nviz_slip,v_bg]).reshape(1,3)
 else:
     line5 = np.array([nviz_wave,nviz_slip]).reshape(1,2)
-line6 = np.array([alpha,beta,rfrac]).reshape(1,3)
 
-# node coordinates 
-print 'Extracting mesh...'
+# node coordinates
+print ('Extracting mesh...')
 coord = np.hstack((nc.variables['coordx'][:].\
         reshape(len(nc.variables['coordx']),1),
         nc.variables['coordy'][:].\
@@ -65,8 +69,8 @@ elif idcase==10:
     vp=5716.;vs=3300.;rho=2700.
 E=rho*vs**2*(3*vp**2-4*vs**2)/(vp**2-vs**2)
 nu=(vp**2-2*vs**2)/2/(vp**2-vs**2)
-visc=1E25 # solid viscosity 
-r=1.0 # power law 
+visc=1E25 # solid viscosity
+r=1.0 # power law
 if idcase in [205,102]:
     mat = [[E,nu,visc,r,rho,E,nu],
            [E,nu,visc,r,rho,E,nu]]
@@ -80,7 +84,16 @@ for i in nc.variables['eb_prop1'][:]:
     n_elem = len(cnct)
     hx_node = np.vstack((hx_node, cnct))
     mat_typ = np.vstack((mat_typ, i*np.ones((len(cnct),1))))
-print '%d nodes, %d elements' %(nnd, len(hx_node))
+print('%d nodes, %d elements' %(nnd, len(hx_node)))
+
+# damped FE
+alpha=0.; beta=0.0025; nx=0
+if idcase in [205,102]:
+    L=18E3
+else:
+    L=23E3
+if damp: alpha= 2.*np.pi*vs/L
+line6 = np.array([alpha,beta,nx]).reshape(1,3)
 
 # Waveform locations
 if idcase==205:
@@ -117,7 +130,7 @@ bc_typ = np.ones((nnd,3), dtype=np.int8)
 for node in bcx_nodes:
     bc_typ[node - 1, 0] = 0
 for node in bcy_nodes:
-    bc_typ[node - 1, 1] = 0   
+    bc_typ[node - 1, 1] = 0
 for node in bcz_nodes:
     bc_typ[node - 1, 2] = 0
 
@@ -130,7 +143,7 @@ for i in nc.variables['ss_prop1'][2:]:
 trac_el1 = bnd_el[3]
 trac_el2 = bnd_el[4]
 trac_el3 = bnd_el[5]
-abs_bc1 = bnd_el[0] 
+abs_bc1 = bnd_el[0]
 abs_bc2 = bnd_el[1]
 abs_bc3 = bnd_el[2]
 #--------------uniform traction BC-------------
@@ -147,7 +160,7 @@ trac_bc2[:,1] = trac_val[1]; trac_bc2[:,3] = 0.; trac_bc2[:,4] = 0.
 trac_bc3[:,2] = trac_val[2]; trac_bc3[:,3] = 0.; trac_bc3[:,4] = 0.
 trac_el = np.vstack((trac_el1, trac_el2, trac_el3))
 trac_bc = np.vstack((trac_bc1, trac_bc2, trac_bc3))
-# absorbing BC 
+# absorbing BC
 abs_bc1 = np.hstack((abs_bc1, np.ones((len(abs_bc1),1))))
 abs_bc2 = np.hstack((abs_bc2, 2*np.ones((len(abs_bc2),1))))
 abs_bc3 = np.hstack((abs_bc3, 3*np.ones((len(abs_bc3),1))))
@@ -157,7 +170,7 @@ abs_bc6 = np.hstack((trac_el3, 3*np.ones((len(trac_el3),1))))
 # abs_bc6 (upper bound) is usually traction free, not absorbing.
 abs_bc = np.vstack((abs_bc1, abs_bc2, abs_bc3, abs_bc4, abs_bc5))
 
-# Fault nodes, direction vector hard coded for planar fault 
+# Fault nodes, direction vector hard coded for planar fault
 ft_pos_nodes = nc.variables['node_ns1'][:]
 ft_neg_nodes = nc.variables['node_ns2'][:]
 if idcase in [205,102]: # vertical fault
@@ -179,7 +192,7 @@ nc.close() # end of mesh reading
 vecf = np.empty(shape=(0,11))
 xfnd = np.empty(shape=(0,3))
 # Sort the nodes on different side of the fault
-print 'Forming fault constraints...'
+print ('Forming fault constraints...')
 coord_pos = coord[ft_pos_nodes - 1,:]
 coord_neg = coord[ft_neg_nodes - 1,:]
 ft_map = np.array(np.array(np.all((coord_pos[:,None,:]==coord_neg[None,:,:]),axis=-1).nonzero()).T.tolist())
@@ -189,7 +202,7 @@ ft_pos_nodes = ft_pos_nodes[id_tmp]
 ft_neg_nodes = ft_neg_nodes[id_tmp]
 nfnd = len(ft_pos_nodes) - len(np.intersect1d(ft_pos_nodes, ft_neg_nodes))
 
-# fault parameters 
+# fault parameters
 j = 0
 st_init = np.zeros((nfnd,3))
 frc = np.empty((nfnd,1),dtype=np.uint32)
@@ -199,7 +212,7 @@ if idcase==205:
     dc = .4*np.ones((nfnd,1),dtype=np.float)
     coh = np.zeros((nfnd,1))
     dcoh = np.ones((nfnd,1))
-elif idcase==10: 
+elif idcase==10:
     fc = .76*np.ones((nfnd,1),dtype=np.float)
     fcd = .448*np.ones((nfnd,1),dtype=np.float)
     dc = .5*np.ones((nfnd,1),dtype=np.float)
@@ -226,17 +239,17 @@ for node_pos, node_neg, i in zip(ft_pos_nodes, ft_neg_nodes, range(len(ft_pos_no
             else:
                 st_init[j,:]=[7E7, 0., -12E7]
             frc[j] = 1
-        elif idcase==10: 
+        elif idcase==10:
             dip = z*2./np.sqrt(3)
             stn = 7378*dip*1E3
             if abs(y)<=1.5 and abs(dip+12.)<=1.5:
-                sts = 2E5 - (.76+.0057)*stn 
+                sts = 2E5 - (.76+.0057)*stn
                 st_init[j,:]=[0., sts, stn]
             elif abs(y)<=15. and dip>=-15.:
-                sts = -.55*stn 
+                sts = -.55*stn
                 st_init[j,:]=[0., sts, stn]
             else:
-                sts = -.55*stn 
+                sts = -.55*stn
                 st_init[j,:]=[0., sts, stn]
                 fc[j]=1E4
                 coh[j]=1E9
@@ -250,7 +263,7 @@ for node_pos, node_neg, i in zip(ft_pos_nodes, ft_neg_nodes, range(len(ft_pos_no
                 By=0.
             if abs(z+7.5)<=.5*W:
                 Bz=1.
-            elif abs(z+7.5)>.5*W and abs(z+7.5)<.5*W+w: 
+            elif abs(z+7.5)>.5*W and abs(z+7.5)<.5*W+w:
                 Bz=.5*(1+np.tanh(w/(abs(z+7.5)-.5*W-w)+w/(abs(z+7.5)-.5*W)))
             else:
                 Bz=0.
@@ -259,20 +272,23 @@ for node_pos, node_neg, i in zip(ft_pos_nodes, ft_neg_nodes, range(len(ft_pos_no
         frc[j]=1
         j=j+1
 # Total length of constraint function
-neq = dim*nfnd; print '%d constraint equations' %(neq)
+neq = dim*nfnd; print ('%d constraint equations' %(neq))
 
 # Export to Defmod .inp file
-if dsp_hyb==1:
-    fout = fin.rsplit('.')[0] + '_dsp.inp'
+if damp:
+    fout = fin.rsplit('.')[0] + '_damp.inp'
 else:
     fout = fin.rsplit('.')[0] + '.inp'
-print 'Writing to ' + fout + '...' 
+if dsp_hyb==1:
+    fout = fout.rsplit('.')[0] + '_dsp.inp'
+print ('Writing to ' + fout + '...')
 if os.path.isfile(fout): os.remove(fout)
 f = open(fout, 'a')
-# six parameter lines 
+
+# six parameter lines
 np.savetxt(f, line1, fmt='%s')
 neqNCF=0 # zero nonconformal nodes
-nfnode=0 # zero nodal force/flux 
+nfnode=0 # zero nodal force/flux
 line2=np.array([len(hx_node),nnd,len(mat),neq,nfnode,len(trac_el),len(abs_bc),nfnd,len(ogrid),neqNCF]).reshape(1,10)
 np.savetxt(f, line2, delimiter=' ', fmt='%d '*10)
 np.savetxt(f, line3, delimiter=' ', fmt='%g %g %d %d')
@@ -292,11 +308,11 @@ slip = np.array([0.0, 0.0, 0.0]).reshape(3,1)
 n=[2]
 for node_pos, node_neg, i in zip(ft_pos_nodes, ft_neg_nodes, range(len(ft_pos_nodes))):
     if node_pos != node_neg:
-        vec1  = [[1, 0, 0, node_pos], 
+        vec1  = [[1, 0, 0, node_pos],
                  [-1, 0, 0, node_neg]]
-        vec2  = [[0, 1, 0, node_pos], 
+        vec2  = [[0, 1, 0, node_pos],
                  [0, -1, 0, node_neg]]
-        vec3  = [[0, 0, 1,  node_pos], 
+        vec3  = [[0, 0, 1,  node_pos],
                  [0, 0, -1, node_neg]]
         mat_ft = np.hstack((vec_fs[i,:].reshape(3,1), vec_fd[i,:].reshape(3,1), vec_fn[i,:].reshape(3,1)))
         mat_f = np.matrix.transpose(mat_ft).reshape(1,9)
@@ -304,9 +320,9 @@ for node_pos, node_neg, i in zip(ft_pos_nodes, ft_neg_nodes, range(len(ft_pos_no
         cval1 = np.hstack((val[0], [0.,0.])).reshape(1,3)
         cval2 = np.hstack((val[1], [0.,0.])).reshape(1,3)
         cval3 = np.hstack((val[2], [0.,0.])).reshape(1,3)
-        np.savetxt(f, n, fmt = '%d') 
-        np.savetxt(f, vec1, delimiter = ' ', fmt = '%g %g %g %d') 
-        np.savetxt(f, cval1, delimiter = ' ', fmt = "%g %g %g") 
+        np.savetxt(f, n, fmt = '%d')
+        np.savetxt(f, vec1, delimiter = ' ', fmt = '%g %g %g %d')
+        np.savetxt(f, cval1, delimiter = ' ', fmt = "%g %g %g")
         np.savetxt(f, n, fmt = '%d')
         np.savetxt(f, vec2, delimiter = ' ', fmt = '%g %g %g %d')
         np.savetxt(f, cval2, delimiter = ' ', fmt = "%g %g %g")
@@ -328,5 +344,5 @@ np.savetxt(f,np.column_stack((trac_el,trac_bc)),delimiter=' ',fmt='%d %d '+'%g '
 np.savetxt(f,ogrid,delimiter=' ',fmt='%g '*3)
 # Absorbing boundaries
 np.savetxt(f,abs_bc,delimiter=' ',fmt='%d %d %d')
-f.close(); 
-print 'Defmod file '+fout+' created'
+f.close();
+print ('Defmod file '+fout+' created')

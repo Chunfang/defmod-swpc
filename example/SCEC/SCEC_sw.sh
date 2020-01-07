@@ -1,36 +1,36 @@
 #!/bin/sh
-#SBATCH --constraint=my OS # delete if uniform OS
-#SBATCH --exclusive        # no sharing node 
-#SBATCH -N 8               # num nodes
-#SBATCH -n 16              # num MPI 
-#SBATCH -c 8               # num thread per MPI  
-#SBATCH -t 12:00:00        # wall time  
-#SBATCH -p my part         # partition name
-#SBATCH -J SCEC_sw         # job name
-#SBATCH --mem=64000        # megabytes memory per node
+#SBATCH -p sched_mit_erl          # partition name
+#SBATCH --constraint=centos7
+#SBATCH --exclusive
+#SBATCH --nodelist=node[297-304]
+#SBATCH -n 16                     # num MPI 
+#SBATCH -c 8                      # num thread per MPI  
+#SBATCH -t 12:00:00               # wall time  
+#SBATCH -J SCEC_sw                # sensible name for the job
+#SBATCH --mem=51200               # this is specified in megabytes per node
+
+##SBATCH -N 8                     # num nodes
+##SBATCH --ntasks-per-node 2       # number of cores per node
+##SBATCH --mem=64000
+
 export I_MPI_PIN_DOMAIN=omp
 export OMP_NUM_THREADS=8
 
 # root dir
-export EXE_DIR=${HOME}/defmod-swpc/bin
-export TOOL_DIR=${HOME}/defmod-swpc/src/tool
+export EXE_DIR=${HOME}/GeoMech/defmod-swpc/bin
+export TOOL_DIR=${HOME}/GeoMech/defmod-swpc/src/tool
 
 # run spwc
-time mpirun ${EXE_DIR}/swpc_3d.x -i SCEC205.inf     -r SCEC205
-time mpirun ${EXE_DIR}/swpc_3d.x -i SCEC10.inf      -r SCEC10
+time mpirun ${EXE_DIR}/swpc_3d.x -i SCEC205_dsp.inf -r SCEC205_dsp
+time mpirun ${EXE_DIR}/swpc_3d.x -i SCEC10_dsp.inf  -r SCEC10_dsp
 time mpirun ${EXE_DIR}/swpc_3d.x -i SCEC102_dsp.inf -r SCEC102_dsp
 
-# sort in .mat (SCEC_sort.sh)
-# FE waveform and slip profile
-${TOOL_DIR}/def_sort.py SCEC205 slip clean
-${TOOL_DIR}/def_sort.py SCEC10  slip clean
-${TOOL_DIR}/def_sort.py SCEC102_dsp slip rsf clean
-# FD waveform 
-${TOOL_DIR}/fd_sort.py SCEC205
-${TOOL_DIR}/fd_sort.py SCEC10
-${TOOL_DIR}/fd_sort.py SCEC102_dsp
+# sort FD waveform
+time ${TOOL_DIR}/fd_sort.py SCEC205_dsp
+time ${TOOL_DIR}/fd_sort.py SCEC10_dsp
+time ${TOOL_DIR}/fd_sort.py SCEC102_dsp
 
-# compare FE, FE-FE against others (SCEC_plot.sh)
-./SCEC_plot.py -m SCEC205     -p 205 -r 1 -fd 1
-./SCEC_plot.py -m SCEC10      -p 10  -r 1 -fd 1
-./SCEC_plot.py -m SCEC102_dsp -p 102 -r 1 -fd 1 -d 1
+# Benchmark comparison
+./SCEC_plot.py -m SCEC205_dsp -p 205 -fd 1 -r 1 -d 1
+./SCEC_plot.py -m SCEC10_dsp  -p 10  -fd 1 -r 1 -d 1
+./SCEC_plot.py -m SCEC102_dsp -p 102 -fd 1 -r 1 -d 1

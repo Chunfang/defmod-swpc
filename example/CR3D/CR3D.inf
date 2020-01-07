@@ -91,10 +91,13 @@
 
   sw_wav_v         = .true.           !! velocity trace output at stations
   sw_wav_u         = .false.          !! displacement trace output at stations
+  sw_wav_stress    = .false.          !! stress tensor trace
+  sw_wav_strain    = .false.          !! strain tansor trace
   ntdec_w          = 5                !! time decimation of waveform output
   st_format        = 'xy'             !! station format: 'xy' or 'll'
   fn_stloc         = 'stloc.xy'       !! station location file
   wav_format       = 'sac'            !! 'sac' or 'csf'
+  wav_calc_dist    = .false.          !! explicitly set  the SAC dist header
 
   !! ----------------------------------------------------------------------- !!
   !! Earthquake Source

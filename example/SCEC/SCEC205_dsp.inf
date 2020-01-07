@@ -91,10 +91,13 @@
 
   sw_wav_v         = .true.           !! velocity trace output at stations
   sw_wav_u         = .false.          !! displacement trace output at stations
+  sw_wav_stress    = .false.          !! stress tensor trace
+  sw_wav_strain    = .false.          !! strain tansor trace
   ntdec_w          = 5                !! time decimation of waveform output
   st_format        = 'xy'             !! station format: 'xy' or 'll'
   fn_stloc         = 'stloc.xy'       !! station location file
   wav_format       = 'sac'            !! 'sac' or 'csf'
+  wav_calc_dist    = .false.          !! explicitly set  the SAC dist header
 
   !! ----------------------------------------------------------------------- !!
   !! Earthquake Source
@@ -152,9 +155,9 @@
     !! --------------------------------------------------------------------- !!
     !! For uniform velocity model 'uni'
     !!
-    vp0              = 5.716            !! P-wave velocity [km/s]
-    vs0              = 3.3              !! S-wave velocity [km/s]
-    rho0             = 2.7              !! mass density    [g/cm^3]
+    vp0              = 6.0              !! P-wave velocity [km/s]
+    vs0              = 3.464            !! S-wave velocity [km/s]
+    rho0             = 2.67             !! mass density    [g/cm^3]
     qp0              = 200.             !! Qp
     qs0              = 200.             !! Qs
     topo0            = 0                !! topography location
