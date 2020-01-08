@@ -10,6 +10,6 @@ Recommended: Must have Cubit/Trelis, Python (numpy, scipy, netCDF4, Anaconda 2.7
 2. Modify/run the Python section (numpy, scipy, netCDF4 required) in the SCEC_rup.sh file.
 3. Upload all inp, inf, stloc.xy, cfg files and SCECXXX folders to a $SCRATCH folder on cluster, and cd there.
 4. Modify the SCEC_rup.sh file (comment out Cubit/Python sections that have been executed), upload to the same folder, submit, and wait for successful exit.
-6, Note, use ssh -Y XXX to logon cluster. Modify, upload and submit SCEC_sw.sh (MPI size has to be consistent with inf and cfg files, or don't change).
+5. Note, use ssh -Y XXX to logon cluster. Modify, upload and submit SCEC_sw.sh (MPI size has to be consistent with inf and cfg files, or don't change).
 
 After successful executions, waveform and contour figures should appear in the same folder. 
