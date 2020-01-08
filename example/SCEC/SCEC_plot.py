@@ -161,8 +161,8 @@ for i in range(nobs):
             ymin_i = min((sign_df[j]*dat[j,:]).min(),(sign_df[j]*dat_fd[j,:]*scl).min(),dat_es[:,1:].min(),dat_fm[:,1:].min())*1.05
             ymax_i = max((sign_df[j]*dat[j,:]).max(),(sign_df[j]*dat_fd[j,:]*scl).max(),dat_es[:,1:].max(),dat_fm[:,1:].max())*1.05
         else:
-            ymin_i = min((sign_df[j]*dat[j,:]).min(),dat_fm[:,1:].min())*1.05
-            ymax_i = max((sign_df[j]*dat[j,:]).min(),dat_fm[:,1:].max())*1.05
+            ymin_i = min((sign_df[j]*dat[j,:]).min(),dat_es[:,1:].min(),dat_fm[:,1:].min())*1.05
+            ymax_i = max((sign_df[j]*dat[j,:]).max(),dat_es[:,1:].max(),dat_fm[:,1:].max())*1.05
         ymin=min(ymin,ymin_i)
         ymax=max(ymax,ymax_i)
         ax = plt.subplot(3,1,j+1)
