@@ -55,19 +55,19 @@
 
   snp_format       = 'netcdf'         !! snapshot format (native or netcdf)
 
-  xy_ps%sw         = .true.          !! P&S amp. for xy section
+  xy_ps%sw         = .true.           !! P&S amp. for xy section
   xz_ps%sw         = .true.           !! P&S amp. for xz section
   yz_ps%sw         = .false.          !! P&S amp. for yz section
   fs_ps%sw         = .true.           !! P&S amp. for free surface
   ob_ps%sw         = .false.          !! P&S amp. for ocean bottom
 
-  xy_v%sw          = .true.          !! 3-comp. velocity for xy section
+  xy_v%sw          = .true.           !! 3-comp. velocity for xy section
   xz_v%sw          = .true.           !! 3-comp. velocity for xz section
   yz_v%sw          = .false.          !! 3-comp. velocity for yz section
   fs_v%sw          = .true.           !! 3-comp. velocity for free surface
   ob_v%sw          = .false.          !! 3-comp. velocity for ocean bottom
 
-  xy_u%sw          = .true.          !! 3-comp. disp. for xy section
+  xy_u%sw          = .true.           !! 3-comp. disp. for xy section
   xz_u%sw          = .true.           !! 3-comp. disp. for xz section
   yz_u%sw          = .false.          !! 3-comp. disp. for yz section
   fs_u%sw          = .true.           !! 3-comp. disp. for free surface
@@ -149,7 +149,7 @@
   !!
 
   vmodel_type      = 'lhm'            !! velocity model type 'uni'/'grd'/'lhm'
-  is_ocean         = .false.           !! topography z<0 is covered by ocean
+  is_ocean         = .false.          !! topography z<0 is covered by ocean
   is_flatten       = .false.          !! Force topography variation zero
 
     !! --------------------------------------------------------------------- !!
@@ -193,21 +193,21 @@
   !! ----------------------------------------------------------------------- !!
   !! Reciprocity Green's Function Mode
   !!
-  green_mode       = .false.          !! reciprocity Green's function mode
-  green_stnm       = 'st01'           !! virtual station name from fn_stlst
-  green_cmp        = 'z'              !! virtual source direction 'x', 'y', 'z'
-  green_trise      = 1.0              !! rise time
-  green_bforce     = .false.          !! also calc. body force Green's function
-  green_maxdist    = 550.             !! horizontal limit of source grid
-  green_fmt        = 'llz'            !! list file format: 'xyz' or 'llz'
-  fn_glst          = 'example/green.lst'   !! Green's function grid point list
+  green_mode       = .false.             !! reciprocity Green's function mode
+  green_stnm       = 'st01'              !! virtual station name from fn_stlst
+  green_cmp        = 'z'                 !! virtual source direction 'x', 'y', 'z'
+  green_trise      = 1.0                 !! rise time
+  green_bforce     = .false.             !! also calc. body force Green's function
+  green_maxdist    = 550.                !! horizontal limit of source grid
+  green_fmt        = 'llz'               !! list file format: 'xyz' or 'llz'
+  fn_glst          = 'example/green.lst' !! Green's function grid point list
 
   !! ----------------------------------------------------------------------- !!
   !! MISC
   !!
 
-  stopwatch_mode   = .false.           !! measure computation time at routines
-  benchmark_mode   = .false.           !! benchmark mode
+  stopwatch_mode   = .false.          !! measure computation time at routines
+  benchmark_mode   = .false.          !! benchmark mode
 
   ipad             = 0                !! memory padding size for tuning
   jpad             = 0                !! memory padding size for tuning
