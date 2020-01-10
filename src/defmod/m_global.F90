@@ -1438,7 +1438,11 @@ contains
     real(8) :: m(:,:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
-    E=mat(id(el),1); nu=mat(id(el),2)
+    if (hyb>0) then
+       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+    else
+       E=mat(id(el),1); nu=mat(id(el),2)
+    end if
     dns=mat(id(el),5)
     call FormElAbsC(enodes,ecoords,side,dir,E,nu,dns,m)
     call FormElIndx(enodes,indx)
@@ -1451,7 +1455,11 @@ contains
     real(8) :: m(:,:),matabs(dmn,dmn),vec1(dmn),vec2(dmn),vec3(dmn)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
-    E=mat(id(el),1); nu=mat(id(el),2)
+    if (hyb>0) then
+       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+    else
+       E=mat(id(el),1); nu=mat(id(el),2)
+    end if
     dns=mat(id(el),5)
     select case(eltype)
     case("tri")
