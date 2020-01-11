@@ -102,7 +102,7 @@ contains
     call AddWinklerFdn(el,k)
     if (dyn) then
        call FormLocalIndx_dyn(enodes,indx)
-       if (poro) call AddELHSinvHt(ecoords,B,Kf,k)
+       !if (poro) call AddElHSinvHt(ecoords,E,nu,B,phi,Kf,k)
     else
        call FixBCinLocalK(el,k)
        if (poro .and. kfv) call FixFVLocalK(el,k)

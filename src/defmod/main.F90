@@ -1517,7 +1517,7 @@ program main
               end do
            end if
            call FormRHS
-           if (poro .and. tstep>1) call AddFluidGravity
+           !if (poro .and. tstep>1) call AddFluidGravity
            if (fail) then
               call FaultSlip_sta
               ! Backup QS slip

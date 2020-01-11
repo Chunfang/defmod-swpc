@@ -132,20 +132,22 @@ contains
   end subroutine FormElKp
 
   ! Dynamic poroelastic stiffness
-  subroutine AddELHSinvHt(ecoords,Bc,Kf,k)
+  subroutine AddElHSinvHt(ecoords,E,nu,Bc,fi,Kf,k)
     implicit none
     real(8) :: ecoords(npel,dmn),Bc,Kf,dN(dmn,npel),detj,B(cdmn,eldof),SinvB2, &
-       m(cdmn,1)
+       m(cdmn,1),N(1,npel),E,nu,fi,Kb
     real(8),target :: k(eldof,eldof)
     integer :: i
-    SinvB2=Kf*Bc**2
+    Kb=E/(f3*(f1-f2*nu))
+    SinvB2=f1/((Bc-fi)*(f1-Bc)/Kb+fi/Kf)*Bc**2
     if (dmn==2) m(:,1)=(/f1,f1,f0/)
     if (dmn==3) m(:,1)=(/f1,f1,f1,f0,f0,f0/)
     do i=1,nip
        call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
        call BMat(dN,B)
-       k=k+matmul(transpose(B),matmul(matmul(m,transpose(m)),B))*SinvB2*       &
-          weight(i)*detj
+       call ShapeFunc(N(1,:),ipoint(i,:))
+       k=k+matmul(transpose(B),matmul(matmul(matmul(m,N),transpose(matmul(m,   &
+          N))),B))*SinvB2*weight(i)*detj
     end do
   end subroutine AddELHSinvHt
 
