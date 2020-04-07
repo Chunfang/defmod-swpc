@@ -242,7 +242,6 @@ contains
     call VecDuplicate(Vec_Up,Vec_Cp,ierr)
     call VecDuplicate(Vec_Up,Vec_Up_fv,ierr)
     call VecZeroEntries(Vec_Cp,ierr)
-    call VecZeroEntries(Vec_Up_fv,ierr)
     do i=1,nels
        call FormLocalK(i,k,indx,"Kp",psync=.true.)
        indx=indxmap(indx,2)
@@ -254,8 +253,6 @@ contains
           call VecSetValue(Vec_Cp,row,k(j2,j2),Add_Values,ierr)
           call VecSetValue(Vec_Up,row,p_fv0(nodes(i,j))/scale,Insert_Values,   &
              ierr)
-          call VecSetValue(Vec_Up_fv,row,p_fv0(nodes(i,j))/scale,Insert_Values,&
-             ierr)
        end do
     end do
     ! Account for constraint eqn's
@@ -264,10 +261,9 @@ contains
     call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
     call VecAssemblyBegin(Vec_Cp,ierr)
     call VecAssemblyEnd(Vec_Cp,ierr)
-    call VecAssemblyBegin(Vec_Up_fv,ierr)
-    call VecAssemblyEnd(Vec_Up_fv,ierr)
     call VecAssemblyBegin(Vec_Up,ierr)
     call VecAssemblyEnd(Vec_Up,ierr)
+    call VecCopy(Vec_Up,Vec_Up_fv,ierr)
     ! Rescale RHS by pressure coefficient
     call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
@@ -293,8 +289,8 @@ contains
     call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
     call VecDuplicate(Vec_Up,Vec_Cp,ierr)
     call VecDuplicate(Vec_Up,Vec_Up_fv,ierr)
+    call VecZeroEntries(Vec_Up,ierr)
     call VecZeroEntries(Vec_Cp,ierr)
-    call VecZeroEntries(Vec_Up_fv,ierr)
     ! Initial pressure
     call h5open_f(err)
     call h5fopen_f(trim(nameh5),H5F_ACC_RDWR_F,idfile,err)
@@ -324,7 +320,6 @@ contains
           row=nl2g(nodes(i,j),2)-1
           call VecSetValue(Vec_Cp,row,k(j2,j2),Add_Values,ierr)
           call VecSetValue(Vec_Up,row,cp*p_cell/scale,Add_Values,ierr)
-          call VecSetValue(Vec_Up_fv,row,cp*p_cell/scale,Add_Values,ierr)
        end do
     end do
     call h5dclose_f(iddat,err)
@@ -339,11 +334,9 @@ contains
     call VecAssemblyEnd(Vec_Cp,ierr)
     call VecAssemblyBegin(Vec_Up,ierr)
     call VecAssemblyEnd(Vec_Up,ierr)
-    call VecAssemblyBegin(Vec_Up_fv,ierr)
-    call VecAssemblyEnd(Vec_Up_fv,ierr)
     ! Average by weight
     call VecPointwiseDivide(Vec_Up,Vec_Up,Vec_Cp0,ierr)
-    call VecPointwiseDivide(Vec_Up_fv,Vec_Up_fv,Vec_Cp0,ierr)
+    call VecCopy(Vec_Up,Vec_Up_fv,ierr)
     ! Rescale RHS by pressure coefficient
     call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr)
     call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
@@ -352,8 +345,6 @@ contains
     call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
     call VecAXPY(Vec_Uu,-f1,Vec_fp,ierr)
     call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)
-    ! Remove hydrostatic RHS
-    !call ResetRHS
   end subroutine FVReformKFUsg
 
   subroutine FVReformKPerm(t_sync,ef_eldof)

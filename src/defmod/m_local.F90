@@ -75,25 +75,38 @@ contains
   end subroutine RscElKv
 
   ! Form element [Kp]
-  subroutine FormElKp(ecoords,estress,E,nu,visc,expn,H,Bc,fi,Kf,theta,scale,   &
+  subroutine FormElKp(ecoords,estress,E,nu,visc,expn,H,Hf,Bc,fi,Kf,theta,scale,&
     dt,k,strng)
     implicit none
     real(8) :: ecoords(npel,dmn),estress(nip,cdmn),E,nu,visc,expn,H,Bc,fi,Kf,  &
        theta,scale,dt,D(cdmn,cdmn),alpha,V(cdmn,cdmn),Q(dmn,dmn),s,m(cdmn,1),  &
-       pN,G,Kb,Ksinv,dN(dmn,npel),detj,B(cdmn,eldof),N(1,npel),betad(cdmn,cdmn)
+       pN,G,Kb,Ksinv,dN(dmn,npel),detj,B(cdmn,eldof),N(1,npel),vec3(dmn),      &
+       betad(cdmn,cdmn),Hf(dmn+(dmn-1)*dmn),Qf(dmn,dmn),matr(dmn,dmn)
     real(8),target :: k(eldof+eldofp,eldof+eldofp)
     real(8),pointer :: kl(:,:)
     integer :: i
     character(2) :: strng
-    k=f0; Q=f0
+    k=f0; Q=f0; Qf=f0
     call DMat(D,E,nu)
     if (strng=="Kv") then
        alpha=f1
        call MatInv(D,V)
     end if
     do i=1,dmn
-       Q(i,i)=H
+       Q(i,i)=H; Qf(i,i)=Hf(i)
+       if (dmn>2 .and. i<3) then
+          matr(i,:)=Hf(dmn+(i-1)*dmn+1:dmn+i*dmn)
+       end if
     end do
+    if (dmn<3) then
+       matr(1,:)=Hf(dmn+1:dmn+2); matr(2,:)=(/Hf(dmn+2),-Hf(dmn+1)/)
+    else ! 3D tensor valued transmissibility
+       call Cross(matr(1,:),matr(2,:),vec3)
+       matr(3,:)=vec3/sqrt(sum(vec3*vec3))
+    end if
+    ! Rotate to Cartesian coordinate
+    Qf=matmul(transpose(matr),matmul(Qf,matr))
+    Q=Q+Qf
     s=scale
     if (dmn==2) m(:,1)=(/f1,f1,f0/)
     if (dmn==3) m(:,1)=(/f1,f1,f1,f0,f0,f0/)

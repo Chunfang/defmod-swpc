@@ -222,13 +222,19 @@ program main
   deallocate(work)
   ! Read material data assuming nels >> nmts, i.e., all ranks store all data
   if (fault .or. galf) then
-     allocate(mat(nmts,5+4*p+init+2+2*rve))
+     allocate(mat(nmts,5+5*p+init+2+2*rve))
   else
      allocate(mat(nmts,5+4*p+2*rve))
   end if
+  if (poro) allocate(Hhf(nmts,dmn+(dmn-1)*dmn))
   do i=1,nmts
      read(10,*)mat(i,:)
   end do
+  if (poro) then ! HF transmissibility
+     do i=1,nmts
+        read(10,*)Hhf(i,:)
+     end do
+  end if
   if (rve>0 .and. nincl>0) then
      allocate(incls(nincl,11))
      do i=1,nincl
@@ -360,7 +366,9 @@ program main
 
   ! Allocate arrays to store loading history
   allocate(cval(nceqs,3),fnode(nfrcs),fval(nfrcs,dmn+p+2),telsd(ntrcs,2),      &
-     tval(ntrcs,dmn+p+2)); cval=f0; fval=f0; tval=f0
+     tval(ntrcs,dmn+p+2),vsel(nvsrc),vsval(nvsrc,dmn+p+2),unodes(nceqs_pix),   &
+     pnodes(nceqs_pix))
+     cval=f0; fval=f0; tval=f0; vsval=f0; unodes=0; pnodes=0
 
   ! Account for constraint eqn's
   if (nceqs>0) then
@@ -370,9 +378,10 @@ program main
            nceqs,3,Petsc_Null_Integer,3,Petsc_Null_Integer,Mat_Gt,ierr)
         call MatSetOption(Mat_Gt,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
            ierr)
-     elseif ((fault .or. galf) .and. nceqs-nceqs_ncf>0 .and. hyb>0) then
-        call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs_ncf/(dmn+p)+nfnd,&
-           Vec_lm_pn,ierr)
+     elseif ((fault .or. galf) .and. nceqs-nceqs_ncf-nceqs_pix>0 .and. hyb>0)  &
+          then
+        call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs_ncf/(dmn+p)+     &
+          nfnd,Vec_lm_pn,ierr)
         call VecGetLocalSize(Vec_lm_pn,n_lmnd,ierr)
         call VecGetOwnershipRange(Vec_lm_pn,lmnd0,j,ierr)
         call VecDuplicate(Vec_lm_pn,Vec_lm_f2s,ierr)
@@ -401,12 +410,21 @@ program main
      end if
      if (rank==0) open(15,file=trim(output_file(:index(output_file,"/",        &
         BACK=.TRUE.)))//"cnstrns.tmp",status="replace")
+     j1=0
      do i=1,nceqs
         read(10,*)n
         if (rank==0) write(15,*)n
         do j=1,n
            read(10,*)vvec,node; node=nmap(node)
            if (rank==0) write(15,*)real(vvec),node
+           if (i>nceqs_ncf .and. i<=nceqs_ncf+nceqs_pix) then
+              j1=j1+1
+              if (sum(vvec(:dmn)*vvec(:dmn))>f0) then ! U constraints
+                 unodes(j1)=node
+              else ! P constraints
+                 pnodes(j1)=node
+              end if
+           end if
         end do
         read(10,*)cval(i,:)
         if (poro) then
@@ -429,18 +447,9 @@ program main
            stx_init(nxflt,dmn),xlock(nxflt))
         biot=f1
         if (rsf==1) allocate(rsfb0(nfnd),rsfV0(nfnd),rsfdtau0(nfnd),rsfa(nfnd),&
-            rsfb(nfnd),rsfL(nfnd),rsftheta(nfnd))
+           rsfb(nfnd),rsfL(nfnd),rsftheta(nfnd))
         do i=1,nfnd
-           if (poro .and. init==1) then
-              if (rsf==1) then
-                 read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
-                    rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
-                    perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i)
-              else
-                 read(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),    &
-                    dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i)
-              end if
-           else if (poro) then
+           if (poro) then
               if (rsf==1) then
                  read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
                     rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
@@ -492,7 +501,11 @@ program main
   do i=1,ntrcs
      read(10,*)telsd(i,:),tval(i,:)
   end do
-  fnode=nmap(fnode); telsd(:,1)=emap(telsd(:,1)) ! Remap nodes/els
+  do i=1,nvsrc
+     read(10,*)vsel(i),vsval(i,:)
+  end do
+  fnode=nmap(fnode); telsd(:,1)=emap(telsd(:,1))
+  vsel=emap(vsel) ! Remap nodes/els
   call FormRHS
   call VecAssemblyBegin(Vec_F,ierr)
   call VecAssemblyEnd(Vec_F,ierr)
@@ -513,9 +526,9 @@ program main
      n_log_dyn=0
   end if
 
-  ! FD domain grid bocks containing fault nodes, xgp, idgp(_loc), gpnlst,
+  ! FD domain grid blocks containing fault nodes, xgp, idgp(_loc), gpnlst,
   ! gpshape
-  if (nceqs-nceqs_ncf>0 .and. fdout==1) then
+  if (nceqs-nceqs_ncf-nceqs_pix>0 .and. fdout==1) then
      call PrintMsg("Locating FD grid points ...")
      call FDInit
      call GetFDFnd
@@ -808,7 +821,7 @@ program main
   ! Generalized-alpha implicit Solver
   if (galf) then
      ! Local to global fault node map
-     if (nceqs-nceqs_ncf>0) then
+     if (nceqs-nceqs_ncf-nceqs_pix>0) then
         call GetFltMap
         if (Xflt>1) call GetXfltMap ! Intersection
      end if
@@ -855,7 +868,7 @@ program main
      do i=1,j
         if (j1+i-1<dmn*nnds) then
            j3=j3+1
-        elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
+        elseif (j1+i-1>=dmn*nnds+nceqs_ncf+nceqs_pix) then
            j4=j4+1
         end if
      end do
@@ -865,7 +878,7 @@ program main
         if (j1+i-1<dmn*nnds) then
            j3=j3+1
            worku(j3)=j1+i-1
-        elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
+        elseif (j1+i-1>=dmn*nnds+nceqs_ncf+nceqs_pix) then
            j4=j4+1
            workl(j4)=j1+i-1
         end if
@@ -1062,7 +1075,7 @@ program main
   ! Fault/hybrid solver
   if (fault) then
      ! Local to global fault node map
-     if (nceqs-nceqs_ncf>0) then
+     if (nceqs-nceqs_ncf-nceqs_pix>0) then
         call GetFltMap
         if (Xflt>1) call GetXfltMap ! Intersection
      end if
@@ -1084,7 +1097,7 @@ program main
               j2=j2+1
            elseif (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
               j3=j3+1
-           elseif (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
+           elseif (j1+i-1>=(dmn+1)*nnds+nceqs_ncf+nceqs_pix) then
               j4=j4+1
            end if
         end do
@@ -1097,7 +1110,7 @@ program main
            elseif (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
               j3=j3+1
               worku(j3)=j1+i-1
-           elseif (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
+           elseif (j1+i-1>=(dmn+1)*nnds+nceqs_ncf+nceqs_pix) then
               j4=j4+1
               workl(j4)=j1+i-1
            end if
@@ -1113,7 +1126,7 @@ program main
 #else
         call MatCreateSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
 #endif
-        if (nceqs > 0) then
+        if (nceqs>0) then
            j=size(workl)
            call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values,    &
               RIl,ierr)
@@ -1156,10 +1169,10 @@ program main
            call VecZeroEntries(Vec_nrm,ierr)
         end if
         call VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-        ! Initialize pore pressure from FV model
+        ! Initialize pore pressure from FV model or hydo-statics
+        call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
         if (fvin>0) then
            call PrintMsg("Initializing FV pressure ...")
-           call VecZeroEntries(Vec_Um,ierr) ! Zero absolute U
            ! Form [K] and F with FE domain pressure imposed by FV
            if (fvin<3) then
               call FVInit
@@ -1168,13 +1181,19 @@ program main
               call FVInitUsg
               call FVReformKFUsg(ef_eldof)
            end if
+        else ! Gradient (grad) or uniform (unif) inititial pressure
+           if (bod_frc==1) then
+              call ReformKFPfix(ef_eldof,"grad")
+           else
+              call ReformKFPfix(ef_eldof,"cnst")
+           end if
         end if
      else ! Not poroelastic
         j3=0; j4=0
         do i=1,j
            if (j1+i-1<dmn*nnds) then
               j3=j3+1
-           elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
+           elseif (j1+i-1>=dmn*nnds+nceqs_ncf+nceqs_pix) then
               j4=j4+1
            end if
         end do
@@ -1184,7 +1203,7 @@ program main
            if (j1+i-1<dmn*nnds) then
               j3=j3+1
               worku(j3)=j1+i-1
-           elseif (j1+i-1>=dmn*nnds+nceqs_ncf) then
+           elseif (j1+i-1>=dmn*nnds+nceqs_ncf+nceqs_pix) then
               j4=j4+1
               workl(j4)=j1+i-1
            end if
@@ -1351,6 +1370,8 @@ program main
               ! Single phase [K] with pressure partially synced with FV
               if (fvin==1) call FVReformKPerm(f0,ef_eldof)
               if (fvin==3) call FVReformKPermUsg(f0,ef_eldof)
+           else
+              call ReformKP(ef_eldof)
            end if
         else ! Not poro
            call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
@@ -1493,7 +1514,8 @@ program main
               j=size(uup)
               call VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
               call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-              if (fvin>0) then! Remove hydrostatic pressure gradient from RHS
+              ! Remove hydrostatic pressure gradient from RHS
+              if (fvin>0 .or. bod_frc==1) then
                  call MatMult(Mat_Kc,Vec_Up_hst,Vec_I,ierr)
                  call VecScale(Vec_I,dt,ierr)
                  call VecGetArrayF90(Vec_I,pntr,ierr)
@@ -1563,10 +1585,10 @@ program main
            ! Extract nodal force by p
            if (poro) then
               ! Reset tot_uu at step 1
-              if (tstep==1 .and. fvin>0) then
-                 tot_uu=f0
-                 if (nobs_loc>0) tot_uu_obs=f0
-              end if
+              !if (tstep==1 .and. (fvin>0 .or. bod_frc==1)) then
+              !   tot_uu=f0
+              !   if (nobs_loc>0) tot_uu_obs=f0
+              !end if
               if (vout==1 .and. mod(tstep,frq)==0) then
                  ! Extract force by p
                  call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
@@ -1616,7 +1638,7 @@ program main
            end if
 
            ! Determine if the fault shall fail by LM
-           if (nceqs-nceqs_ncf>0 .and. hyb>0) then
+           if (nceqs-nceqs_ncf-nceqs_pix>0 .and. hyb>0) then
               call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               call LM_s2d
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
@@ -2085,16 +2107,17 @@ contains
     if (stype=="alpha" .or. stype=="alpha-rve") galf=.true.
     if (fault .or. gf .or. galf) then
        if (rve>0) then
-          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf,&
-             nincl
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nvsrc,nabcs,nfnd,nobs,    &
+             nceqs_ncf,nceqs_pix,nincl
        else
-          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nvsrc,nabcs,nfnd,nobs,    &
+             nceqs_ncf,nceqs_pix
        end if
     else
        if (rve>0) then
-          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs,nincl
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nvsrc,nabcs,nobs,nincl
        else
-          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs
+          read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nvsrc,nabcs,nobs
        end if
     end if
     read(10,*)t,dt,frq,dsp
@@ -2107,7 +2130,7 @@ contains
     if (fault .or. galf) then
        lm_str=.false. ! Calculate LM to stress ratio: lm*r_f2s = str
        read(10,*)t_dyn,dt_dyn,frq_dyn,t_lim,dsp_hyb,Xflt,bod_frc,hyb,rsf,init
-       if (nceqs-nceqs_ncf>0) lm_str=.true.
+       if (nceqs-nceqs_ncf-nceqs_pix>0) lm_str=.true.
        if (galf) dt_dyn=dt
        ! One time (dt = 24hr) fluid source for initial pressure condition
        if (init==1 .and. poro) then

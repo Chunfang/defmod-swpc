@@ -17,20 +17,23 @@ module global
   ! Global variables
   integer :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,Xflt,    &
      bod_frc,steps,tstep,steps_dyn,tstep_dyn,nfnd,hyb,frq_dyn,nobs,n_log,      &
-     n_log_dyn,n_log_wave,ih,igf,rsf,n_log_slip,nceqs_ncf,init,frq_wave,       &
-     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,fvin,rve,nincl,nxflt
+     n_log_dyn,n_log_wave,ih,igf,rsf,n_log_slip,nceqs_ncf,nceqs_pix,init,      &
+     frq_wave,frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,fvin,rve,    &
+     nincl,nxflt,nvsrc
   real(8) :: alpha,beta,t,dt,t_dyn,dt_dyn,t_lim,val,wt,scale,rslip,t_ext,t_abs,&
      t_hyb,v_bg,vtol,trunc
   integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
      worku(:),workl(:),node_pos(:),node_neg(:),slip(:),perm(:),onlst(:,:),     &
      frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),gpl2g(:), &
-     nnd_fe2fd(:),fdact_loc(:),matFD(:,:),xpair(:),XFltMap(:),oel(:)
+     nnd_fe2fd(:),fdact_loc(:),matFD(:,:),xpair(:),XFltMap(:),oel(:),vsel(:),  &
+     unodes(:),pnodes(:)
   real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:),xfnd(:,:),     &
      ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),biot(:),           &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
      mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:),incls(:,:),       &
-     vecxf(:,:),stx_init(:,:),st_obs(:,:),tot_st_obs(:,:),trac_dyn(:,:)
+     vecxf(:,:),stx_init(:,:),st_obs(:,:),tot_st_obs(:,:),trac_dyn(:,:),       &
+     Hhf(:,:),vsval(:,:)
   real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
      fl(:),ql(:),flc(:),fp(:),qu(:),ss(:),sh(:),f2s(:),dip(:),nrm(:),          &
      flt_slip(:),tot_flt_slip(:),res_flt_slip(:),qs_flt_slip(:)
@@ -73,20 +76,20 @@ contains
   subroutine FormLocalK(el,k,indx,strng,psync)
     implicit none
     integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn)
+    real(8) :: k(:,:),estress(nip,cdmn),Hf(9)
     character(2) :: strng
     logical,optional :: psync
-    logical :: kfv
+    logical :: pfix
     if (present(psync)) then
-       kfv=psync
+       pfix=psync
     else
-       kfv=.false.
+       pfix=.false.
     end if
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     if (visco) estress=stress(el,:,:)
     if (dyn) then
-       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+       E=mat(id(el),5+5*p+init+1); nu=mat(id(el),5+5*p+init+2)
     else
        E=mat(id(el),1); nu=mat(id(el),2)
     end if
@@ -94,10 +97,10 @@ contains
     if ((.not. poro) .or. strng=="Ke") then
        call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
     else
-       H=mat(id(el),6)
+       H=mat(id(el),6); Hf=Hhf(id(el),:)
        B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
-       call FormElKp(ecoords,estress,E,nu,visc,expn,H,B,phi,Kf,1.0d0,scale,dt, &
-          k,strng)
+       call FormElKp(ecoords,estress,E,nu,visc,expn,H,Hf,B,phi,Kf,1.0d0,scale, &
+          dt,k,strng)
     end if
     call AddWinklerFdn(el,k)
     if (dyn) then
@@ -105,7 +108,7 @@ contains
        !if (poro) call AddElHSinvHt(ecoords,E,nu,B,phi,Kf,k)
     else
        call FixBCinLocalK(el,k)
-       if (poro .and. kfv) call FixFVLocalK(el,k)
+       if (poro .and. pfix) call FixPLocalK(el,k,nl2g(enodes,2))
        call FormLocalIndx(enodes,indx)
     end if
   end subroutine FormLocalK
@@ -118,7 +121,7 @@ contains
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     if (dyn) then
-       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+       E=mat(id(el),5+5*p+init+1); nu=mat(id(el),5+5*p+init+2)
     else
        E=mat(id(el),1); nu=mat(id(el),2)
     end if
@@ -245,7 +248,6 @@ contains
        "cnstrns.tmp",status='old')
     j4=0
     do i=1,nceqs
-       if (poro .and. mod(i,dmn+1)>0) j4=j4+1
        read(15,*)n
        do j=1,n
           read(15,*)vvec,node
@@ -257,13 +259,12 @@ contains
              end do
           end if
           if ((explicit .or. fault .or. galf) .and. .not. tap) then
+             ! Exclude pressure and pixel constraints
+             if (sum(vvec(:dmn)*vvec(:dmn))>f0 .and. j==1 .and. (i<=nceqs_ncf  &
+                .or. i>nceqs_ncf+nceqs_pix)) j4=j4+1
              do j1=1,dmn
                 j2=dmn*node-dmn+j1-1; j3=i-1
-                if (poro .and. mod(i,dmn+1)>0) then
-                   call MatSetValue(Mat_Gt,j2,j4-1,vvec(j1),Add_Values,ierr)
-                elseif (.not. poro) then
-                   call MatSetValue(Mat_Gt,j2,j3,vvec(j1),Add_Values,ierr)
-                end if
+                call MatSetValue(Mat_Gt,j2,j4-1,vvec(j1),Add_Values,ierr)
              end do
           end if
        end do
@@ -283,10 +284,10 @@ contains
 #include "petsc.h"
 #endif
     integer :: j,j1,j3,j4,u1,u2,workpos(dmn),workneg(dmn),row(1)
-    real(8) :: lm(dmn),vecfl(dmn),lmq(1),q
+    real(8) :: lm(dmn),vecfl(dmn),tmp(1),q
     call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
     do j=1,nfnd
-       lm=f0; vecfl=f0; lmq=f0; q=f0
+       lm=f0; vecfl=f0; q=f0
        do j1=1,dmn
           workpos(j1)=dmn*node_pos(j)-dmn+j1-1
           workneg(j1)=dmn*node_neg(j)-dmn+j1-1
@@ -296,17 +297,18 @@ contains
              row=dmn*(j-1)+j1-1
           end if
           if (row(1)>=u1 .and. row(1)<u2) then
-             call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
+             call VecGetValues(Vec_Ul,1,row,tmp,ierr)
+             lm(j1)=tmp(1)
           end if
        end do
        call MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
           ierr)
        if (poro .and. perm(j)==1) then
-           row=row+1
+           row=row+1; tmp=f0
            if (row(1)>=u1 .and. row(1)<u2) then
-              call VecGetValues(Vec_Ul,1,row,lmq,ierr)
+              call VecGetValues(Vec_Ul,1,row,tmp,ierr)
            end if
-           call MPI_Reduce(lmq,q,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,   &
+           call MPI_Reduce(tmp,q,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,   &
               ierr)
        end if
        if (rank==nprcs-1) then
@@ -349,7 +351,7 @@ contains
 #include "petsc.h"
 #endif
     integer :: j,j1,u1,u2,r1,r2,workpos(dmn),workneg(dmn),row(1),row_f2s(1)
-    real(8) :: lm(dmn),vecfl(dmn),rvec(dmn),rf2s(dmn)
+    real(8) :: lm(dmn),vecfl(dmn),rvec(dmn),rf2s(dmn),tmp(1)
     logical,save :: tap=.false.
     call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
     if (tap) call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
@@ -364,12 +366,14 @@ contains
              row=dmn*(j-1)+j1-1
           end if
           if (row(1)>=u1 .and. row(1)<u2) then
-             call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
+             call VecGetValues(Vec_Ul,1,row,tmp,ierr)
+             lm(j1)=tmp(1)
           end if
           if (tap) then
              row_f2s=dmn*node_pos(j)-dmn+j1-1
              if (row_f2s(1)>=r1 .and. row_f2s(1)<r2) then
-                call VecGetValues(Vec_f2s,1,row_f2s,rvec(j1),ierr)
+                call VecGetValues(Vec_f2s,1,row_f2s,tmp,ierr)
+                rvec(j1)=tmp(1)
              end if
           end if
        end do
@@ -1259,10 +1263,10 @@ contains
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        if (poro) then
-          rw_sta=(dmn+1)*nnds+nceqs_ncf+(/((j3-1)*dmn+sum(perm(1:j3-1))        &
-             +j2-1,j2=1,dmn)/)
+          rw_sta=(dmn+1)*nnds+nceqs_ncf+nceqs_pix+(/((j3-1)*dmn+               &
+             sum(perm(1:j3-1))+j2-1,j2=1,dmn)/)
        else
-          rw_sta=dmn*nnds+nceqs_ncf+(/((j3-1)*dmn+j2-1,j2=1,dmn)/)
+          rw_sta=dmn*nnds+nceqs_ncf+nceqs_pix+(/((j3-1)*dmn+j2-1,j2=1,dmn)/)
        end if
        vec=tot_flt_slip(rw_loc)
        ! Zero non-slip components, and rotate to Cartesian
@@ -1397,6 +1401,25 @@ contains
     end do
   end subroutine ApplyTraction
 
+  ! Apply force to volume
+  subroutine ApplyVolSrc(el,vvec)
+    implicit none
+    integer :: el,nd,i,j,enode
+    real(8) :: vvec(:)
+    real(8),allocatable :: vec(:)
+    nd=size(vvec); allocate(vec(nd))
+    enodes=nodes(el,:)
+    vvec=vvec/dble(nps)
+    do i=1,nps
+       vec=vvec
+       do j=1,nd
+          if (bc(enodes(i),j)==0) vec(j)=f0
+       end do
+       enode=nl2g(enodes(i),2)
+       call ApplyNodalForce(enode,vec)
+    end do
+  end subroutine ApplyVolSrc
+
   ! Form RHS
   subroutine FormRHS
     implicit none
@@ -1429,6 +1452,13 @@ contains
           if (el/=0) call ApplyTraction(el,side,vvec)
        end if
     end do
+    do i=1,nvsrc
+       t1=vsval(i,dmn+p+1)/dt; t2=vsval(i,dmn+p+2)/dt
+       if (tstep>=nint(t1) .and. tstep<=nint(t2)) then
+          el=vsel(i); vvec=vsval(i,1:dmn+p)
+          if (el/=0) call ApplyVolSrc(el,vvec)
+       end if
+    end do
   end subroutine FormRHS
 
   ! Form local damping matrix for elements with viscous dampers
@@ -1439,7 +1469,7 @@ contains
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     if (hyb>0) then
-       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+       E=mat(id(el),5+5*p+init+1); nu=mat(id(el),5+5*p+init+2)
     else
        E=mat(id(el),1); nu=mat(id(el),2)
     end if
@@ -1456,7 +1486,7 @@ contains
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     if (hyb>0) then
-       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+       E=mat(id(el),5+5*p+init+1); nu=mat(id(el),5+5*p+init+2)
     else
        E=mat(id(el),1); nu=mat(id(el),2)
     end if
@@ -1530,13 +1560,13 @@ contains
     call FormElIndx(enodes,indx)
   end subroutine FormLocalAbsC1
 
-  subroutine Cross(a,b,r)
-    implicit none
-    real(8) :: a(3),b(3),r(3)
-    r(1)=a(2)*b(3)-a(3)*b(2)
-    r(2)=a(3)*b(1)-a(1)*b(3)
-    r(3)=a(1)*b(2)-a(2)*b(1)
-  end subroutine Cross
+  !subroutine Cross(a,b,r)
+  !  implicit none
+  !  real(8) :: a(3),b(3),r(3)
+  !  r(1)=a(2)*b(3)-a(3)*b(2)
+  !  r(2)=a(3)*b(1)-a(1)*b(3)
+  !  r(3)=a(1)*b(2)-a(2)*b(1)
+  !end subroutine Cross
 
   ! Form local index
   subroutine FormLocalIndx(enodes,indx)
@@ -1683,22 +1713,6 @@ contains
        if (bc(nodes(el,j),dmn+1)==0 .or. bc(nodes(el,j),dmn+1)==2) Hs(j)=f0
     end do
   end subroutine FormLocalHs
-
-  ! Signed distance point to plane/line
-  subroutine Mix3D(a,b,c,m)
-    implicit none
-    real(8) :: a(3),b(3),c(3),r(3),m
-    r(1)=a(2)*b(3)-a(3)*b(2)
-    r(2)=a(3)*b(1)-a(1)*b(3)
-    r(3)=a(1)*b(2)-a(2)*b(1)
-    m=(r(1)*c(1)+r(2)*c(2)+r(3)*c(3))/(r(1)*r(1)+r(2)*r(2)+r(3)*r(3))
-  end subroutine Mix3D
-  subroutine Mix2D(a,b,m)
-    implicit none
-    real(8) :: a(2),b(2),a3(3),b3(3),c3(3),m
-    a3=(/f0,f0,f1/); b3=(/a(:),f0/); c3=(/b(:),f0/)
-    call Mix3D(a3,b3,c3,m)
-  end subroutine Mix2D
 
   ! Observation/FD nodal base
   subroutine GetObsNd(strng)
@@ -2083,17 +2097,19 @@ contains
   end subroutine FixBCinLocalK
 
   ! Fixed pressure at local [k]
-  subroutine FixFVLocalK(el,k)
+  subroutine FixPLocalK(el,k,npfix)
     implicit none
-    integer :: el,j,j2
+    integer :: el,j,j2,npfix(:)
     real(8) :: k(:,:),tmp
     do j=1,npel
-       j2=dmn*npel+j
-       tmp=k(j2,j2)
-       k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
-       k(j2,j2)=tmp
+       if (.not. any(pnodes(:)==npfix(j))) then ! Unconstrained pressure
+          j2=dmn*npel+j
+          tmp=k(j2,j2)
+          k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
+          k(j2,j2)=tmp
+       end if
     end do
-  end subroutine FixFVLocalK
+  end subroutine FixPLocalK
 
   subroutine FixFVLocalKBD(el,k) ! Only for boundary condition
     implicit none
@@ -2108,6 +2124,91 @@ contains
        end if
     end do
   end subroutine FixFVLocalKBD
+
+  subroutine ReformKFPfix(ef_eldof,ptyp)
+implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h"
+#endif
+    character(4) :: ptyp
+    integer :: ef_eldof,i,j,j2,row
+    real(8) :: depth,p_hst,dp,gradp,zmin,zmax,pfix
+    gradp=12.D3 ! Pressure gradient density*g
+    call MatZeroEntries(Mat_K,ierr)
+    call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
+    call VecDuplicate(Vec_Up,Vec_Cp,ierr)
+    call VecDuplicate(Vec_Up,Vec_Up_hst,ierr)
+    call VecDuplicate(Vec_Up,Vec_Up_fv,ierr)
+    call VecZeroEntries(Vec_Cp,ierr)
+    if (ptyp=="cnst") then ! Uniform median pressure
+       call MPI_Allreduce(minval(coords(:,dmn)),zmin,1,MPI_Real8,MPI_Min,      &
+          MPI_Comm_World,ierr)
+       call MPI_Allreduce(maxval(coords(:,dmn)),zmax,1,MPI_Real8,MPI_Max,      &
+          MPI_Comm_World,ierr)
+       depth=-(zmin+zmax)/f2
+       pfix=depth*gradp
+    end if
+    do i=1,nels
+       call FormLocalK(i,k,indx,"Kp",psync=.true.)
+       indx=indxmap(indx,2)
+       call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
+       ! Record pressure coefficient and pressure
+       do j=1,npel
+          if (ptyp=="grad") then
+             depth=-coords(nodes(i,j),dmn)
+             p_hst=depth*gradp
+          elseif (ptyp=="cnst") then
+             p_hst=pfix
+          end if
+          j2=dmn*npel+j
+          row=nl2g(nodes(i,j),2)-1
+          call VecSetValue(Vec_Up_hst,row,p_hst/scale,Insert_Values,ierr)
+          if (.not. any(pnodes(:)==row+1)) then ! Unconstrained pressure
+             call VecSetValue(Vec_Cp,row,k(j2,j2),Add_Values,ierr)
+             dp=mat(id(i),5+4*p+init+p) ! Over/under pressure
+             call VecSetValue(Vec_Up,row,(p_hst+dp)/scale,Insert_Values,ierr)
+          end if
+       end do
+    end do
+    ! Account for constraint eqn's
+    if (rank==0 .and. nceqs>0) call ApplyConstraints
+    call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+    call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+    call VecAssemblyBegin(Vec_Cp,ierr)
+    call VecAssemblyEnd(Vec_Cp,ierr)
+    call VecAssemblyBegin(Vec_Up_hst,ierr)
+    call VecAssemblyEnd(Vec_Up_hst,ierr)
+    call VecAssemblyBegin(Vec_Up,ierr)
+    call VecAssemblyEnd(Vec_Up,ierr)
+    ! Scale by pressure coefficient
+    call VecCopy(Vec_Up,Vec_Up_fv,ierr)
+    call VecPointwiseMult(Vec_Up,Vec_Up,Vec_Cp,ierr)
+    call VecRestoreSubVector(Vec_F,RI,Vec_Up,ierr)
+    ! Add fixed pressure contribution to nodal force
+    call MatMult(Mat_H,Vec_Up_fv,Vec_fp,ierr)
+    call VecGetSubVector(Vec_F,RIu,Vec_Uu,ierr)
+    call VecAXPY(Vec_Uu,-f1,Vec_fp,ierr)
+    call VecRestoreSubVector(Vec_F,RIu,Vec_Uu,ierr)
+  end subroutine ReformKFPfix
+
+  ! Poroelastic [K] with varing pressure
+  subroutine ReformKP(ef_eldof)
+    implicit none
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=7 && PETSC_VERSION_SUBMINOR<5)
+#include "petsc.h"
+#endif
+    integer :: i,ef_eldof
+    call MatZeroEntries(Mat_K,ierr)
+    do i=1,nels
+       call FormLocalK(i,k,indx,"Kp")
+       indx=indxmap(indx,2)
+       call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
+    end do
+    ! Account for constraint eqn's
+    if (rank==0 .and. nceqs>0) call ApplyConstraints
+    call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+    call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+  end subroutine ReformKP
 
   ! Print message
   subroutine PrintMsg(msg)

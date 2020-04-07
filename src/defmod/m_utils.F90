@@ -50,6 +50,31 @@ contains
        A(1,2)*(A(2,1)*A(3,3)-A(2,3)*A(3,1))+A(1,3)*(A(2,1)*A(3,2)-A(2,2)*A(3,1))
   end subroutine MatDet
 
+  ! Cross product of 3D vectors c = axb
+  subroutine Cross(a,b,r)
+    implicit none
+    real(8) :: a(3),b(3),r(3)
+    r(1)=a(2)*b(3)-a(3)*b(2)
+    r(2)=a(3)*b(1)-a(1)*b(3)
+    r(3)=a(1)*b(2)-a(2)*b(1)
+  end subroutine Cross
+
+  ! Signed distance point to plane/line
+  subroutine Mix3D(a,b,c,m)
+    implicit none
+    real(8) :: a(3),b(3),c(3),r(3),m
+    r(1)=a(2)*b(3)-a(3)*b(2)
+    r(2)=a(3)*b(1)-a(1)*b(3)
+    r(3)=a(1)*b(2)-a(2)*b(1)
+    m=(r(1)*c(1)+r(2)*c(2)+r(3)*c(3))/(r(1)*r(1)+r(2)*r(2)+r(3)*r(3))
+  end subroutine Mix3D
+  subroutine Mix2D(a,b,m)
+    implicit none
+    real(8) :: a(2),b(2),a3(3),b3(3),c3(3),m
+    a3=(/f0,f0,f1/); b3=(/a(:),f0/); c3=(/b(:),f0/)
+    call Mix3D(a3,b3,c3,m)
+  end subroutine Mix2D
+
   !===============================================================================
   !  This file contains some Fortran 90 programs to compute incomplete elliptic
   !  integrals of first and second kind: B(phi|m) and D(phi|m)

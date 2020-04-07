@@ -146,7 +146,7 @@ if slip:
     fcoord=np.empty(shape=[nfnd_all,dmn*3],dtype=np.float)
     if dyn:
         dat_slip_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
-        dat_trac_tmp=np.empty(shape=[nfnd_all,dmn,nframe],dtype=np.float)
+        dat_trac_tmp=np.empty(shape=[nfnd_all,2*dmn,nframe],dtype=np.float)
     h5 = h5py.File(files_slip[0], 'r')
     dat_slip_sta=np.empty(shape=[nfnd_all,dmn,nframe_qs],dtype=np.float)
     dat_trac_sta=np.empty(shape=[nfnd_all,dmn+p,nframe_qs],dtype=np.float)
