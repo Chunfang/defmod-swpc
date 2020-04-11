@@ -165,46 +165,48 @@ contains
        call h5dwrite_f(iddat,h5t_native_integer,dat_idx,dim_idx,err)
        call h5dclose_f(iddat,err)
        call h5fclose_f(idfile,err)
-       dim_st=(/1,cdmn,nobs_loc/)
     end if
+    limit(1)=H5S_UNLIMITED_F
     if (strng=="sta") then
        dim_uu=(/1,dmn+p,nobs_loc/)
+       dim_st=(/1,cdmn,nobs_loc/)
        nameuu="uu_sta"
        namest="st_sta"
        do j1=1,nobs_loc
           if (dsp==0) then
              dat_uu(1,:,j1)=uu_obs(j1,:)
              dat_st(1,:,j1)=st_obs(j1,:)
-          elseif (dsp==1) then
+          else
              dat_uu(1,:,j1)=tot_uu_obs(j1,:)
              dat_st(1,:,j1)=tot_st_obs(j1,:)
           end if
        end do
        k=k+1; dim_uus=(/k,dmn+p,nobs_loc/); dim_sts=(/k,cdmn,nobs_loc/)
-    elseif (strng=="dyn") then
+       limit(2:3)=(/dmn+p,nobs_loc/)
+    else
        dim_uu=(/1,dmn,nobs_loc/)
        nameuu="uu_dyn"
        do j1=1,nobs_loc
           if (dsp_hyb==0) then
-             dat_uu(1,:,j1)=uu_dyn_obs(j1,:)
-          elseif (dsp_hyb==1) then
-             dat_uu(1,:,j1)=tot_uu_dyn_obs(j1,:)
+             dat_uu(1,:dmn,j1)=uu_dyn_obs(j1,:)
+          else
+             dat_uu(1,:dmn,j1)=tot_uu_dyn_obs(j1,:)
           end if
        end do
        kd=kd+1; dim_uus=(/kd,dmn,nobs_loc/)
+       limit(2:3)=(/dmn,nobs_loc/)
     end if
     call h5fopen_f(trim(file_obs),H5F_ACC_RDWR_F,idfile,err)
     call h5screate_simple_f(3,dim_uu,spc_uu,err)
     call h5screate_simple_f(3,dim_st,spc_st,err)
     if ((k==1 .and. strng=="sta") .or. (kd==1 .and. strng=="dyn")) then !Create
-       limit(1)=H5S_UNLIMITED_F; limit(2:3)=(/dmn+p,nobs_loc/)
        call h5screate_simple_f(3,dim_uu,spc_dat,err,limit)
        call h5pcreate_f(H5P_DATASET_CREATE_F,config,err)
        call h5pset_chunk_f(config,3,dim_uu,err)
        call h5dcreate_f(idfile,nameuu,h5t_native_double,spc_dat,iddat,err,     &
           config)
-       call h5dwrite_f(iddat,h5t_native_double,dat_uu,dim_uu,err)
        if (strng=="sta") then ! Static stress
+          call h5dwrite_f(iddat,h5t_native_double,dat_uu,dim_uu,err)
           limit(2:3)=(/cdmn,nobs_loc/)
           call h5screate_simple_f(3,dim_st,spc_dat,err,limit)
           call h5pcreate_f(H5P_DATASET_CREATE_F,config,err)
@@ -212,6 +214,8 @@ contains
           call h5dcreate_f(idfile,namest,h5t_native_double,spc_dat,iddat,err,  &
              config)
           call h5dwrite_f(iddat,h5t_native_double,dat_st,dim_st,err)
+       else
+          call h5dwrite_f(iddat,h5t_native_double,dat_uu(1,:dmn,:),dim_uu,err)
        end if
     else ! Extend data
        offset(1)=dim_uus(1)-1; offset(2:3)=0
@@ -219,8 +223,9 @@ contains
        call h5dset_extent_f(iddat,dim_uus,err)
        call h5dget_space_f(iddat,spc_dat,err)
        call h5sselect_hyperslab_f(spc_dat,H5S_SELECT_SET_F,offset,dim_uu,err)
-       call H5dwrite_f(iddat,h5t_native_double,dat_uu,dim_uu,err,spc_uu,spc_dat)
        if (strng=="sta") then ! Static traction and pressure
+          call H5dwrite_f(iddat,h5t_native_double,dat_uu,dim_uu,err,spc_uu,    &
+             spc_dat)
           offset(1)=dim_sts(1)-1; offset(2:3)=0
           call h5dopen_f(idfile,namest,iddat,err)
           call h5dset_extent_f(iddat,dim_sts,err)
@@ -228,6 +233,9 @@ contains
           call h5sselect_hyperslab_f(spc_dat,H5S_SELECT_SET_F,offset,dim_st,err)
           call H5dwrite_f(iddat,h5t_native_double,dat_st,dim_st,err,spc_st,    &
              spc_dat)
+       else
+          call H5dwrite_f(iddat,h5t_native_double,dat_uu(:,:dmn,:),dim_uu,err, &
+             spc_uu,spc_dat)
        end if
     end if
     call h5dclose_f(iddat,err)

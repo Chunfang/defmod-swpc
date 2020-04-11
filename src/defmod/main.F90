@@ -1335,7 +1335,7 @@ program main
            end if
            ! Write output
            if (vout==1) call WriteOutput_x
-           if (nobs_loc>0) call Write_obs("dyn")
+           if (nobs_loc>0) call Write_obs("sta")
            if (init==1) then
               call PrintMsg("Applying one step (24 hr) fluid source ...")
               ! Zero initial pressure
