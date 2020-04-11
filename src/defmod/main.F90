@@ -1584,11 +1584,15 @@ program main
            end if
            ! Extract nodal force by p
            if (poro) then
-              ! Reset tot_uu at step 1
-              !if (tstep==1 .and. (fvin>0 .or. bod_frc==1)) then
-              !   tot_uu=f0
-              !   if (nobs_loc>0) tot_uu_obs=f0
-              !end if
+              ! Reset tot_uu displacment at step 1
+              if (tstep==1 .and. (fvin>0 .or. bod_frc==1)) then
+                deallocate(worku); allocate(worku(dmn))
+                 do i=1,nnds
+                    worku=(/((i-1)*(dmn+p)+j,j=1,dmn)/)
+                    tot_uu(worku)=f0
+                 end do
+                 if (nobs_loc>0) tot_uu_obs(:,:dmn)=f0
+              end if
               if (vout==1 .and. mod(tstep,frq)==0) then
                  ! Extract force by p
                  call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
@@ -1637,7 +1641,7 @@ program main
               if (nobs_loc>0) call Write_obs("sta")
            end if
 
-           ! Determine if the fault shall fail by LM
+           ! Has fault constraints
            if (nceqs-nceqs_ncf-nceqs_pix>0 .and. hyb>0) then
               call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               call LM_s2d
