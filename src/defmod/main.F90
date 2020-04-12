@@ -1587,7 +1587,7 @@ program main
               ! Reset tot_uu displacment at step 1
               if (tstep==1 .and. (fvin>0 .or. bod_frc==1)) then
                 deallocate(worku); allocate(worku(dmn))
-                 do i=1,nnds
+                 do i=1,size(nl2g,1)
                     worku=(/((i-1)*(dmn+p)+j,j=1,dmn)/)
                     tot_uu(worku)=f0
                  end do
