@@ -2133,17 +2133,17 @@ implicit none
     character(4) :: ptyp
     integer :: ef_eldof,i,j,j2,row
     real(8) :: depth,p_hst,dp,gradp,zmin,zmax,pfix
-    gradp=12.D3 ! Pressure gradient density*g
+    gradp=10.D3 ! Pressure gradient density*g
     call MatZeroEntries(Mat_K,ierr)
     call VecGetSubVector(Vec_F,RI,Vec_Up,ierr)
     call VecDuplicate(Vec_Up,Vec_Cp,ierr)
     call VecDuplicate(Vec_Up,Vec_Up_hst,ierr)
     call VecDuplicate(Vec_Up,Vec_Up_fv,ierr)
     call VecZeroEntries(Vec_Cp,ierr)
+    call MPI_Allreduce(maxval(coords(:,dmn)),zmax,1,MPI_Real8,MPI_Max,         &
+       MPI_Comm_World,ierr)
     if (ptyp=="cnst") then ! Uniform median pressure
        call MPI_Allreduce(minval(coords(:,dmn)),zmin,1,MPI_Real8,MPI_Min,      &
-          MPI_Comm_World,ierr)
-       call MPI_Allreduce(maxval(coords(:,dmn)),zmax,1,MPI_Real8,MPI_Max,      &
           MPI_Comm_World,ierr)
        depth=-(zmin+zmax)/f2
        pfix=depth*gradp
@@ -2155,17 +2155,19 @@ implicit none
        ! Record pressure coefficient and pressure
        do j=1,npel
           if (ptyp=="grad") then
-             depth=-coords(nodes(i,j),dmn)
+             depth=zmax-coords(nodes(i,j),dmn)
              p_hst=depth*gradp
           elseif (ptyp=="cnst") then
              p_hst=pfix
           end if
           j2=dmn*npel+j
           row=nl2g(nodes(i,j),2)-1
-          call VecSetValue(Vec_Up_hst,row,p_hst/scale,Insert_Values,ierr)
+          dp=mat(id(i),5+4*p+init+p) ! Over/under pressure
+          ! Add over/under pressure to hydro-static
+          !call VecSetValue(Vec_Up_hst,row,p_hst/scale,Insert_Values,ierr)
+          call VecSetValue(Vec_Up_hst,row,(p_hst+dp)/scale,Insert_Values,ierr)
           if (.not. any(pnodes(:)==row+1)) then ! Unconstrained pressure
              call VecSetValue(Vec_Cp,row,k(j2,j2),Add_Values,ierr)
-             dp=mat(id(i),5+4*p+init+p) ! Over/under pressure
              call VecSetValue(Vec_Up,row,(p_hst+dp)/scale,Insert_Values,ierr)
           end if
        end do
