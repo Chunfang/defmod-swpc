@@ -7,6 +7,14 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.patches as patches 
 from matplotlib import gridspec
+import argparse
+ap=argparse.ArgumentParser()
+ap.add_argument('-p') # problem number
+idcase=int(ap.parse_args().p)
+if not idcase in [14, 15]:
+    print "-p arg has to be 14 or 15"
+    sys.exit(0)
+
 font = {'weight' : 'normal',
         'size'   : 12}
 matplotlib.rc('font', **font)
@@ -26,7 +34,8 @@ matplotlib.rc('font', **font)
 #plt.contourf(x,y,-vz[it,:,:],20, cmap=plt.cm.rainbow, vmax=1E-2, vmin=-1E-2)
 #ax=plt.subplot(gs[1])
 #plt.contourf(x,y,-uz[it,:,:],20, cmap=plt.cm.rainbow, vmax=1E-3, vmin=-1E-3)
-path='out14'
+
+path='out'+str(idcase)
 fin=path+'/swpc.xy.v.nc'
 nc=netCDF4.Dataset(fin)
 x=nc.variables['x'][:]
@@ -67,15 +76,15 @@ umax=4.; umin=1E-5
 i_scale=5
 nplot=vx_xy.shape[0];t_play=15
 for it in range(nplot):
-    mappablev = cm.ScalarMappable(cmap=plt.get_cmap('gray'), norm=matplotlib.colors.Normalize(vmin=0, vmax=vmax))
-    mappableu = cm.ScalarMappable(cmap=plt.get_cmap('gray'), norm=matplotlib.colors.Normalize(vmin=0, vmax=umax))
+    mappablev = cm.ScalarMappable(cmap=plt.get_cmap('gray_r'), norm=matplotlib.colors.Normalize(vmin=0, vmax=vmax))
+    mappableu = cm.ScalarMappable(cmap=plt.get_cmap('gray_r'), norm=matplotlib.colors.Normalize(vmin=0, vmax=umax))
     mappablev.set_array(np.sqrt(vx_xy[i_scale,:,:]**2+vy_xy[i_scale,:,:]**2+vz_xy[i_scale,:,:]**2)-vmin)
     mappableu.set_array(np.sqrt(ux_xy[i_scale,:,:]**2+uy_xy[i_scale,:,:]**2+uz_xy[i_scale,:,:]**2)-vmin)
     fig.set_size_inches(height,width, forward=True)
     ax=plt.subplot(gs[0])
     plt.xlabel('x [km]')
     plt.ylabel('y [km]')
-    plt.contourf(x,y,np.sqrt(vx_xy[it,:,:]**2+vy_xy[it,:,:]**2+vz_xy[it,:,:]**2)-vmin,40, cmap=plt.get_cmap('gray'), vmax=vmax, vmin=0.)
+    plt.contourf(x,y,np.sqrt(vx_xy[it,:,:]**2+vy_xy[it,:,:]**2+vz_xy[it,:,:]**2)-vmin,40, cmap=plt.get_cmap('gray_r'), vmax=vmax, vmin=0.)
     ax.xaxis.set_ticks_position('none')
     ax.add_patch(patches.Rectangle((-24., -32.), 48., 64., fill=False,edgecolor="white",linestyle='dotted'))
     if True:
@@ -88,7 +97,7 @@ for it in range(nplot):
     ax=plt.subplot(gs[1])
     #plt.xlabel('x [km]')
     #plt.ylabel('y [km]')
-    plt.contourf(x,y,np.sqrt(ux_xy[it,:,:]**2+uy_xy[it,:,:]**2+uz_xy[it,:,:]**2)-umin,40, cmap=plt.get_cmap('gray'), vmax=umax, vmin=0.)
+    plt.contourf(x,y,np.sqrt(ux_xy[it,:,:]**2+uy_xy[it,:,:]**2+uz_xy[it,:,:]**2)-umin,40, cmap=plt.get_cmap('gray_r'), vmax=umax, vmin=0.)
     if True:
         cbax2 = fig.add_axes([.56, 1.0, 0.4, 0.02])
         plt.colorbar(mappableu,orientation='horizontal',cax=cbax2,format='%1.2g')
@@ -101,7 +110,7 @@ for it in range(nplot):
     plt.ylabel('z [km]')
     if False:
         plt.axis('off')
-    plt.contourf(x,-z,np.sqrt(vx_xz[it,:,:]**2+vy_xz[it,:,:]**2+vz_xz[it,:,:]**2)-vmin,40, cmap=plt.get_cmap('gray'), vmax=vmax, vmin=0.)
+    plt.contourf(x,-z,np.sqrt(vx_xz[it,:,:]**2+vy_xz[it,:,:]**2+vz_xz[it,:,:]**2)-vmin,40, cmap=plt.get_cmap('gray_r'), vmax=vmax, vmin=0.)
     ax.xaxis.set_ticks_position('none')
     ax.add_patch(patches.Rectangle((-24., -32.), 48., 33., fill=False,edgecolor="white",linestyle='dotted'))
     #plt.colorbar(mappablev,orientation='vertical')
@@ -111,7 +120,7 @@ for it in range(nplot):
     #plt.ylabel('z [km]')
     if False:
         plt.axis('off')
-    plt.contourf(x,-z,np.sqrt(ux_xz[it,:,:]**2+uy_xz[it,:,:]**2+uz_xz[it,:,:]**2)-umin,40, cmap=plt.get_cmap('gray'), vmax=umax, vmin=0.)
+    plt.contourf(x,-z,np.sqrt(ux_xz[it,:,:]**2+uy_xz[it,:,:]**2+uz_xz[it,:,:]**2)-umin,40, cmap=plt.get_cmap('gray_r'), vmax=umax, vmin=0.)
     ax.xaxis.set_ticks_position('none')
     #plt.colorbar(mappableu,orientation='vertical')
     if it==0: plt.tight_layout()
@@ -119,6 +128,6 @@ for it in range(nplot):
     plt.clf()
 os.chdir(path)
 call(['avconv','-r',str(nplot/t_play),'-i','wav_%d.png','-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-pix_fmt', 'yuv420p', 'fd_wav.mov'])
-call(['mv', 'fd_wav.mov', '../F3DX14_fd.mov'])
-call(['mv', 'wav_0.png', '../'+'F3DX14_fd.png'])
+call(['mv', 'fd_wav.mov', '../F3DX'+str(idcase)+'_fd.mov'])
+call(['mv', 'wav_0.png', '../'+'F3DX'+str(idcase)+'_fd.png'])
 os.chdir('../')

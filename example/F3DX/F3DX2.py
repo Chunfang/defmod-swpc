@@ -23,15 +23,15 @@ else:
 # headers
 dim=3
 t=.05; dt=.05; nviz=1
-t_dyn=0.1; t_lim=10.; dsp=1; dsp_str=1
+t_dyn=0.1; t_lim=10.; dsp=1; Xflt=2
 bod_frc=0; hyb=1; nviz_dyn=100; init=0; rsf=0
-alpha=0.; beta=0.0025; rfrac=0
+alpha=0.; beta=0.0025
 dt_dyn=1E-3; nviz_wave=16; nviz_slip=40
 line1 = ["fault tet 29"]
 line3 = np.array([t,dt,nviz,dsp]).reshape(1,4)
-line4 = np.array([t_dyn,dt_dyn,nviz_dyn,t_lim,dsp_hyb,dsp_str,bod_frc,hyb,rsf,init]).reshape(1,10)
+line4 = np.array([t_dyn,dt_dyn,nviz_dyn,t_lim,dsp_hyb,Xflt,bod_frc,hyb,rsf,init]).reshape(1,10)
 line5 = np.array([nviz_wave,nviz_slip]).reshape(1,2)
-line6 = np.array([alpha,beta,rfrac]).reshape(1,3)
+line6 = np.array([alpha,beta]).reshape(1,2)
 
 # read mesh
 nc = netCDF4.Dataset(fin)
@@ -130,9 +130,33 @@ for i in range(8):
     else:
         ft_pos_nodes.append(nc.variables['node_ns%d' %(i+1)][:])
 
-# Sort the nodes on different side of the fault
+# Split nodes at intersection
+ft_x= [np.intersect1d(ft_pos_nodes[0],ft_pos_nodes[3]),
+       np.intersect1d(ft_neg_nodes[0],ft_pos_nodes[2]),
+       np.intersect1d(ft_neg_nodes[1],ft_neg_nodes[2]),
+       np.intersect1d(ft_pos_nodes[1],ft_neg_nodes[3])]
+tmp=np.intersect1d(ft_x[0],ft_x[2])
+ft_x[0]=np.setdiff1d(ft_x[0],tmp); ft_x[2]=np.setdiff1d(ft_x[2],tmp)
+tmp=np.intersect1d(ft_x[1],ft_x[3])
+ft_x[1]=np.setdiff1d(ft_x[1],tmp); ft_x[3]=np.setdiff1d(ft_x[3],tmp)
+# Sort intersection nodes on different side of the fault
+coordx = []
+ft_xall = []
+for i in range(4):
+    coordx.append(coord[ft_x[0]-1,:])
+ft_map = np.array(np.array(np.all((coordx[0][:,None,:]==coordx[2][None,:,:]),axis=-1).nonzero()).T.tolist())
+ft_x[2]=ft_x[2][ft_map[:,1]]
+ft_map = np.array(np.array(np.all((coordx[1][:,None,:]==coordx[3][None,:,:]),axis=-1).nonzero()).T.tolist())
+nxfnd = len(ft_x[0])+len(ft_x[1])
+for i in range(4):
+    ft_xall = list(set().union(ft_xall,ft_x[i]))
+
+# Sort non-intersection nodes on different side of the fault
 nfnd = 0
 for i in range(4):
+    # Remove intersection nodes
+    ft_pos_nodes[i]=np.setdiff1d(ft_pos_nodes[i],ft_xall)
+    ft_neg_nodes[i]=np.setdiff1d(ft_neg_nodes[i],ft_xall)
     coord_pos = coord[ft_pos_nodes[i]-1,:]
     coord_neg = coord[ft_neg_nodes[i]-1,:]
     ft_map = np.array(np.array(np.all((coord_pos[:,None,:]==coord_neg[None,:,:]),axis=-1).nonzero()).T.tolist())
@@ -141,26 +165,8 @@ for i in range(4):
     ft_pos_nodes[i] = ft_pos_nodes[i][id_tmp]
     ft_neg_nodes[i] = ft_neg_nodes[i][id_tmp]
     nfnd += len(ft_pos_nodes[i])-len(np.intersect1d(ft_pos_nodes[i],ft_neg_nodes[i]))
-
-# Split nodes at intersection
-ft_x= [np.intersect1d(ft_pos_nodes[0],ft_pos_nodes[3]),
-       np.intersect1d(ft_neg_nodes[0],ft_pos_nodes[2]),
-       np.intersect1d(ft_pos_nodes[1],ft_neg_nodes[3]),
-       np.intersect1d(ft_neg_nodes[1],ft_neg_nodes[2])]
-coordx = []
-ft_xall = []
-for i in range(4):
-    coordx.append(coord[ft_x[0]-1,:])
-    ft_xall = list(set().union(ft_xall,ft_x[i]))
-nfndx = 0
-for i in range(3):
-    ft_map = np.array(np.array(np.all((coordx[i][:,None,:]==coordx[i+1][None,:,:]),axis=-1).nonzero()).T.tolist())
-    ft_x[i+1] = ft_x[i+1][ft_map[:,1]]
-    coordx[i+1] = coordx[i+1][ft_map[:,1],:]
-    nfndx += len(ft_x[i+1]) - len(np.intersect1d(ft_x[i],ft_x[i+1]))
-nfndx += len(ft_x[3]) - len(np.intersect1d(ft_x[0],ft_x[3]))
-#nfnd -= nfndx
-nfnd -= (len(ft_x[0])-1)*2
+# Add non-cross links
+nfnd+=nxfnd
 
 # fault parameters
 vec_fs=np.zeros((nfnd,3),dtype=float)
@@ -174,14 +180,9 @@ dcoh=np.ones((nfnd,1))
 st_init=np.zeros((nfnd,3))
 frc=np.zeros((nfnd,1),dtype=np.uint32)
 j=0; dx=.1; eps=dx*.1
-if idcase == 14:
-    id_hinge = [0, 1, 2, 3]
-else:
-    id_hinge = [0, 2, 1, 3]
 for k in range(4):
     for node_pos,node_neg in zip(ft_pos_nodes[k],ft_neg_nodes[k]):
-        if node_pos!=node_neg and not ((node_pos in ft_x[id_hinge[0]] and node_neg in ft_x[id_hinge[1]]) or\
-           (node_pos in ft_x[id_hinge[2]] and node_neg in ft_x[3])):
+        if node_pos!=node_neg:
             x=coord[node_pos-1,0]
             y=coord[node_pos-1,1]
             z=coord[node_pos-1,2]
@@ -206,31 +207,38 @@ for k in range(4):
                     st_init[j,:]=[-7.8E7,0.,-12E7]
                 vec_fn[j,0]=-np.sqrt(3)*0.5; vec_fn[j,1]=0.5
                 vec_fs[j,0]=0.5; vec_fs[j,1]=np.sqrt(3)*0.5
-            #if x>dx/2.-eps and x<dx/2.+eps: # fault hinge
-            #    dc[j]=0.1
             vec_fd[j,2]=-1.
             if y<12: frc[j] = 1
-            # Glue the hinge
-            #if (node_pos in ft_x[id_hinge[0]] and node_neg in ft_x[id_hinge[2]]) or\
-            #   (node_pos in ft_x[id_hinge[1]] and node_neg in ft_x[id_hinge[3]]):
-            #    frc[j] = 0
             j += 1
+# Cross-link nodes at intersection [0<->2] [3<->1]
+for node_pos,node_neg in zip(np.hstack((ft_x[0],ft_x[3])),np.hstack((ft_x[2],ft_x[1]))):
+    vec_fn[j,0]=-1.; vec_fs[j,1]=1; vec_fd[j,2]=-1.
+    frc[j]=1
+    if idcase==14:
+        st_init[j,:]=[7E7,0.,-12E7]
+    else:
+        st_init[j,:]=[-7E7,0.,-12E7]
+    j += 1
+if j != nfnd: print "Warning "+ str(nfnd)+" fault pair expected, "+str(j)+" given."
+
 # Total length of constraint function
 neq = dim*nfnd; print '%d constraint equations' %(neq)
 
 # Export to Defmod .inp file
-if dsp_hyb==1:
-    fout = 'F3DX%d_dsp.inp' %(idcase)
-else:
-    fout = 'F3DX%d.inp' %(idcase)
+ext = str()
+if fin.find('lit') !=-1: ext = '_lit'
+if dsp_hyb==1: ext += '_dsp'
+fout = 'F3DX%d'%(idcase)+ext+'.inp'
 print 'Writing to ' + fout + '...'
 if os.path.isfile(fout): os.remove(fout)
 f = open(fout, 'a')
 # six parameter lines
 np.savetxt(f, line1, fmt='%s')
 neqNCF=0 # zero nonconformal nodes
+neqPIX=0 # zero fixed pressure
 nfnode=0 # zero nodal force/flux
-line2=np.array([len(tet_node),nnd,len(mat),neq,nfnode,len(trac_el),len(abs_bc),nfnd,len(ogrid),neqNCF]).reshape(1,10)
+nvsrc=0  # zero volume source
+line2=np.array([len(tet_node),nnd,len(mat),neq,nfnode,len(trac_el),nvsrc,len(abs_bc),nfnd,len(ogrid),neqNCF,neqPIX]).reshape(1,12)
 np.savetxt(f, line2, delimiter=' ', fmt='%d '*10)
 np.savetxt(f, line3, delimiter=' ', fmt='%g %g %d %d')
 np.savetxt(f, line4, delimiter=' ', fmt='%g %g %d %g '+'%d '*6)
@@ -238,7 +246,7 @@ if rsf==1:
     np.savetxt(f, line5, delimiter=' ', fmt='%d %d %g')
 else:
     np.savetxt(f, line5, delimiter=' ', fmt='%d %d')
-np.savetxt(f, line6, delimiter=' ', fmt='%g %g %g')
+np.savetxt(f, np.hstack((line6,[[nxfnd]])), delimiter=' ', fmt='%g %g %d')
 # mesh
 np.savetxt(f, np.column_stack((tet_node, mat_typ)), delimiter=' ', fmt='%d '*5)
 np.savetxt(f, np.column_stack((coord, bc_typ)) , delimiter = ' ', fmt='%g '*3+ '%d '*3)
@@ -251,10 +259,8 @@ j=0
 vecf = np.empty(shape=(0,11))
 xfnd = np.empty(shape=(0,3))
 for k in range(4):
-    #for node_pos, node_neg, i in zip(ft_pos_nodes[k], ft_neg_nodes[k], range(len(ft_pos_nodes[k]))):
     for node_pos, node_neg in zip(ft_pos_nodes[k], ft_neg_nodes[k]):
-        if node_pos != node_neg and not ((node_pos in ft_x[id_hinge[0]] and node_neg in ft_x[id_hinge[1]]) or\
-           (node_pos in ft_x[id_hinge[2]] and node_neg in ft_x[id_hinge[3]])):
+        if node_pos != node_neg:
             vec1  = [[1, 0, 0, node_pos],
                      [-1, 0, 0, node_neg]]
             vec2  = [[0, 1, 0, node_pos],
@@ -278,14 +284,50 @@ for k in range(4):
             np.savetxt(f, cval3, delimiter = ' ', fmt = "%g %g %g")
             vecf = np.vstack((vecf,np.hstack(([[node_pos, node_neg]], mat_f))))
             xfnd = np.vstack((xfnd, coord[node_pos-1,:]))
-            j=j+1
+            j+=1
+# Cross-link nodes
+i=0
+vecxf=np.empty(shape=(nxfnd,10))
+stx_init=np.empty(shape=(nxfnd,3))
+for node_pos,node_neg in zip(np.hstack((ft_x[0],ft_x[3])),np.hstack((ft_x[2],ft_x[1]))):
+    vec1  = [[1, 0, 0, node_pos],
+             [-1, 0, 0, node_neg]]
+    vec2  = [[0, 1, 0, node_pos],
+             [0, -1, 0, node_neg]]
+    vec3  = [[0, 0, 1,  node_pos],
+             [0, 0, -1, node_neg]]
+    cval = np.array([[0.,0.,0.]])
+    np.savetxt(f, n, fmt = '%d')
+    np.savetxt(f, vec1, delimiter = ' ', fmt = '%g %g %g %d')
+    np.savetxt(f, cval, delimiter = ' ', fmt = "%g %g %g")
+    np.savetxt(f, n, fmt = '%d')
+    np.savetxt(f, vec2, delimiter = ' ', fmt = '%g %g %g %d')
+    np.savetxt(f, cval, delimiter = ' ', fmt = "%g %g %g")
+    np.savetxt(f, n, fmt = '%d')
+    np.savetxt(f, vec3, delimiter = ' ', fmt = '%g %g %g %d')
+    np.savetxt(f, cval, delimiter = ' ', fmt = "%g %g %g")
+    mat_f = np.hstack((vec_fs[j,:], vec_fd[j,:], vec_fn[j,:])).reshape(1,9)
+    vecf = np.vstack((vecf,np.hstack(([[node_pos, node_neg]], mat_f))))
+    xfnd = np.vstack((xfnd, coord[node_pos-1,:]))
+    j+=1 # Fortran 1 based nfnd index
+    # Auxiliary fault
+    if i<len(ft_x[0]):
+        vecxf[i,:] = np.hstack((j,[0.5,np.sqrt(3)*0.5,0], [0,0,-1], [-np.sqrt(3)*0.5,0.5,0]))
+    else: # Reversely linked node pairs [3<->1]
+        vecxf[i,:] = np.hstack((j,[-0.5,-np.sqrt(3)*0.5,0], [0,0,1], [np.sqrt(3)*0.5,-0.5,0]))
+    if idcase == 14:
+        stx_init[i,:]=[7E7,0.,-12E7]
+    else:
+        stx_init[i,:]=[-7.8E7,0.,-12E7]
+    i+=1
+
 np.savetxt(f,np.hstack((vecf,fc,fcd,dc,st_init,xfnd,frc,coh,dcoh)),delimiter=' ',\
        fmt='%d '*2+'%g '*18+'%d '+'%g '*2)
-
+# Auxiliary fault
+np.savetxt(f,np.hstack((vecxf,stx_init)),delimiter=' ', fmt='%d '+'%g '*12)
 # Boundary traction
 np.savetxt(f,np.column_stack((trac_el,trac_bc)),delimiter=' ',fmt='%d %d '+'%g '*5)
 # Observation grid
-#np.savetxt(f,np.column_stack((ogrid,obs_nlist,obs_N)),delimiter=' ',fmt='%g '*3+'%d '*8+'%g '*8)
 np.savetxt(f,ogrid,delimiter=' ',fmt='%g '*3)
 # Absorbing boundaries
 np.savetxt(f,abs_bc,delimiter=' ',fmt='%d %d %d')
