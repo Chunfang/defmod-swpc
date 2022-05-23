@@ -1053,7 +1053,7 @@ contains
   ! Frictional failure law trial
   subroutine TriFlt_dyn(vec,vec_rot,trac0,pavg,tau0,fcoh,mu,fail,trac)
     implicit none
-    real(8) :: vec(dmn),vec_rot(dmn),trac0(dmn),pavg,tau0,fcoh,mu,fsh,fnrm,fr, &
+    real(8) :: vec(dmn),vec_rot(dmn*dmn),trac0(dmn),pavg,tau0,fcoh,mu,fsh,fnrm,fr, &
        frs,frd,trac(dmn)
     logical :: fail
     ! Rotate to faults coordinate
