@@ -13,7 +13,7 @@ module add engaging/intel/2013.1.046
 unset F77  
 export PETSC_DIR=$PWD  
 export PETSC_ARCH=mkl-impi-icc  
-./configure --with-cc=mpiicc --with-cxx=mpiicpc --with-fc=mpiifort --with-blas-lapack-dir=/cm/shared/engaging/intel/intel-2013.1.046/composerxe/mkl/lib/intel64 --with-scalapack-lib="-L/cm/shared/engaging/intel/intel-2013.1.046/composerxe/mkl/lib/intel64 -lmkl_scalapack_lp64 -lmkl_blacs_intelmpi_lp64" --download-metis --download-parmetis --download-hdf5 --download-mumps --with-shared-libraries=0 --with-debugging=0 --COPTFLAGS="-O2 -xHost" --FOPTFLAGS="-O2 -xHost" --CXXOPTFLAGS="-O2 -xHost"  
+./configure --with-cc=mpiicc --with-cxx=mpiicpc --with-fc=mpiifort --with-blas-lapack-dir=/cm/shared/engaging/intel/intel-2013.1.046/composerxe/mkl/lib/intel64 --with-scalapack-lib="-L/cm/shared/engaging/intel/intel-2013.1.046/composerxe/mkl/lib/intel64 -lmkl_scalapack_lp64 -lmkl_blacs_intelmpi_lp64" --download-metis --download-parmetis --download-hdf5 --download-hdf5-fortran-bindings --download-mumps --with-shared-libraries=0 --with-debugging=0 --COPTFLAGS="-O2 -xHost" --FOPTFLAGS="-O2 -xHost" --CXXOPTFLAGS="-O2 -xHost"  
 make all  
 (Note, the module/path unset is to prevent customized python and any unnecessary library linkage.)
 
@@ -27,14 +27,14 @@ module add gcc
 unset F77 FC CC CXX  
 export PETSC_DIR=$PWD  
 export PETSC_ARCH=atlas-ompi-gcc  
-./configure  --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpifort --with-x=0 --with-blas-lapack-dir=/usr/lib64/atlas  --download-metis --download-parmetis --download-scalapack --download-mumps --download-hdf5 --with-shared-libraries=0 --with-debugging=0 --COPTFLAGS=-O2 --FOPTFLAGS=-O2 --CXXOPTFLAGS=-O2  
+./configure  --with-cc=mpicc --with-cxx=mpicxx --with-fc=mpifort --with-x=0 --with-blas-lapack-dir=/usr/lib64/atlas  --download-metis --download-parmetis --download-scalapack --download-mumps --download-hdf5 --download-hdf5-fortran-bindings --with-shared-libraries=0 --with-debugging=0 --COPTFLAGS=-O2 --FOPTFLAGS=-O2 --CXXOPTFLAGS=-O2  
 make all
 
 For Ubuntu OS mkl+gcc+openmpi, change blas-lapack arguments according to different Linux distros:
 
 sudo apt install cmake  
 export PETSC_ARCH=linux-gnu-opt  
-./configure --with-blas-lapack-dir=/usr/lib/atlas-base --with-mpi=1 --with-cc=mpicc --with-fc=mpif90 --with-cxx=mpicxx --download-hdf5 --download-scalapack --download-parmetis --download-mumps --download-metis --download-ptscotch --download-scotch --download-hypre --download-ml --with-shared-libraries=0 --with-debugging=0 COPTFLAGS=-O3 FOPTFLAGS=-O3 CXXOPTFLAGS=-O3  
+./configure --with-blas-lapack-dir=/usr/lib/atlas-base --with-mpi=1 --with-cc=mpicc --with-fc=mpif90 --with-cxx=mpicxx --download-hdf5 --download-hdf5-fortran-bindings --download-scalapack --download-parmetis --download-mumps --download-metis --download-ptscotch --download-scotch --download-hypre --download-ml --with-shared-libraries=0 --with-debugging=0 COPTFLAGS=-O3 FOPTFLAGS=-O3 CXXOPTFLAGS=-O3  
 make all
 
 All configurations can have --with-debugging=1 to turn on debug. To inspect the allocatable array/pointer with gdb+gfortran   
